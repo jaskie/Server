@@ -36,6 +36,7 @@ frame_transform::frame_transform()
 	, field_mode(field_mode::progressive)
 	, is_key(false)
 	, is_mix(false)
+	, is_paused(false)
 {
 	std::fill(fill_translation.begin(), fill_translation.end(), 0.0);
 	std::fill(fill_scale.begin(), fill_scale.end(), 1.0);
@@ -66,6 +67,7 @@ frame_transform& frame_transform::operator*=(const frame_transform &other)
 	field_mode				 = static_cast<field_mode::type>(field_mode & other.field_mode);
 	is_key					|= other.is_key;
 	is_mix					|= other.is_mix;
+	is_paused				|= other.is_paused;
 
 	return *this;
 }
@@ -104,6 +106,7 @@ frame_transform tween(double time, const frame_transform& source, const frame_tr
 	result.field_mode			= static_cast<field_mode::type>(source.field_mode & dest.field_mode);
 	result.is_key				= source.is_key | dest.is_key;
 	result.is_mix				= source.is_mix | dest.is_mix;
+	result.is_paused			= source.is_paused | dest.is_paused;
 	return result;
 }
 

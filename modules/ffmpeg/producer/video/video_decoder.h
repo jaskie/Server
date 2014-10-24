@@ -44,6 +44,7 @@ public:
 	explicit video_decoder(const safe_ptr<AVFormatContext>& context);
 	
 	bool ready() const;
+	bool empty() const;
 	void push(const std::shared_ptr<AVPacket>& packet);
 	std::shared_ptr<AVFrame> poll();
 	
@@ -52,6 +53,7 @@ public:
 
 	uint32_t nb_frames() const;
 	uint32_t file_frame_number() const;
+	int64_t packet_time() const;
 
 	bool	 is_progressive() const;
 

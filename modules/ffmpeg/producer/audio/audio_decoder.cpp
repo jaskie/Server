@@ -54,6 +54,7 @@ struct audio_decoder::implementation : boost::noncopyable
 {	
 	int															index_;
 	const safe_ptr<AVCodecContext>								codec_context_;		
+	const AVStream*												stream_;
 	const core::video_format_desc								format_desc_;
 
 	audio_resampler												resampler_;
@@ -64,6 +65,8 @@ struct audio_decoder::implementation : boost::noncopyable
 
 	const int64_t												nb_frames_;
 	tbb::atomic<size_t>											file_frame_number_;
+	tbb::atomic<int64_t>										packet_time_;
+	int64_t														pts_correction_;
 	core::channel_layout										channel_layout_;
 public:
 	explicit implementation(const safe_ptr<AVFormatContext>& context, const core::video_format_desc& format_desc, const std::wstring& custom_channel_order) 
@@ -75,8 +78,13 @@ public:
 		, buffer1_(AVCODEC_MAX_AUDIO_FRAME_SIZE*2)
 		, nb_frames_(0)//context->streams[index_]->nb_frames)
 		, channel_layout_(get_audio_channel_layout(*codec_context_, custom_channel_order))
+		, stream_(context->streams[index_])
 	{
 		file_frame_number_ = 0;
+		packet_time_ = 0;
+		pts_correction_ = stream_->first_dts;
+		if (pts_correction_ == AV_NOPTS_VALUE)
+			pts_correction_ = 0;
 
 		CASPAR_LOG(debug) << print() 
 				<< " Selected channel layout " << channel_layout_.name;
@@ -131,8 +139,15 @@ public:
 		
 		const auto n_samples = buffer1_.size() / av_get_bytes_per_sample(AV_SAMPLE_FMT_S32);
 		const auto samples = reinterpret_cast<int32_t*>(buffer1_.data());
-
+		
 		++file_frame_number_;
+		if (pkt.pts == AV_NOPTS_VALUE)
+			if (stream_->avg_frame_rate.num > 0)
+				packet_time_ = (AV_TIME_BASE * static_cast<int64_t>(file_frame_number_) * stream_->avg_frame_rate.den)/stream_->avg_frame_rate.num - pts_correction_;
+			else
+				packet_time_ = std::numeric_limits<int64_t>().max();
+		else
+			packet_time_ = ((pkt.pts + pts_correction_) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
 
 		return std::make_shared<core::audio_buffer>(samples, samples + n_samples);
 	}
@@ -140,6 +155,11 @@ public:
 	bool ready() const
 	{
 		return packets_.size() > 10;
+	}
+
+	bool empty() const
+	{
+		return packets_.size() == 0;
 	}
 
 	uint32_t nb_frames() const
@@ -156,10 +176,12 @@ public:
 audio_decoder::audio_decoder(const safe_ptr<AVFormatContext>& context, const core::video_format_desc& format_desc, const std::wstring& custom_channel_order) : impl_(new implementation(context, format_desc, custom_channel_order)){}
 void audio_decoder::push(const std::shared_ptr<AVPacket>& packet){impl_->push(packet);}
 bool audio_decoder::ready() const{return impl_->ready();}
+bool audio_decoder::empty() const{return impl_->empty();}
 std::shared_ptr<core::audio_buffer> audio_decoder::poll(){return impl_->poll();}
 uint32_t audio_decoder::nb_frames() const{return impl_->nb_frames();}
 uint32_t audio_decoder::file_frame_number() const{return impl_->file_frame_number_;}
 const core::channel_layout& audio_decoder::channel_layout() const { return impl_->channel_layout_; }
 std::wstring audio_decoder::print() const{return impl_->print();}
+int64_t audio_decoder::packet_time() const {return impl_->packet_time_;}
 
 }}
