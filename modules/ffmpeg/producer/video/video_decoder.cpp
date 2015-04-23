@@ -67,7 +67,7 @@ struct video_decoder::implementation : boost::noncopyable
 
 	tbb::atomic<size_t>						file_frame_number_;
 	tbb::atomic<int64_t>					packet_time_;
-	int64_t									pts_correction_;
+	const int64_t							stream_start_pts_;
 
 public:
 	explicit implementation(const safe_ptr<AVFormatContext>& context) 
@@ -77,12 +77,10 @@ public:
 		, height_(codec_context_->height)
 		, context_(context)
 		, stream_(context->streams[index_])
+		, stream_start_pts_(stream_->start_time) 
 	{
 		file_frame_number_ = 0;
-		packet_time_ = 0;
-		pts_correction_ = stream_->first_dts;
-		if (pts_correction_ == AV_NOPTS_VALUE)
-			pts_correction_ = 0;
+		packet_time_ = - ((stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
 	}
 
 	void push(const std::shared_ptr<AVPacket>& packet)
@@ -100,7 +98,7 @@ public:
 			return nullptr;
 		
 		auto packet = packets_.front();
-					
+
 		if(packet->data == nullptr)
 		{			
 			if(codec_context_->codec->capabilities & CODEC_CAP_DELAY)
@@ -122,6 +120,9 @@ public:
 
 	std::shared_ptr<AVFrame> decode(safe_ptr<AVPacket> pkt)
 	{
+		//int64_t packet_time = ((pkt->pts - (stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_)) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
+		//CASPAR_LOG(info) << "Begin decode packet of time: " << packet_time;
+
 		std::shared_ptr<AVFrame> decoded_frame(avcodec_alloc_frame(), av_free);
 
 		int frame_finished = 0;
@@ -139,18 +140,20 @@ public:
 		if(decoded_frame->repeat_pict > 0)
 			CASPAR_LOG(warning) << "[video_decoder] Field repeat_pict not implemented.";
 		
-		if (!(stream_->avg_frame_rate.den == 0 || pkt->pts == AV_NOPTS_VALUE))
-			file_frame_number_ = static_cast<size_t>(((pkt->pts + pts_correction_) * stream_->time_base.num * stream_->avg_frame_rate.num) / (stream_->time_base.den*stream_->avg_frame_rate.den));
+		if (!(stream_->avg_frame_rate.den == 0 || decoded_frame->pkt_pts == AV_NOPTS_VALUE))
+			file_frame_number_ = static_cast<size_t>((decoded_frame->pkt_pts * stream_->time_base.num * stream_->avg_frame_rate.num) / (stream_->time_base.den*stream_->avg_frame_rate.den));
 		else
 			++file_frame_number_;
 
-		if (pkt->pts == AV_NOPTS_VALUE)
+		if (decoded_frame->pkt_pts == AV_NOPTS_VALUE)
 			if (stream_->avg_frame_rate.num > 0)
-				packet_time_ = (AV_TIME_BASE * static_cast<int64_t>(file_frame_number_) * stream_->avg_frame_rate.den)/stream_->avg_frame_rate.num - pts_correction_;
+				packet_time_ = (AV_TIME_BASE * static_cast<int64_t>(file_frame_number_) * stream_->avg_frame_rate.den)/stream_->avg_frame_rate.num;
 			else
 				packet_time_ = std::numeric_limits<int64_t>().max();
 		else
-			packet_time_ = ((pkt->pts + pts_correction_) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
+			packet_time_ = ((decoded_frame->pkt_pts - (stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_)) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
+		//packet_time = ((pkt->pts - (stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_)) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
+		//CASPAR_LOG(info) << "End decode packet of time: " << packet_time << " decoded frame time " << packet_time_;
 
 		// This ties the life of the decoded_frame to the packet that it came from. For the
 		// current version of ffmpeg (0.8 or c17808c) the RAW_VIDEO codec returns frame data

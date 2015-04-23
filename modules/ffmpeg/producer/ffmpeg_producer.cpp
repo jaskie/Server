@@ -467,20 +467,33 @@ public:
 				[&]
 				{
 					if(!muxer_->video_ready() && video_decoder_ && !video_completed)	
+					{
 						video = video_decoder_->poll();	
+					/*	if (video)
+						{
+							CASPAR_LOG(info) << "Frame time: " << video->pkt_dts << " is key frame: " << video->key_frame;
+						}*/
+					}
 				},
 				[&]
 				{		
 					if(!muxer_->audio_ready() && audio_decoder_ && !audio_completed)		
 						audio = audio_decoder_->poll();		
 				});
+
 				i++;
-				video_completed = !video_decoder_ || video == flush_video() || video_decoder_->packet_time() >= start_time_;
-				audio_completed = !audio_decoder_ || audio == flush_audio() || audio_decoder_->packet_time() >= start_time_;
+				video_completed = !video_decoder_ || video == flush_video() || video_decoder_->packet_time() >= start_time_ || video_decoder_->empty();
+				audio_completed = !audio_decoder_ || audio == flush_audio() || audio_decoder_->packet_time() >= start_time_ || audio_decoder_->empty();
 		}
-		while ((!video_completed || !audio_completed) && i < MAX_GOP_SIZE && !(input_.empty() && (!video_decoder_ || video_decoder_->empty()) &&  (!audio_decoder_ || audio_decoder_->empty()))); // max i detemines maximal gop size which correctly seek
+		while (!(video_completed && audio_completed) 
+			&& i < MAX_GOP_SIZE 
+			&& !(input_.empty() && (!video_decoder_ || video_decoder_->empty()) &&  (!audio_decoder_ || audio_decoder_->empty()))); // max i detemines maximal gop size which correctly seek
+		
 		if (i>=MAX_GOP_SIZE)
 			CASPAR_LOG(warning) << print() << " Giving up seeking frame at " << start_;
+		else
+			if (i>1)
+				CASPAR_LOG(info) << print() << " Skipped " << i-1 << " frames before selected";
 
 		muxer_->push(video, hints);
 		muxer_->push(audio);

@@ -82,7 +82,7 @@ struct input::implementation : boost::noncopyable
 	const bool													thumbnail_mode_;
 	tbb::atomic<bool>											loop_;
 	uint32_t													frame_number_;
-	int64_t														pts_correction_;
+	const int64_t												stream_start_time;
 	int64_t														start_time_;
 	int64_t														end_time_;
 	const double												channel_fps_;
@@ -107,6 +107,7 @@ struct input::implementation : boost::noncopyable
 		, start_time_(0)
 		, end_time_(std::numeric_limits<int64_t>().max())
 		, channel_fps_(fps)
+		, stream_start_time(default_stream_->start_time)
 	{
 		if (thumbnail_mode_)
 			executor_.invoke([]
@@ -117,10 +118,6 @@ struct input::implementation : boost::noncopyable
 		loop_			= loop;
 		buffer_size_	= 0;
 		
-		pts_correction_ = default_stream_ ? default_stream_->first_dts : AV_NOPTS_VALUE;
-		if (pts_correction_ == AV_NOPTS_VALUE)
-			pts_correction_ = 0;
-
 		if (default_stream_ && default_stream_->codec->codec_type == AVMEDIA_TYPE_VIDEO && default_stream_->avg_frame_rate.num > 0)
 		{
 				start_time_ = (AV_TIME_BASE * static_cast<int64_t>(start) * default_stream_->avg_frame_rate.den)/default_stream_->avg_frame_rate.num;
@@ -133,6 +130,9 @@ struct input::implementation : boost::noncopyable
 				if (length_ != std::numeric_limits<uint32_t>().max())
 					end_time_ = static_cast<int64_t>((AV_TIME_BASE * static_cast<int64_t>(start+length-1))/channel_fps_);
 		}
+		CASPAR_LOG(info) << "Requestet start time: " << start_time_;
+
+
 		if(start_ > 0)			
 			queued_seek(start_);
 								
@@ -146,6 +146,14 @@ struct input::implementation : boost::noncopyable
 	bool try_pop(std::shared_ptr<AVPacket>& packet)
 	{
 		auto result = buffer_.try_pop(packet);
+
+		/*if (result && packet->stream_index == default_stream_index_)
+		{
+			auto packet_stream = format_context_->streams[packet->stream_index];
+			int64_t packet_time = ((packet->pts - (stream_start_time == AV_NOPTS_VALUE ? 0 : stream_start_time)) * AV_TIME_BASE * packet_stream->time_base.num)/packet_stream->time_base.den;
+			CASPAR_LOG(info) << "Pulled packet of time: " << packet_time;
+		}*/
+
 		
 		if(result)
 		{
@@ -216,8 +224,8 @@ struct input::implementation : boost::noncopyable
 				auto ret = av_read_frame(format_context_.get(), packet.get()); // packet is only valid until next call of av_read_frame. Use av_dup_packet to extend its life.	
 		
 				AVStream * packet_stream = format_context_->streams[packet->stream_index];
-				int64_t packet_time = (packet.get() && packet->pts != AV_NOPTS_VALUE && packet_stream->time_base.den>0)  ? ((packet->pts + pts_correction_) * AV_TIME_BASE * packet_stream->time_base.num)/packet_stream->time_base.den : std::numeric_limits<int64_t>().max();
-				
+				int64_t packet_time = (packet.get() && packet->pts != AV_NOPTS_VALUE && packet_stream->time_base.den>0)  ? ((packet->pts - (stream_start_time == AV_NOPTS_VALUE ? 0 : stream_start_time)) * AV_TIME_BASE * packet_stream->time_base.num)/packet_stream->time_base.den : std::numeric_limits<int64_t>().max();
+
 				if(is_eof(ret) || (packet->stream_index == default_stream_index_ && packet_time > end_time_))
 				{
 					frame_number_	= 0;
@@ -365,34 +373,31 @@ struct input::implementation : boost::noncopyable
 		if (!thumbnail_mode_)
 			CASPAR_LOG(debug) << print() << " Seeking: " << target;
 
-		int flags = AVSEEK_FLAG_FRAME;
-		if(target == 0)
-		{
-			// Fix VP6 seeking
-			int vid_stream_index = av_find_best_stream(format_context_.get(), AVMEDIA_TYPE_VIDEO, -1, -1, 0, 0);
-			if(vid_stream_index >= 0)
-			{
-				auto codec_id = format_context_->streams[vid_stream_index]->codec->codec_id;
-				if(codec_id == CODEC_ID_VP6A || codec_id == CODEC_ID_VP6F || codec_id == CODEC_ID_VP6)
-					flags = AVSEEK_FLAG_BYTE;
-			}
-		}
+		//int flags = AVSEEK_FLAG_FRAME;
+		//if(target == 0)
+		//{
+		//	// Fix VP6 seeking
+		//	int vid_stream_index = av_find_best_stream(format_context_.get(), AVMEDIA_TYPE_VIDEO, -1, -1, 0, 0);
+		//	if(vid_stream_index >= 0)
+		//	{
+		//		auto codec_id = format_context_->streams[vid_stream_index]->codec->codec_id;
+		//		if(codec_id == CODEC_ID_VP6A || codec_id == CODEC_ID_VP6F || codec_id == CODEC_ID_VP6)
+		//			flags = AVSEEK_FLAG_BYTE;
+		//	}
+		//}
 		
 		int64_t seek;
 		bool seek_by_stream_time = default_stream_->avg_frame_rate.num != 0 && default_stream_->codec->codec_type == AVMEDIA_TYPE_VIDEO;
 		if (seek_by_stream_time)
-			seek = (static_cast<int64_t>(target) * default_stream_->time_base.den * default_stream_->avg_frame_rate.den)/(default_stream_->time_base.num * default_stream_->avg_frame_rate.num) + pts_correction_;		
+			seek = (static_cast<int64_t>(target) * default_stream_->time_base.den * default_stream_->avg_frame_rate.den)/(default_stream_->time_base.num * default_stream_->avg_frame_rate.num) + (stream_start_time == AV_NOPTS_VALUE ? 0 : stream_start_time) + default_stream_->first_dts - 1024;		
 		else
-			seek = static_cast<int64_t>(target / channel_fps_ * AV_TIME_BASE);
-						
-		THROW_ON_ERROR2(avformat_seek_file(
+			seek = static_cast<int64_t>(target / channel_fps_ * AV_TIME_BASE) + format_context_->start_time;
+			
+		THROW_ON_ERROR2(av_seek_frame(
 			format_context_.get(), 
 			seek_by_stream_time ? default_stream_index_ : -1, 
-			std::numeric_limits<int64_t>::min(),
-			seek,
-			std::numeric_limits<int64_t>::max(), 
-			0), print());
-
+			seek, 
+			AVSEEK_FLAG_BACKWARD), print());
 		auto flush_packet	= create_packet();
 		flush_packet->data	= nullptr;
 		flush_packet->size	= 0;
