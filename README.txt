@@ -1,3 +1,10 @@
+TVP's fork of CasparCG
+======================
+This is fork of 2.06 Stable master branch with merged following fixes which are not in main distribution:
+1. Mpeg files with long-gop now are precisely seeked.
+2. When interlaced image is paused (assuming that displayed fields comes from different moments in time), there are no image trembling.
+3. Serwer process can't be closed with Ctrl-C.
+
 CasparCG Server 2.0.6 Stable
 ============================
 
