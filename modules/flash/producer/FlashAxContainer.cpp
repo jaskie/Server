@@ -574,7 +574,8 @@ HRESULT STDMETHODCALLTYPE FlashAxContainer::GetTime(/* [out] */ VARIANT *pvtime)
 		return E_POINTER;
 
 //	return E_NOTIMPL;
-	pvtime->lVal = 0;
+	if (pvtime->vt == VT_I4)
+		pvtime->lVal = 0;
 	return S_OK;
 }
 
@@ -712,6 +713,8 @@ void FlashAxContainer::DestroyAxControl()
 
 	if ((!m_spUnknown) == false)
 		m_spUnknown.Release();
+
+	CoFreeUnusedLibrariesEx(0, 0);
 }
 
 bool FlashAxContainer::CheckForFlashSupport()

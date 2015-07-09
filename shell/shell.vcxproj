@@ -354,7 +354,7 @@ copy "$(ProjectDir)casparcg_auto_restart.bat" "$(OutDir)"</Command>
       <WarningLevel>Level4</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <PreprocessorDefinitions>TBB_USE_CAPTURED_EXCEPTION=0;TBB_USE_ASSERT=1;TBB_USE_PERFORMANCE_WARNINGS=1;NDEBUG;_VC80_UPGRADE=0x0710;COMPILE_DEVELOP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>TBB_USE_CAPTURED_EXCEPTION=0;TBB_USE_ASSERT=1;TBB_USE_PERFORMANCE_WARNINGS=1;NDEBUG;_VC80_UPGRADE=0x0710;GLEW_MX;COMPILE_DEVELOP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WholeProgramOptimization>false</WholeProgramOptimization>
       <TreatWarningAsError>true</TreatWarningAsError>
       <FloatingPointModel>Fast</FloatingPointModel>
