@@ -32,13 +32,6 @@
 
 namespace caspar { namespace protocol { namespace amcp {
 
-	enum AMCPCommandScheduling
-	{
-		Default = 0,
-		AddToQueue,
-		ImmediatelyAndClear
-	};
-
 	class AMCPCommand
 	{
 		AMCPCommand(const AMCPCommand&);
@@ -49,7 +42,6 @@ namespace caspar { namespace protocol { namespace amcp {
 		virtual bool Execute() = 0;
 
 		virtual bool NeedChannel() = 0;
-		virtual AMCPCommandScheduling GetDefaultScheduling() = 0;
 		virtual int GetMinimumParameters() = 0;
 
 		void SendReply();
@@ -86,14 +78,8 @@ namespace caspar { namespace protocol { namespace amcp {
 
 		virtual void Clear();
 
-		AMCPCommandScheduling GetScheduling()
-		{
-			return scheduling_ == Default ? GetDefaultScheduling() : scheduling_;
-		}
-
 		virtual std::wstring print() const = 0;
 
-		void SetScheduling(AMCPCommandScheduling s){scheduling_ = s;}
 		void SetReplyString(const std::wstring& str){replyString_ = str;}
 
 	protected:
@@ -108,13 +94,12 @@ namespace caspar { namespace protocol { namespace amcp {
 		std::shared_ptr<core::thumbnail_generator> thumb_gen_;
 		std::shared_ptr<core::media_info_repository> media_info_repo_;
 		boost::promise<bool>* shutdown_server_now_;
-		AMCPCommandScheduling scheduling_;
 		std::wstring replyString_;
 	};
 
 	typedef std::tr1::shared_ptr<AMCPCommand> AMCPCommandPtr;
 
-	template<bool TNeedChannel, AMCPCommandScheduling TScheduling, int TMinParameters>
+	template<bool TNeedChannel, int TMinParameters>
 	class AMCPCommandBase : public AMCPCommand
 	{
 	public:
@@ -125,7 +110,6 @@ namespace caspar { namespace protocol { namespace amcp {
 		}
 
 		virtual bool NeedChannel(){return TNeedChannel;}		
-		virtual AMCPCommandScheduling GetDefaultScheduling(){return TScheduling;}
 		virtual int GetMinimumParameters(){return TMinParameters;}
 	protected:
 		~AMCPCommandBase(){}

@@ -542,7 +542,6 @@ HRESULT STDMETHODCALLTYPE FlashAxContainer::Advise(VARIANT vtimeMin, VARIANT vti
 		pTimerHelper->Setup(vtimeMin.ulVal, vtimeInterval.ulVal, pTimerSink);
 		*pdwCookie = pTimerHelper->ID;
 		bHasNewTiming_ = true;
-
 		return S_OK;
 	}
 	else
@@ -551,7 +550,7 @@ HRESULT STDMETHODCALLTYPE FlashAxContainer::Advise(VARIANT vtimeMin, VARIANT vti
 
 HRESULT STDMETHODCALLTYPE FlashAxContainer::Unadvise(/* [in] */ DWORD dwCookie)
 {
-	ATLTRACE(_T("Timer::Unadvice\n"));
+	ATLTRACE(_T("Timer::Unadvise\n"));
 	if(pTimerHelper != 0)
 	{
 		pTimerHelper->pTimerSink = 0;
@@ -919,7 +918,7 @@ bool FlashAxContainer::FlashCall(const std::wstring& str, std::wstring& result2)
 
 	if(bCallSuccessful_)
 		result2 = result;
-
+	
 	return bCallSuccessful_;
 }
 

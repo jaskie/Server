@@ -45,7 +45,7 @@ namespace flash {
 		{
 			firstTime = first;
 			interval = interv;
-			currentTime = first;
+			currentTime = firstTime;
 			pTimerSink = pTS;
 			ID = first;
 		}
@@ -57,7 +57,6 @@ namespace flash {
 				VARIANT value;
 				value.vt = VT_UI4;
 				value.ulVal = currentTime;
-
 				pTimerSink->OnTimer(value);
 				currentTime += interval;
 			}

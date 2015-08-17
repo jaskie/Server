@@ -207,11 +207,6 @@ AMCPCommandPtr AMCPProtocolStrategy::InterpretCommandString(const std::wstring& 
 				//Set scheduling
 				if(commandSwitch.size() > 0) {
 					transform(commandSwitch.begin(), commandSwitch.end(), commandSwitch.begin(), toupper);
-
-					if(commandSwitch == TEXT("/APP"))
-						pCommand->SetScheduling(AddToQueue);
-					else if(commandSwitch  == TEXT("/IMMF"))
-						pCommand->SetScheduling(ImmediatelyAndClear);
 				}
 
 				if(pCommand->NeedChannel())
