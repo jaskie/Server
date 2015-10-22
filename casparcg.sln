@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio 2010
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core", "core\core.vcxproj", "{79388C20-6499-4BF6-B8B9-D8C33D7D4DDD}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "shell", "shell\shell.vcxproj", "{8C26C94F-8092-4769-8D84-DEA479721C5B}"
@@ -31,8 +31,6 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "image", "modules\image\image.vcxproj", "{3E11FF65-A9DA-4F80-87F2-A7C6379ED5E2}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "common", "common\common.vcxproj", "{02308602-7FE0-4253-B96E-22134919F56A}"
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "newtek", "modules\newtek\newtek.vcxproj", "{29CCB0C0-A1B7-4C05-BFEC-486C9A0B78CE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -130,14 +128,6 @@ Global
 		{02308602-7FE0-4253-B96E-22134919F56A}.Profile|Win32.Build.0 = Profile|Win32
 		{02308602-7FE0-4253-B96E-22134919F56A}.Release|Win32.ActiveCfg = Release|Win32
 		{02308602-7FE0-4253-B96E-22134919F56A}.Release|Win32.Build.0 = Release|Win32
-		{29CCB0C0-A1B7-4C05-BFEC-486C9A0B78CE}.Debug|Win32.ActiveCfg = Debug|Win32
-		{29CCB0C0-A1B7-4C05-BFEC-486C9A0B78CE}.Debug|Win32.Build.0 = Debug|Win32
-		{29CCB0C0-A1B7-4C05-BFEC-486C9A0B78CE}.Develop|Win32.ActiveCfg = Develop|Win32
-		{29CCB0C0-A1B7-4C05-BFEC-486C9A0B78CE}.Develop|Win32.Build.0 = Develop|Win32
-		{29CCB0C0-A1B7-4C05-BFEC-486C9A0B78CE}.Profile|Win32.ActiveCfg = Profile|Win32
-		{29CCB0C0-A1B7-4C05-BFEC-486C9A0B78CE}.Profile|Win32.Build.0 = Profile|Win32
-		{29CCB0C0-A1B7-4C05-BFEC-486C9A0B78CE}.Release|Win32.ActiveCfg = Release|Win32
-		{29CCB0C0-A1B7-4C05-BFEC-486C9A0B78CE}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -150,6 +140,5 @@ Global
 		{82ED7ED6-8A15-40EC-A8AF-F5E712E0DA68} = {C54DA43E-4878-45DB-B76D-35970553672C}
 		{88F974F0-D09F-4788-8CF8-F563209E60C1} = {C54DA43E-4878-45DB-B76D-35970553672C}
 		{3E11FF65-A9DA-4F80-87F2-A7C6379ED5E2} = {C54DA43E-4878-45DB-B76D-35970553672C}
-		{29CCB0C0-A1B7-4C05-BFEC-486C9A0B78CE} = {C54DA43E-4878-45DB-B76D-35970553672C}
 	EndGlobalSection
 EndGlobal

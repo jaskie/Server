@@ -50,9 +50,6 @@
     <ProjectReference Include="..\modules\image\image.vcxproj">
       <Project>{3e11ff65-a9da-4f80-87f2-a7c6379ed5e2}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\modules\newtek\newtek.vcxproj">
-      <Project>{29ccb0c0-a1b7-4c05-bfec-486c9a0b78ce}</Project>
-    </ProjectReference>
     <ProjectReference Include="..\modules\oal\oal.vcxproj">
       <Project>{82ed7ed6-8a15-40ec-a8af-f5e712e0da68}</Project>
     </ProjectReference>
