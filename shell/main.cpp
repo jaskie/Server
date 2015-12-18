@@ -300,7 +300,7 @@ int main(int argc, wchar_t* argv[])
 						shutdown_server_now.set_value(false); // False to not restart server
 						break;
 					}
-				
+				#ifndef COMPILE_RELEASE
 					try
 					{
 						// This is just dummy code for testing.
@@ -356,7 +356,7 @@ int main(int argc, wchar_t* argv[])
 						CASPAR_LOG_CURRENT_EXCEPTION();
 						continue;
 					}
-
+				#endif
 					wcmd += L"\r\n";
 					amcp.Parse(wcmd.c_str(), wcmd.length(), console_client);
 				}	
