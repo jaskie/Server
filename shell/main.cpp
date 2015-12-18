@@ -305,11 +305,11 @@ int main(int argc, wchar_t* argv[])
 					{
 						// This is just dummy code for testing.
 						if(wcmd.substr(0, 1) == L"1")
-							wcmd = L"LOADBG 1-1 " + wcmd.substr(1, wcmd.length()-1) + L" SLIDE 100 LOOP \r\nPLAY 1-1";
+							wcmd = L"LOAD 1-0 VRT_TEST";
 						else if(wcmd.substr(0, 1) == L"2")
-							wcmd = L"MIXER 1-0 VIDEO IS_KEY 1";
+							wcmd = L"MIXER 1-0 SATURATION 0 50";
 						else if(wcmd.substr(0, 1) == L"3")
-							wcmd = L"CG 1-2 ADD 1 BBTELEFONARE 1";
+							wcmd = L"MIXER 1-0 SATURATION 1 50";
 						else if(wcmd.substr(0, 1) == L"4")
 							wcmd = L"PLAY 1-1 DV FILTER yadif=1:-1 LOOP";
 						else if(wcmd.substr(0, 1) == L"5")
