@@ -23,7 +23,7 @@
 
 #include "filter.h"
 
-#include "parallel_yadif.h"
+//#include "parallel_yadif.h"
 
 #include "../../ffmpeg_error.h"
 
@@ -48,10 +48,10 @@ extern "C"
 	#include <libavutil/avutil.h>
 	#include <libavutil/imgutils.h>
 	#include <libavfilter/avfilter.h>
-	#include <libavfilter/avcodec.h>
+	#include <libavcodec/avcodec.h>
 	#include <libavfilter/avfiltergraph.h>
 	#include <libavfilter/buffersink.h>
-	#include <libavfilter/vsrc_buffer.h>
+	#include <libavfilter/buffersrc.h>
 }
 #if defined(_MSC_VER)
 #pragma warning (pop)
@@ -60,47 +60,47 @@ extern "C"
 
 namespace caspar { namespace ffmpeg {
 
-static int query_formats_444(AVFilterContext *ctx)
-{
-    static const int pix_fmts[] = {PIX_FMT_YUV444P, PIX_FMT_NONE};
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
-    return 0;
-}
-
-static int query_formats_422(AVFilterContext *ctx)
-{
-    static const int pix_fmts[] = {PIX_FMT_YUV422P, PIX_FMT_NONE};
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
-    return 0;
-}
-
-static int query_formats_420(AVFilterContext *ctx)
-{
-    static const int pix_fmts[] = {PIX_FMT_YUV420P, PIX_FMT_NONE};
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
-    return 0;
-}
-
-static int query_formats_420a(AVFilterContext *ctx)
-{
-    static const int pix_fmts[] = {PIX_FMT_YUVA420P, PIX_FMT_NONE};
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
-    return 0;
-}
-
-static int query_formats_411(AVFilterContext *ctx)
-{
-    static const int pix_fmts[] = {PIX_FMT_YUV411P, PIX_FMT_NONE};
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
-    return 0;
-}
-
-static int query_formats_410(AVFilterContext *ctx)
-{
-    static const int pix_fmts[] = {PIX_FMT_YUV410P, PIX_FMT_NONE};
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
-    return 0;
-}
+//static int query_formats_444(AVFilterContext *ctx)
+//{
+//    static const int pix_fmts[] = {AV_PIX_FMT_YUV444P, AV_PIX_FMT_NONE};
+//    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
+//    return 0;
+//}
+//
+//static int query_formats_422(AVFilterContext *ctx)
+//{
+//    static const int pix_fmts[] = {AV_PIX_FMT_YUV422P, AV_PIX_FMT_NONE};
+//    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
+//    return 0;
+//}
+//
+//static int query_formats_420(AVFilterContext *ctx)
+//{
+//    static const int pix_fmts[] = {AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE};
+//    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
+//    return 0;
+//}
+//
+//static int query_formats_420a(AVFilterContext *ctx)
+//{
+//    static const int pix_fmts[] = {AV_PIX_FMT_YUVA420P, AV_PIX_FMT_NONE};
+//    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
+//    return 0;
+//}
+//
+//static int query_formats_411(AVFilterContext *ctx)
+//{
+//    static const int pix_fmts[] = {AV_PIX_FMT_YUV411P, AV_PIX_FMT_NONE};
+//    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
+//    return 0;
+//}
+//
+//static int query_formats_410(AVFilterContext *ctx)
+//{
+//    static const int pix_fmts[] = {AV_PIX_FMT_YUV410P, AV_PIX_FMT_NONE};
+//    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
+//    return 0;
+//}
 
 struct filter::implementation
 {
@@ -109,10 +109,10 @@ struct filter::implementation
 	AVFilterContext*				buffersink_ctx_;
 	AVFilterContext*				buffersrc_ctx_;
 	std::shared_ptr<void>			parallel_yadif_ctx_;
-	std::vector<PixelFormat>		pix_fmts_;
+	std::vector<AVPixelFormat>		pix_fmts_;
 	std::queue<safe_ptr<AVFrame>>	bypass_;
 		
-	implementation(const std::wstring& filters, const std::vector<PixelFormat>& pix_fmts) 
+	implementation(const std::wstring& filters, const std::vector<AVPixelFormat>& pix_fmts) 
 		: filters_(filters)
 		, parallel_yadif_ctx_(nullptr)
 		, pix_fmts_(pix_fmts)
@@ -120,19 +120,19 @@ struct filter::implementation
 		if(pix_fmts_.empty())
 		{
 			pix_fmts_ = boost::assign::list_of
-				(PIX_FMT_YUVA420P)
-				(PIX_FMT_YUV444P)
-				(PIX_FMT_YUV422P)
-				(PIX_FMT_YUV420P)
-				(PIX_FMT_YUV411P)
-				(PIX_FMT_BGRA)
-				(PIX_FMT_ARGB)
-				(PIX_FMT_RGBA)
-				(PIX_FMT_ABGR)
-				(PIX_FMT_GRAY8);
+				(AV_PIX_FMT_YUVA420P)
+				(AV_PIX_FMT_YUV444P)
+				(AV_PIX_FMT_YUV422P)
+				(AV_PIX_FMT_YUV420P)
+				(AV_PIX_FMT_YUV411P)
+				(AV_PIX_FMT_BGRA)
+				(AV_PIX_FMT_ARGB)
+				(AV_PIX_FMT_RGBA)
+				(AV_PIX_FMT_ABGR)
+				(AV_PIX_FMT_GRAY8);
 		}
 		
-		pix_fmts_.push_back(PIX_FMT_NONE);
+		pix_fmts_.push_back(AV_PIX_FMT_NONE);
 	}
 	
 	void push(const std::shared_ptr<AVFrame>& frame)
@@ -183,57 +183,57 @@ struct filter::implementation
 					inputs->next			= nullptr;
 			
 					std::string filters = boost::to_lower_copy(narrow(filters_));
-					THROW_ON_ERROR2(avfilter_graph_parse(graph_.get(), filters.c_str(), &inputs, &outputs, NULL), "[filter]");
+					THROW_ON_ERROR2(avfilter_graph_parse(graph_.get(), filters.c_str(), inputs, outputs, NULL), "[filter]");
 			
 					auto yadif_filter = boost::adaptors::filtered([&](AVFilterContext* p){return strstr(p->name, "yadif") != 0;});
 
-					BOOST_FOREACH(auto filter_ctx, boost::make_iterator_range(graph_->filters, graph_->filters + graph_->filter_count) | yadif_filter)
+				/*	BOOST_FOREACH(auto filter_ctx, boost::make_iterator_range(graph_->filters, graph_->filters + graph_->filter_count) | yadif_filter)
 					{
 						// Don't trust that libavfilter chooses optimal format.
 						filter_ctx->filter->query_formats = [&]() -> int (*)(AVFilterContext*)
 						{
 							switch(frame->format)
 							{
-							case PIX_FMT_YUV444P16: 
-							case PIX_FMT_YUV444P10: 
-							case PIX_FMT_YUV444P9:  	
-							case PIX_FMT_YUV444P:	
-							case PIX_FMT_BGR24:		
-							case PIX_FMT_RGB24:	
+							case AV_PIX_FMT_YUV444P16: 
+							case AV_PIX_FMT_YUV444P10: 
+							case AV_PIX_FMT_YUV444P9:  	
+							case AV_PIX_FMT_YUV444P:	
+							case AV_PIX_FMT_BGR24:		
+							case AV_PIX_FMT_RGB24:	
 								return query_formats_444;
-							case PIX_FMT_YUV422P16: 
-							case PIX_FMT_YUV422P10: 
-							case PIX_FMT_YUV422P9:  
-							case PIX_FMT_YUV422P:	
-							case PIX_FMT_UYVY422:	
-							case PIX_FMT_YUYV422:	
+							case AV_PIX_FMT_YUV422P16: 
+							case AV_PIX_FMT_YUV422P10: 
+							case AV_PIX_FMT_YUV422P9:  
+							case AV_PIX_FMT_YUV422P:	
+							case AV_PIX_FMT_UYVY422:	
+							case AV_PIX_FMT_YUYV422:	
 								return query_formats_422;
-							case PIX_FMT_YUV420P16: 
-							case PIX_FMT_YUV420P10: 
-							case PIX_FMT_YUV420P9:  
-							case PIX_FMT_YUV420P:	
+							case AV_PIX_FMT_YUV420P16: 
+							case AV_PIX_FMT_YUV420P10: 
+							case AV_PIX_FMT_YUV420P9:  
+							case AV_PIX_FMT_YUV420P:	
 								return query_formats_420;
-							case PIX_FMT_YUVA420P:	
-							case PIX_FMT_BGRA:		
-							case PIX_FMT_RGBA:		
-							case PIX_FMT_ABGR:		
-							case PIX_FMT_ARGB:		
+							case AV_PIX_FMT_YUVA420P:	
+							case AV_PIX_FMT_BGRA:		
+							case AV_PIX_FMT_RGBA:		
+							case AV_PIX_FMT_ABGR:		
+							case AV_PIX_FMT_ARGB:		
 								return query_formats_420a;
-							case PIX_FMT_UYYVYY411: 
-							case PIX_FMT_YUV411P:	
+							case AV_PIX_FMT_UYYVYY411: 
+							case AV_PIX_FMT_YUV411P:	
 								return query_formats_411;
-							case PIX_FMT_YUV410P:	
+							case AV_PIX_FMT_YUV410P:	
 								return query_formats_410;
 							default:				
 								return filter_ctx->filter->query_formats;
 							}
 						}();
 					}
-					
+					*/
 					THROW_ON_ERROR2(avfilter_graph_config(graph_.get(), NULL), "[filter]");	
 					
-					BOOST_FOREACH(auto filter_ctx, boost::make_iterator_range(graph_->filters, graph_->filters + graph_->filter_count) | yadif_filter)						
-						parallel_yadif_ctx_ = make_parallel_yadif(filter_ctx);						
+					//BOOST_FOREACH(auto filter_ctx, boost::make_iterator_range(graph_->filters, graph_->filters + graph_->nb_filters) | yadif_filter)						
+					//	parallel_yadif_ctx_ = make_parallel_yadif(filter_ctx);						
 				}
 				catch(...)
 				{
@@ -242,7 +242,7 @@ struct filter::implementation
 				}
 			}
 		
-			THROW_ON_ERROR2(av_vsrc_buffer_add_frame(buffersrc_ctx_, frame.get(), 0), "[filter]");
+			THROW_ON_ERROR2(av_buffersrc_add_frame(buffersrc_ctx_, frame.get()), "[filter]");
 		}
 		catch(ffmpeg_error&)
 		{
@@ -268,6 +268,24 @@ struct filter::implementation
 		if(!graph_)
 			return nullptr;
 		
+		std::shared_ptr<AVFrame> filt_frame(
+			av_frame_alloc(), 
+			[](AVFrame* p)
+			{
+				av_frame_free(&p);
+			});
+		
+		const auto ret = av_buffersink_get_frame(
+			buffersink_ctx_, 
+			filt_frame.get());
+				
+		if(ret == AVERROR_EOF || ret == AVERROR(EAGAIN))
+			return nullptr;
+					
+		FF_RET(ret, "poll");
+
+		return filt_frame;
+		/*
 		try
 		{
 			if(avfilter_poll_frame(buffersink_ctx_->inputs[0])) 
@@ -311,10 +329,11 @@ struct filter::implementation
 		{
 			BOOST_THROW_EXCEPTION(ffmpeg_error() << boost::errinfo_nested_exception(boost::current_exception()));
 		}
+		*/
 	}
 };
 
-filter::filter(const std::wstring& filters, const std::vector<PixelFormat>& pix_fmts) : impl_(new implementation(filters, pix_fmts)){}
+filter::filter(const std::wstring& filters, const std::vector<AVPixelFormat>& pix_fmts) : impl_(new implementation(filters, pix_fmts)){}
 filter::filter(filter&& other) : impl_(std::move(other.impl_)){}
 filter& filter::operator=(filter&& other){impl_ = std::move(other.impl_); return *this;}
 void filter::push(const std::shared_ptr<AVFrame>& frame){impl_->push(frame);}

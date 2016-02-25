@@ -117,19 +117,20 @@ struct frame_muxer::implementation : boost::noncopyable
 		if(!video_frame)
 			return;
 		
-		if(video_frame == flush_video())
+		/*if(video_frame == flush_video())
 		{	
 			video_streams_.push(std::queue<safe_ptr<write_frame>>());
+			CASPAR_LOG(trace) << "Muxer::push flush video";
 		}
 		else if(video_frame == empty_video())
 		{
 			video_streams_.back().push(make_safe<core::write_frame>(this, audio_channel_layout_));
 			display_mode_ = display_mode::simple;
+			CASPAR_LOG(trace) << "Muxer::push empty video";
 		}
-		else
+		else*/
 		{
 			bool deinterlace_hint = (hints & core::frame_producer::DEINTERLACE_HINT) != 0;
-		
 			if(auto_deinterlace_ && force_deinterlacing_ != deinterlace_hint)
 			{
 				force_deinterlacing_ = deinterlace_hint;
@@ -144,12 +145,12 @@ struct frame_muxer::implementation : boost::noncopyable
 		
 			auto format = video_frame->format;
 			if(video_frame->format == CASPAR_PIX_FMT_LUMA) // CASPAR_PIX_FMT_LUMA is not valid for filter, change it to GRAY8
-				video_frame->format = PIX_FMT_GRAY8;
+				video_frame->format = AV_PIX_FMT_GRAY8;
 
 			filter_.push(video_frame);
 			BOOST_FOREACH(auto& av_frame, filter_.poll_all())
 			{
-				if(video_frame->format == PIX_FMT_GRAY8 && format == CASPAR_PIX_FMT_LUMA)
+				if(video_frame->format == AV_PIX_FMT_GRAY8 && format == CASPAR_PIX_FMT_LUMA)
 					av_frame->format = format;
 
 				video_streams_.back().push(make_write_frame(this, av_frame, frame_factory_, hints, audio_channel_layout_));
@@ -165,7 +166,7 @@ struct frame_muxer::implementation : boost::noncopyable
 		if(!audio)	
 			return;
 
-		if(audio == flush_audio())
+		/*if(audio == flush_audio())
 		{
 			audio_streams_.push(core::audio_buffer());
 		}
@@ -173,7 +174,7 @@ struct frame_muxer::implementation : boost::noncopyable
 		{
 			boost::range::push_back(audio_streams_.back(), core::audio_buffer(audio_cadence_.front() * audio_channel_layout_.num_channels, 0));
 		}
-		else
+		else*/
 		{
 			boost::range::push_back(audio_streams_.back(), *audio);
 		}
@@ -377,6 +378,18 @@ struct frame_muxer::implementation : boost::noncopyable
 
 		return static_cast<uint32_t>(nb_frames2);
 	}
+
+
+	void clear()
+	{
+		while(!video_streams_.empty())
+			video_streams_.pop();	
+		while(!audio_streams_.empty())
+			audio_streams_.pop();	
+		while(!frame_buffer_.empty())
+			frame_buffer_.pop();
+//		filter_.reset();
+	}
 };
 
 frame_muxer::frame_muxer(
@@ -388,6 +401,7 @@ frame_muxer::frame_muxer(
 	: impl_(new implementation(in_fps, frame_factory, filter, thumbnail_mode, audio_channel_layout)){}
 void frame_muxer::push(const std::shared_ptr<AVFrame>& video_frame, int hints){impl_->push(video_frame, hints);}
 void frame_muxer::push(const std::shared_ptr<core::audio_buffer>& audio_samples){return impl_->push(audio_samples);}
+void frame_muxer::clear(){return impl_->clear();}
 std::shared_ptr<basic_frame> frame_muxer::poll(){return impl_->poll();}
 uint32_t frame_muxer::calc_nb_frames(uint32_t nb_frames) const {return impl_->calc_nb_frames(nb_frames);}
 bool frame_muxer::video_ready() const{return impl_->video_ready();}

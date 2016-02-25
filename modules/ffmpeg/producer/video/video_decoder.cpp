@@ -88,7 +88,7 @@ public:
 		if(!packet)
 			return;
 
-		if(packet->stream_index == index_ || packet->data == nullptr)
+		if(packet->stream_index == index_ || (packet->data == nullptr)) // flush packet
 			packets_.push(make_safe_ptr(packet));
 	}
 
@@ -98,6 +98,7 @@ public:
 			return nullptr;
 		
 		auto packet = packets_.front();
+		packets_.pop();
 
 		if(packet->data == nullptr)
 		{			
@@ -107,14 +108,8 @@ public:
 				if(video)
 					return video;
 			}
-					
-			packets_.pop();
-			file_frame_number_ = static_cast<size_t>(packet->pos);
-			avcodec_flush_buffers(codec_context_.get());
-			return flush_video();	
+			return nullptr;
 		}
-			
-		packets_.pop();
 		return decode(packet);
 	}
 
@@ -123,28 +118,27 @@ public:
 		//int64_t packet_time = ((pkt->pts - (stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_)) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
 		//CASPAR_LOG(info) << "Begin decode packet of time: " << packet_time;
 
-		std::shared_ptr<AVFrame> decoded_frame(avcodec_alloc_frame(), av_free);
+		std::shared_ptr<AVFrame> decoded_frame = create_frame();
 
-		int frame_finished = 0;
-		THROW_ON_ERROR2(avcodec_decode_video2(codec_context_.get(), decoded_frame.get(), &frame_finished, pkt.get()), "[video_decoder]");
+		int got_picture_ptr = 0;
+		int bytes_consumed = avcodec_decode_video2(codec_context_.get(), decoded_frame.get(), &got_picture_ptr, pkt.get());//), "[video_decoder]");
 		
 		// If a decoder consumes less then the whole packet then something is wrong
 		// that might be just harmless padding at the end, or a problem with the
 		// AVParser or demuxer which puted more then one frame in a AVPacket.
 
-		if(frame_finished == 0)	
+		if(got_picture_ptr == 0 || bytes_consumed < 0)	
 			return nullptr;
 
 		is_progressive_ = !decoded_frame->interlaced_frame;
 
 		if(decoded_frame->repeat_pict > 0)
 			CASPAR_LOG(warning) << "[video_decoder] Field repeat_pict not implemented.";
-		
-		if (!(stream_->avg_frame_rate.den == 0 || decoded_frame->pkt_pts == AV_NOPTS_VALUE))
-			file_frame_number_ = static_cast<size_t>((decoded_frame->pkt_pts * stream_->time_base.num * stream_->avg_frame_rate.num) / (stream_->time_base.den*stream_->avg_frame_rate.den));
+		int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(decoded_frame.get());
+		if (!(stream_->avg_frame_rate.den == 0 || frame_time_stamp == AV_NOPTS_VALUE))
+			file_frame_number_ = static_cast<size_t>((frame_time_stamp * stream_->time_base.num * stream_->avg_frame_rate.num) / (stream_->time_base.den*stream_->avg_frame_rate.den));
 		else
 			++file_frame_number_;
-
 		if (decoded_frame->pkt_pts == AV_NOPTS_VALUE)
 			if (stream_->avg_frame_rate.num > 0)
 				packet_time_ = (AV_TIME_BASE * static_cast<int64_t>(file_frame_number_) * stream_->avg_frame_rate.den)/stream_->avg_frame_rate.num;
@@ -154,11 +148,8 @@ public:
 			packet_time_ = ((decoded_frame->pkt_pts - (stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_)) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
 		//packet_time = ((pkt->pts - (stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_)) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
 		//CASPAR_LOG(info) << "End decode packet of time: " << packet_time << " decoded frame time " << packet_time_;
-
-		// This ties the life of the decoded_frame to the packet that it came from. For the
-		// current version of ffmpeg (0.8 or c17808c) the RAW_VIDEO codec returns frame data
-		// owned by the packet.
-		return std::shared_ptr<AVFrame>(decoded_frame.get(), [decoded_frame, pkt](AVFrame*){});
+		//CASPAR_LOG(trace) << print() << "Packet time: " << packet_time_/1000;
+		return decoded_frame;
 	}
 	
 	bool ready() const
@@ -174,6 +165,15 @@ public:
 	uint32_t nb_frames() const
 	{
 		return std::max<uint32_t>(nb_frames_, file_frame_number_);
+	}
+
+	void clear()
+	{
+		while (!packets_.empty())
+			packets_.pop();
+		avcodec_flush_buffers(codec_context_.get());
+		packet_time_ = 0;
+		file_frame_number_ = 0;
 	}
 
 	std::wstring print() const
@@ -194,5 +194,6 @@ uint32_t video_decoder::file_frame_number() const{return impl_->file_frame_numbe
 int64_t video_decoder::packet_time() const{return impl_->packet_time_;}
 bool	video_decoder::is_progressive() const{return impl_->is_progressive_;}
 std::wstring video_decoder::print() const{return impl_->print();}
+void video_decoder::clear(){impl_->clear();}
 
 }}

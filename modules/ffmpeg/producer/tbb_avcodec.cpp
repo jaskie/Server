@@ -87,46 +87,28 @@ void thread_init(AVCodecContext* s)
 	static const size_t MAX_THREADS = 16; // See mpegvideo.h
 	static int dummy_opaque;
 
-    s->active_thread_type = FF_THREAD_SLICE;
-	s->thread_opaque	  = &dummy_opaque; 
+    s->thread_type = FF_THREAD_SLICE || FF_THREAD_FRAME;
     s->execute			  = thread_execute;
     s->execute2			  = thread_execute2;
+	s->slice_count		  = MAX_THREADS;
     s->thread_count		  = MAX_THREADS; // We are using a task-scheduler, so use as many "threads/tasks" as possible. 
 
 	CASPAR_LOG(info) << "Initialized ffmpeg tbb context.";
 }
 
-void thread_free(AVCodecContext* s)
-{
-	if(!s->thread_opaque)
-		return;
-
-	s->thread_opaque = nullptr;
-	
-	CASPAR_LOG(info) << "Released ffmpeg tbb context.";
-}
-
 int tbb_avcodec_open(AVCodecContext* avctx, AVCodec* codec)
 {
-	CodecID supported_codecs[] = {CODEC_ID_MPEG2VIDEO, CODEC_ID_PRORES, CODEC_ID_FFV1};
+	AVCodecID supported_codecs[] = {AV_CODEC_ID_MPEG2VIDEO, AV_CODEC_ID_PRORES, AV_CODEC_ID_FFV1, AV_CODEC_ID_H264};
 
 	avctx->thread_count = 1;
 	// Some codecs don't like to have multiple multithreaded decoding instances. Only enable for those we know work.
 	if(std::find(std::begin(supported_codecs), std::end(supported_codecs), codec->id) != std::end(supported_codecs) && 
-	  (codec->capabilities & CODEC_CAP_SLICE_THREADS) && 
-	  (avctx->thread_type & FF_THREAD_SLICE)) 
+	  ((codec->capabilities & CODEC_CAP_SLICE_THREADS) && (avctx->thread_type & FF_THREAD_SLICE)
+	  ||  (codec->capabilities & CODEC_CAP_FRAME_THREADS)) && (avctx->thread_type & FF_THREAD_FRAME)) 
 	{
 		thread_init(avctx);
 	}	
-	// ff_thread_init will not be executed since thread_opaque != nullptr || thread_count == 1.
-	return avcodec_open(avctx, codec); 
-}
-
-int tbb_avcodec_close(AVCodecContext* avctx)
-{
-	thread_free(avctx);
-	// ff_thread_free will not be executed since thread_opaque == nullptr.
-	return avcodec_close(avctx); 
+	return avcodec_open2(avctx, codec, nullptr); 
 }
 
 }

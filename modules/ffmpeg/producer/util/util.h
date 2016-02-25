@@ -41,6 +41,8 @@ struct AVPacket;
 struct AVRational;
 struct AVCodecContext;
 
+#define AVCODEC_MAX_AUDIO_FRAME_SIZE 192000
+
 namespace caspar {
 
 namespace core {
@@ -68,6 +70,7 @@ int							make_alpha_format(int format); // NOTE: Be careful about CASPAR_PIX_FM
 safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVFrame>& decoded_frame, const safe_ptr<core::frame_factory>& frame_factory, int hints, const core::channel_layout& audio_channel_layout);
 
 safe_ptr<AVPacket> create_packet();
+safe_ptr<AVFrame> create_frame();
 
 safe_ptr<AVCodecContext> open_codec(AVFormatContext& context,  enum AVMediaType type, int& index);
 
@@ -85,5 +88,6 @@ bool is_valid_file(const std::wstring filename);
 bool try_get_duration(const std::wstring filename, std::int64_t& duration, boost::rational<std::int64_t>& time_base);
 
 core::channel_layout get_audio_channel_layout(const AVCodecContext& context, const std::wstring& custom_channel_order);
+std::int64_t create_channel_layout_bitmask(int num_channels);
 
 }}

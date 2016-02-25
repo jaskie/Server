@@ -218,12 +218,11 @@ public:
 			if(FAILED(video->GetBytes(&bytes)) || !bytes)
 				return S_OK;
 			
-			safe_ptr<AVFrame> av_frame(avcodec_alloc_frame(), av_free);	
-			avcodec_get_frame_defaults(av_frame.get());
+			safe_ptr<AVFrame> av_frame(av_frame_alloc(), [](AVFrame* frame) {av_frame_free(&frame);});
 						
 			av_frame->data[0]			= reinterpret_cast<uint8_t*>(bytes);
 			av_frame->linesize[0]		= video->GetRowBytes();			
-			av_frame->format			= PIX_FMT_UYVY422;
+			av_frame->format			= AV_PIX_FMT_UYVY422;
 			av_frame->width				= video->GetWidth();
 			av_frame->height			= video->GetHeight();
 			av_frame->interlaced_frame	= format_desc_.field_mode != core::field_mode::progressive;

@@ -107,11 +107,14 @@ struct ffmpeg_producer : public core::frame_producer
 	std::unique_ptr<video_decoder>								video_decoder_;
 	std::unique_ptr<audio_decoder>								audio_decoder_;	
 	std::unique_ptr<frame_muxer>								muxer_;
+	core::channel_layout										audio_channel_layout_;
+	const std::wstring											custom_channel_order_;	
 
 	const double												fps_;
-	const uint32_t												start_;
+	uint32_t													seek_;
 	const uint32_t												length_;
 	const bool													thumbnail_mode_;
+	const std::wstring											filter_;
 
 	safe_ptr<core::basic_frame>									last_frame_;
 	
@@ -120,6 +123,7 @@ struct ffmpeg_producer : public core::frame_producer
 	int64_t														frame_number_;
 	uint32_t													file_frame_number_;
 	int64_t														start_time_;
+	
 		
 public:
 	explicit ffmpeg_producer(const safe_ptr<core::frame_factory>& frame_factory, const std::wstring& filename, FFMPEG_Resource resource_type, const std::wstring& filter, bool loop, uint32_t start, uint32_t length, bool thumbnail_mode, const std::wstring& custom_channel_order, const ffmpeg_producer_params& vid_params)
@@ -131,24 +135,16 @@ public:
 		, initial_logger_disabler_(temporary_disable_logging_for_thread(thumbnail_mode))
 		, input_(graph_, filename_, resource_type, loop, start, length, thumbnail_mode, vid_params, format_desc_.fps)
 		, fps_(read_fps(*input_.context(), format_desc_.fps))
-		, start_(start)
 		, length_(length)
 		, thumbnail_mode_(thumbnail_mode)
 		, last_frame_(core::basic_frame::empty())
+		, filter_(filter)
+		, custom_channel_order_(custom_channel_order)
 		, frame_number_(0)
-		, start_time_(0) 
-
 	{
 		graph_->set_color("frame-time", diagnostics::color(0.1f, 1.0f, 0.1f));
 		graph_->set_color("underflow", diagnostics::color(0.6f, 0.3f, 0.9f));	
 		diagnostics::register_graph(graph_);
-		int stream_index = av_find_best_stream(input_.context().get(), AVMEDIA_TYPE_VIDEO, -1, -1, 0, 0);
-		AVStream* stream = stream_index >=0 ? input_.context()->streams[stream_index]: NULL;
-		if (stream && stream->avg_frame_rate.num > 0)
-			start_time_ = (AV_TIME_BASE * static_cast<int64_t>(start_) * stream ->avg_frame_rate.den)/(stream ->avg_frame_rate.num); 
-		else
-			start_time_ = static_cast<int64_t>(AV_TIME_BASE * (start_ / format_desc_.fps));
-	
 		try
 		{
 			video_decoder_.reset(new video_decoder(input_.context()));
@@ -157,7 +153,7 @@ public:
 		}
 		catch(averror_stream_not_found&)
 		{
-			//CASPAR_LOG(warning) << print() << " No video-stream found. Running without video.";	
+			CASPAR_LOG(warning) << print() << " No video-stream found. Running without video.";	
 		}
 		catch(...)
 		{
@@ -168,19 +164,19 @@ public:
 			}
 		}
 
-		core::channel_layout audio_channel_layout = core::default_channel_layout_repository().get_by_name(L"STEREO");
+		audio_channel_layout_ = core::default_channel_layout_repository().get_by_name(L"STEREO");
 
 		if (!thumbnail_mode_)
 		{
 			try
 			{
 				audio_decoder_.reset(new audio_decoder(input_.context(), frame_factory->get_video_format_desc(), custom_channel_order));
-				audio_channel_layout = audio_decoder_->channel_layout();
+				audio_channel_layout_ = audio_decoder_->channel_layout();
 				CASPAR_LOG(info) << print() << L" " << audio_decoder_->print();
 			}
 			catch(averror_stream_not_found&)
 			{
-				//CASPAR_LOG(warning) << print() << " No audio-stream found. Running without audio.";	
+				CASPAR_LOG(warning) << print() << " No audio-stream found. Running without audio.";	
 			}
 			catch(...)
 			{
@@ -191,8 +187,7 @@ public:
 
 		if(!video_decoder_ && !audio_decoder_)
 			BOOST_THROW_EXCEPTION(averror_stream_not_found() << msg_info("No streams found"));
-
-		muxer_.reset(new frame_muxer(fps_, frame_factory, thumbnail_mode_, audio_channel_layout, filter));
+		seek(start);
 	}
 
 	// frame_producer
@@ -273,7 +268,7 @@ public:
 		if (file_position > 0) // Assume frames are requested in sequential order,
 			                   // therefore no seeking should be necessary for the first frame.
 		{
-			input_.seek(file_position > 1 ? file_position - 2: file_position).get();
+			input_.seek(file_position > 1 ? file_position - 2: file_position);//.get();
 			boost::this_thread::sleep(boost::posix_time::milliseconds(40));
 		}
 
@@ -298,7 +293,7 @@ public:
 				if (adjusted_seek > 1 && file_position > 0)
 				{
 					CASPAR_LOG(trace) << print() << L" adjusting to " << adjusted_seek;
-					input_.seek(static_cast<uint32_t>(adjusted_seek) - 1).get();
+					input_.seek(static_cast<uint32_t>(adjusted_seek) - 1);//.get();
 					boost::this_thread::sleep(boost::posix_time::milliseconds(40));
 				}
 				else
@@ -374,15 +369,12 @@ public:
 		nb_frames = std::min(length_, nb_frames);
 		nb_frames = muxer_->calc_nb_frames(nb_frames);
 		
-		return nb_frames > start_ ? nb_frames - start_ : 0;
+		return nb_frames > seek_ ? nb_frames - seek_ : 0;
 	}
 
 	uint32_t file_nb_frames() const
 	{
-		uint32_t file_nb_frames = 0;
-		file_nb_frames = std::max(file_nb_frames, video_decoder_ ? video_decoder_->nb_frames() : 0);
-		file_nb_frames = std::max(file_nb_frames, audio_decoder_ ? audio_decoder_->nb_frames() : 0);
-		return file_nb_frames;
+		return video_decoder_ ? video_decoder_->nb_frames() : std::numeric_limits<uint32_t>::max();
 	}
 	
 	virtual boost::unique_future<std::wstring> call(const std::wstring& param) override
@@ -438,16 +430,35 @@ public:
 		}
 		if(boost::regex_match(param, what, seek_exp))
 		{
-			input_.seek(boost::lexical_cast<uint32_t>(what["VALUE"].str()));
+			seek(boost::lexical_cast<uint32_t>(what["VALUE"].str()));
 			return L"";
 		}
-
 		BOOST_THROW_EXCEPTION(invalid_argument());
 	}
 
+	
+	void seek(uint32_t frame)
+	{
+		int stream_index = av_find_best_stream(input_.context().get(), AVMEDIA_TYPE_VIDEO, -1, -1, 0, 0);
+		AVStream* stream = stream_index >=0 ? input_.context()->streams[stream_index]: NULL;
+		if (stream && stream->avg_frame_rate.num > 0)
+			start_time_ = (AV_TIME_BASE * static_cast<int64_t>(frame) * stream ->avg_frame_rate.den)/(stream ->avg_frame_rate.num); 
+		else
+			start_time_ = static_cast<int64_t>(AV_TIME_BASE * (frame / format_desc_.fps));
+		input_.seek(frame);
+		video_decoder_->clear();
+		audio_decoder_->clear();
+		seek_ = frame;
+		while (!frame_buffer_.empty())
+			frame_buffer_.pop();
+		muxer_.reset(new frame_muxer(fps_, frame_factory_, thumbnail_mode_, audio_channel_layout_, filter_));
+		CASPAR_LOG(trace) << print() << " Muxer reset" ;
+		//muxer_->clear();
+	}
+	
 	void try_decode_frame(int hints)
 	{
-		std::shared_ptr<AVPacket> pkt;
+		std::shared_ptr<AVPacket>			pkt;
 		std::shared_ptr<AVFrame>			video;
 		std::shared_ptr<core::audio_buffer> audio;
 		int i = 0;
@@ -467,13 +478,7 @@ public:
 				[&]
 				{
 					if(!muxer_->video_ready() && video_decoder_ && !video_completed)	
-					{
 						video = video_decoder_->poll();	
-					/*	if (video)
-						{
-							CASPAR_LOG(info) << "Frame time: " << video->pkt_dts << " is key frame: " << video->key_frame;
-						}*/
-					}
 				},
 				[&]
 				{		
@@ -482,35 +487,33 @@ public:
 				});
 
 				i++;
-				video_completed = !video_decoder_ || video == flush_video() || video_decoder_->packet_time() >= start_time_ || video_decoder_->empty();
-				audio_completed = !audio_decoder_ || audio == flush_audio() || audio_decoder_->packet_time() >= start_time_ || audio_decoder_->empty();
+				video_completed = !video_decoder_ || video_decoder_->packet_time() >= start_time_ || video_decoder_->empty();
+				audio_completed = !audio_decoder_ || audio_decoder_->packet_time() >= start_time_ || audio_decoder_->empty();
+		/*		if (video)
+					CASPAR_LOG(trace) << print() << "decoded: " << video->best_effort_timestamp/512 << ", audio completed: " << audio_completed;*/
 		}
 		while (!(video_completed && audio_completed) 
 			&& i < MAX_GOP_SIZE 
 			&& !(input_.empty() && (!video_decoder_ || video_decoder_->empty()) &&  (!audio_decoder_ || audio_decoder_->empty()))); // max i detemines maximal gop size which correctly seek
 		
 		if (i>=MAX_GOP_SIZE)
-			CASPAR_LOG(warning) << print() << " Giving up seeking frame at " << start_;
+			CASPAR_LOG(warning) << print() << " Giving up seeking frame at " << seek_;
 		else
 			if (i>1)
-				CASPAR_LOG(info) << print() << " Skipped " << i-1 << " frames before selected";
+				CASPAR_LOG(trace) << print() << " Skipped " << i-1 << " frames before selected";
 
 		muxer_->push(video, hints);
 		muxer_->push(audio);
 
 		if(!audio_decoder_)
 		{
-			if(video == flush_video())
-				muxer_->push(flush_audio());
-			else if(!muxer_->audio_ready())
+			if(!muxer_->audio_ready())
 				muxer_->push(empty_audio());
 		}
 
 		if(!video_decoder_)
 		{
-			if(audio == flush_audio())
-				muxer_->push(flush_video(), 0);
-			else if(!muxer_->video_ready())
+			if(!muxer_->video_ready())
 				muxer_->push(empty_video(), 0);
 		}
 		

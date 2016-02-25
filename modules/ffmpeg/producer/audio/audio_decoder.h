@@ -50,16 +50,10 @@ public:
 	bool empty() const;
 	void push(const std::shared_ptr<AVPacket>& packet);
 	std::shared_ptr<core::audio_buffer> poll();
-
-	uint32_t nb_frames() const;
-	
-	uint32_t file_frame_number() const;
-	
 	int64_t packet_time() const;
-
 	const core::channel_layout& channel_layout() const;
-
 	std::wstring print() const;
+	void clear();
 private:
 	struct implementation;
 	safe_ptr<implementation> impl_;

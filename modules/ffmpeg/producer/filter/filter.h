@@ -30,7 +30,7 @@
 #include <vector>
 
 struct AVFrame;
-enum PixelFormat;
+enum AVPixelFormat;
 
 namespace caspar { namespace ffmpeg {
 
@@ -42,7 +42,7 @@ static std::wstring append_filter(const std::wstring& filters, const std::wstrin
 class filter : boost::noncopyable
 {
 public:
-	filter(const std::wstring& filters = L"", const std::vector<PixelFormat>& pix_fmts = std::vector<PixelFormat>());
+	filter(const std::wstring& filters = L"", const std::vector<AVPixelFormat>& pix_fmts = std::vector<AVPixelFormat>());
 	filter(filter&& other);
 	filter& operator=(filter&& other);
 

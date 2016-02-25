@@ -58,10 +58,11 @@ public:
 	
 	void push(const std::shared_ptr<AVFrame>& video_frame, int hints = 0);
 	void push(const std::shared_ptr<core::audio_buffer>& audio_samples);
-	
+	void clear();
+
 	bool video_ready() const;
 	bool audio_ready() const;
-
+	
 	std::shared_ptr<core::basic_frame> poll();
 
 	uint32_t calc_nb_frames(uint32_t nb_frames) const;

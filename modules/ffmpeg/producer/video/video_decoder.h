@@ -59,6 +59,8 @@ public:
 
 	std::wstring print() const;
 
+	void clear();
+
 private:
 	struct implementation;
 	safe_ptr<implementation> impl_;

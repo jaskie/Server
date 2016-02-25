@@ -161,7 +161,7 @@ public:
 		, screen_height_(format_desc.height)
 		, square_width_(format_desc.square_width)
 		, square_height_(format_desc.square_height)
-		, filter_(format_desc.field_mode == core::field_mode::progressive || !config.auto_deinterlace ? L"" : L"YADIF=1:-1", boost::assign::list_of(PIX_FMT_BGRA))
+		, filter_(format_desc.field_mode == core::field_mode::progressive || !config.auto_deinterlace ? L"" : L"YADIF=1:-1", boost::assign::list_of(AV_PIX_FMT_BGRA))
 	{		
 		if(format_desc_.format == core::video_format::ntsc && config_.aspect == configuration::aspect_4_3)
 		{
@@ -342,11 +342,12 @@ public:
 	
 	safe_ptr<AVFrame> get_av_frame()
 	{		
-		safe_ptr<AVFrame> av_frame(avcodec_alloc_frame(), av_free);	
-		avcodec_get_frame_defaults(av_frame.get());
-						
+		safe_ptr<AVFrame> av_frame = safe_ptr<AVFrame>(av_frame_alloc(), [](AVFrame* frame)
+		{
+			av_frame_free(&frame);
+		});
 		av_frame->linesize[0]		= format_desc_.width*4;			
-		av_frame->format			= PIX_FMT_BGRA;
+		av_frame->format			= AV_PIX_FMT_BGRA;
 		av_frame->width				= format_desc_.width;
 		av_frame->height			= format_desc_.height;
 		av_frame->interlaced_frame	= format_desc_.field_mode != core::field_mode::progressive;
@@ -405,13 +406,13 @@ public:
 			memcpy(const_cast<int*>(&src_linesizes[0]), av_frame->linesize, 4);
 
 			auto av_frame2 = get_av_frame();
-			av_image_alloc(av_frame2->data, av_frame2->linesize, av_frame2->width, av_frame2->height, PIX_FMT_BGRA, 16);
+			av_image_alloc(av_frame2->data, av_frame2->linesize, av_frame2->width, av_frame2->height, AV_PIX_FMT_BGRA, 16);
 			av_frame = safe_ptr<AVFrame>(av_frame2.get(), [=](AVFrame*)
 			{
 				av_freep(&av_frame2->data[0]);
 			});
 
-			av_image_copy(av_frame2->data, av_frame2->linesize, src_data, src_linesizes, PIX_FMT_BGRA, av_frame2->width, av_frame2->height);
+			av_image_copy(av_frame2->data, av_frame2->linesize, src_data, src_linesizes, AV_PIX_FMT_BGRA, av_frame2->width, av_frame2->height);
 		}
 
 		glBindTexture(GL_TEXTURE_2D, texture_);

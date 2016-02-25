@@ -63,27 +63,28 @@ extern "C"
 
 namespace caspar { namespace ffmpeg {
 		
+/*
 std::shared_ptr<core::audio_buffer> flush_audio()
 {
 	static std::shared_ptr<core::audio_buffer> audio(new core::audio_buffer());
 	return audio;
 }
-
+*/
 std::shared_ptr<core::audio_buffer> empty_audio()
 {
 	static std::shared_ptr<core::audio_buffer> audio(new core::audio_buffer());
 	return audio;
 }
-
+/*
 std::shared_ptr<AVFrame>			flush_video()
 {
-	static std::shared_ptr<AVFrame> video(avcodec_alloc_frame(), av_free);
+	static std::shared_ptr<AVFrame> video = create_frame();
 	return video;
 }
-
+*/
 std::shared_ptr<AVFrame>			empty_video()
 {
-	static std::shared_ptr<AVFrame> video(avcodec_alloc_frame(), av_free);
+	static std::shared_ptr<AVFrame> video = create_frame();
 	return video;
 }
 
@@ -95,31 +96,31 @@ core::field_mode::type get_mode(const AVFrame& frame)
 	return frame.top_field_first ? core::field_mode::upper : core::field_mode::lower;
 }
 
-core::pixel_format::type get_pixel_format(PixelFormat pix_fmt)
+core::pixel_format::type get_pixel_format(AVPixelFormat pix_fmt)
 {
 	switch(pix_fmt)
 	{
 	case CASPAR_PIX_FMT_LUMA:	return core::pixel_format::luma;
-	case PIX_FMT_GRAY8:			return core::pixel_format::gray;
-	case PIX_FMT_BGRA:			return core::pixel_format::bgra;
-	case PIX_FMT_ARGB:			return core::pixel_format::argb;
-	case PIX_FMT_RGBA:			return core::pixel_format::rgba;
-	case PIX_FMT_ABGR:			return core::pixel_format::abgr;
-	case PIX_FMT_YUV444P:		return core::pixel_format::ycbcr;
-	case PIX_FMT_YUV422P:		return core::pixel_format::ycbcr;
-	case PIX_FMT_YUV420P:		return core::pixel_format::ycbcr;
-	case PIX_FMT_YUV411P:		return core::pixel_format::ycbcr;
-	case PIX_FMT_YUV410P:		return core::pixel_format::ycbcr;
-	case PIX_FMT_YUVA420P:		return core::pixel_format::ycbcra;
+	case AV_PIX_FMT_GRAY8:			return core::pixel_format::gray;
+	case AV_PIX_FMT_BGRA:			return core::pixel_format::bgra;
+	case AV_PIX_FMT_ARGB:			return core::pixel_format::argb;
+	case AV_PIX_FMT_RGBA:			return core::pixel_format::rgba;
+	case AV_PIX_FMT_ABGR:			return core::pixel_format::abgr;
+	case AV_PIX_FMT_YUV444P:		return core::pixel_format::ycbcr;
+	case AV_PIX_FMT_YUV422P:		return core::pixel_format::ycbcr;
+	case AV_PIX_FMT_YUV420P:		return core::pixel_format::ycbcr;
+	case AV_PIX_FMT_YUV411P:		return core::pixel_format::ycbcr;
+	case AV_PIX_FMT_YUV410P:		return core::pixel_format::ycbcr;
+	case AV_PIX_FMT_YUVA420P:		return core::pixel_format::ycbcra;
 	default:					return core::pixel_format::invalid;
 	}
 }
 
-core::pixel_format_desc get_pixel_format_desc(PixelFormat pix_fmt, size_t width, size_t height)
+core::pixel_format_desc get_pixel_format_desc(AVPixelFormat pix_fmt, size_t width, size_t height)
 {
 	// Get linesizes
 	AVPicture dummy_pict;	
-	avpicture_fill(&dummy_pict, nullptr, pix_fmt == CASPAR_PIX_FMT_LUMA ? PIX_FMT_GRAY8 : pix_fmt, width, height);
+	avpicture_fill(&dummy_pict, nullptr, (AVPixelFormat)(pix_fmt == CASPAR_PIX_FMT_LUMA ? AV_PIX_FMT_GRAY8 : pix_fmt), width, height);
 
 	core::pixel_format_desc desc;
 	desc.pix_fmt = get_pixel_format(pix_fmt);
@@ -163,7 +164,7 @@ core::pixel_format_desc get_pixel_format_desc(PixelFormat pix_fmt, size_t width,
 
 int make_alpha_format(int format)
 {
-	switch(get_pixel_format(static_cast<PixelFormat>(format)))
+	switch(get_pixel_format(static_cast<AVPixelFormat>(format)))
 	{
 	case core::pixel_format::ycbcr:
 	case core::pixel_format::ycbcra:
@@ -182,32 +183,32 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 
 	const auto width  = decoded_frame->width;
 	const auto height = decoded_frame->height;
-	auto desc		  = get_pixel_format_desc(static_cast<PixelFormat>(decoded_frame->format), width, height);
+	auto desc		  = get_pixel_format_desc(static_cast<AVPixelFormat>(decoded_frame->format), width, height);
 	
 	if(hints & core::frame_producer::ALPHA_HINT)
-		desc = get_pixel_format_desc(static_cast<PixelFormat>(make_alpha_format(decoded_frame->format)), width, height);
+		desc = get_pixel_format_desc(static_cast<AVPixelFormat>(make_alpha_format(decoded_frame->format)), width, height);
 
 	std::shared_ptr<core::write_frame> write;
 
 	if(desc.pix_fmt == core::pixel_format::invalid)
 	{
-		auto pix_fmt = static_cast<PixelFormat>(decoded_frame->format);
-		auto target_pix_fmt = PIX_FMT_BGRA;
+		auto pix_fmt = static_cast<AVPixelFormat>(decoded_frame->format);
+		auto target_pix_fmt = AV_PIX_FMT_BGRA;
 
-		if(pix_fmt == PIX_FMT_UYVY422)
-			target_pix_fmt = PIX_FMT_YUV422P;
-		else if(pix_fmt == PIX_FMT_YUYV422)
-			target_pix_fmt = PIX_FMT_YUV422P;
-		else if(pix_fmt == PIX_FMT_UYYVYY411)
-			target_pix_fmt = PIX_FMT_YUV411P;
-		else if(pix_fmt == PIX_FMT_YUV420P10)
-			target_pix_fmt = PIX_FMT_YUV420P;
-		else if(pix_fmt == PIX_FMT_YUV422P10)
-			target_pix_fmt = PIX_FMT_YUV422P;
-		else if(pix_fmt == PIX_FMT_YUV444P10)
-			target_pix_fmt = PIX_FMT_YUV444P;
+		if(pix_fmt == AV_PIX_FMT_UYVY422)
+			target_pix_fmt = AV_PIX_FMT_YUV422P;
+		else if(pix_fmt == AV_PIX_FMT_YUYV422)
+			target_pix_fmt = AV_PIX_FMT_YUV422P;
+		else if(pix_fmt == AV_PIX_FMT_UYYVYY411)
+			target_pix_fmt = AV_PIX_FMT_YUV411P;
+		else if(pix_fmt == AV_PIX_FMT_YUV420P10)
+			target_pix_fmt = AV_PIX_FMT_YUV420P;
+		else if(pix_fmt == AV_PIX_FMT_YUV422P10)
+			target_pix_fmt = AV_PIX_FMT_YUV422P;
+		else if(pix_fmt == AV_PIX_FMT_YUV444P10)
+			target_pix_fmt = AV_PIX_FMT_YUV444P;
 		
-		auto target_desc = get_pixel_format_desc(target_pix_fmt, width, height);
+		auto target_desc = get_pixel_format_desc(static_cast<AVPixelFormat>(target_pix_fmt), width, height);
 
 		write = frame_factory->create_frame(tag, target_desc, audio_channel_layout);
 		write->set_type(get_mode(*decoded_frame));
@@ -226,7 +227,7 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 		if(!pool.try_pop(sws_context))
 		{
 			double param;
-			sws_context.reset(sws_getContext(width, height, pix_fmt, width, height, target_pix_fmt, SWS_BILINEAR, nullptr, nullptr, &param), sws_freeContext);
+			sws_context.reset(sws_getContext(width, height, static_cast<AVPixelFormat>(pix_fmt), width, height, target_pix_fmt, SWS_BILINEAR, nullptr, nullptr, &param), sws_freeContext);
 		}
 			
 		if(!sws_context)
@@ -235,11 +236,11 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 									boost::errinfo_api_function("sws_getContext"));
 		}	
 		
-		safe_ptr<AVFrame> av_frame(avcodec_alloc_frame(), av_free);	
-		avcodec_get_frame_defaults(av_frame.get());			
-		if(target_pix_fmt == PIX_FMT_BGRA)
+		safe_ptr<AVFrame> av_frame = create_frame();	
+		av_frame_unref(av_frame.get());			
+		if(target_pix_fmt == AV_PIX_FMT_BGRA)
 		{
-			auto size = avpicture_fill(reinterpret_cast<AVPicture*>(av_frame.get()), write->image_data().begin(), PIX_FMT_BGRA, width, height);
+			auto size = avpicture_fill(reinterpret_cast<AVPicture*>(av_frame.get()), write->image_data().begin(), AV_PIX_FMT_BGRA, width, height);
 			CASPAR_VERIFY(size == write->image_data().size()); 
 		}
 		else
@@ -337,7 +338,7 @@ double read_fps(AVFormatContext& context, double fail_value)
 		const auto video_context = context.streams[video_index]->codec;
 		const auto video_stream  = context.streams[video_index];
 					
-		auto frame_rate_time_base = video_stream->avg_frame_rate;
+		auto frame_rate_time_base = av_stream_get_r_frame_rate(video_stream);
 		std::swap(frame_rate_time_base.num, frame_rate_time_base.den);
  
 		if(is_sane_fps(frame_rate_time_base))
@@ -402,25 +403,26 @@ double read_fps(AVFormatContext& context, double fail_value)
 
 safe_ptr<AVPacket> create_packet()
 {
-	safe_ptr<AVPacket> packet(new AVPacket, [](AVPacket* p)
-	{
-		av_free_packet(p);
-		delete p;
-	});
-	
+	safe_ptr<AVPacket> packet((AVPacket*)av_malloc(sizeof(AVPacket)), av_free_packet);
 	av_init_packet(packet.get());
 	return packet;
+}
+
+safe_ptr<AVFrame> create_frame()
+{	
+	safe_ptr<AVFrame> frame(av_frame_alloc(), [](AVFrame* frame)
+		{
+			av_frame_free(&frame);
+		});
+	return frame;
 }
 
 safe_ptr<AVCodecContext> open_codec(AVFormatContext& context, enum AVMediaType type, int& index)
 {	
 	AVCodec* decoder;
-	index = THROW_ON_ERROR2(av_find_best_stream(&context, type, -1, -1, &decoder, 0), "");
-	//if(strcmp(decoder->name, "prores") == 0 && decoder->next && strcmp(decoder->next->name, "prores_lgpl") == 0)
-	//	decoder = decoder->next;
-
-	THROW_ON_ERROR2(tbb_avcodec_open(context.streams[index]->codec, decoder), "");
-	return safe_ptr<AVCodecContext>(context.streams[index]->codec, tbb_avcodec_close);
+	index = THROW_ON_ERROR2(av_find_best_stream(&context, type, -1, -1, &decoder, 0), "[open_codec}");
+	THROW_ON_ERROR2(tbb_avcodec_open(context.streams[index]->codec, decoder), "[open_codec]");
+	return safe_ptr<AVCodecContext>(context.streams[index]->codec, avcodec_close);
 }
 
 std::wstring print_mode(size_t width, size_t height, double fps, bool interlaced)
@@ -461,9 +463,9 @@ bool is_valid_file(const std::wstring filename, const std::vector<std::wstring>&
 	pb.filename = filename2.c_str();
 	pb.buf		= buf.data();
 	pb.buf_size = buf.size();
-
-	int score = 0;
-	return av_probe_input_format2(&pb, true, &score) != nullptr;
+	//TODO: find exception reason
+	//int score = 0;
+	return true;//av_probe_input_format2(&pb, true, &score) != nullptr;
 }
 
 bool is_valid_file(const std::wstring filename)
@@ -479,7 +481,10 @@ bool try_get_duration(const std::wstring filename, std::int64_t& duration, boost
 	if(avformat_open_input(&weak_context, narrow(filename).c_str(), nullptr, nullptr) < 0)
 		return false;
 
-	std::shared_ptr<AVFormatContext> context(weak_context, av_close_input_file);
+	std::shared_ptr<AVFormatContext> context(weak_context, [](AVFormatContext* p)
+	{
+		avformat_close_input(&p);
+	});
 	
 	context->probesize = context->probesize / 10;
 	context->max_analyze_duration = context->probesize / 10;
@@ -558,6 +563,19 @@ core::channel_layout get_audio_channel_layout(
 	}
 
 	return core::create_unspecified_layout(context.channels);
+}
+
+std::int64_t create_channel_layout_bitmask(int num_channels)
+{
+	if (num_channels > 63)
+		BOOST_THROW_EXCEPTION(caspar_exception("FFMpeg cannot handle more than 63 audio channels"));
+
+	const auto ALL_63_CHANNELS = 0x7FFFFFFFFFFFFFFFULL;
+
+	auto to_shift = 63 - num_channels;
+	auto result = ALL_63_CHANNELS >> to_shift;
+
+	return static_cast<std::int64_t>(result);
 }
 
 //

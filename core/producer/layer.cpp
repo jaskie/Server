@@ -149,7 +149,23 @@ public:
 
 	boost::unique_future<std::wstring> call(bool foreground, const std::wstring& param)
 	{
-		return (foreground ? foreground_ : background_)->call(param);
+		static const boost::wregex loop_exp(L"SEEK\\s*(?<VALUE>\\d+)", boost::regex::icase);
+		auto producer = foreground ? foreground_ : background_;
+		boost::promise<std::wstring> promise;
+		boost::wsmatch what;
+		promise.set_value(do_call(producer, param));
+		if (is_paused_ && boost::regex_match(param, what, loop_exp))
+		{
+			play();
+			receive(frame_producer::NO_HINT);
+			pause();
+		}
+		return promise.get_future();
+	}
+
+	std::wstring do_call(const safe_ptr<frame_producer> producer, const std::wstring& param)
+	{
+		return producer->call(param).get();
 	}
 
 	bool empty() const
