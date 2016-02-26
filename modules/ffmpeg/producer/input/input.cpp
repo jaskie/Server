@@ -379,6 +379,7 @@ struct input::implementation : boost::noncopyable
 		start_ = target;
 		frame_number_ = target;
 		flush_packet_count_ = FLUSH_PACKET_COUNT;
+		is_eof_ = false;
 		if (default_stream_ && default_stream_->codec->codec_type == AVMEDIA_TYPE_VIDEO && default_stream_->avg_frame_rate.num > 0)
 		{
 				start_time_ = (AV_TIME_BASE * static_cast<int64_t>(start_) * default_stream_->avg_frame_rate.den)/default_stream_->avg_frame_rate.num;
@@ -401,17 +402,8 @@ struct input::implementation : boost::noncopyable
 			+ default_stream_->first_dts - 1024; //don't know why?		
 		else
 			seek = static_cast<int64_t>(target / channel_fps_ * AV_TIME_BASE) + format_context_->start_time;
-			
-		is_eof_ = av_seek_frame(
-			format_context_.get(), 
-			seek_by_stream_time ? default_stream_index_ : -1, 
-			seek, 
-			AVSEEK_FLAG_BACKWARD) < 0; // Again, why backward? but it just works.
-		auto flush_packet	= create_packet();
-		flush_packet->data	= nullptr;
-		flush_packet->size	= 0;
-		flush_packet->pos	= target;
-		buffer_.push(flush_packet);
+		av_seek_frame(format_context_.get(), seek_by_stream_time ? default_stream_index_ : -1, seek, AVSEEK_FLAG_BACKWARD); // Again, why backward? but it just works.
+		avformat_flush(format_context_.get());
 		tick();
 	}	
 

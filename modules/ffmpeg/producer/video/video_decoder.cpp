@@ -80,7 +80,7 @@ public:
 		, stream_start_pts_(stream_->start_time) 
 	{
 		file_frame_number_ = 0;
-		packet_time_ = - ((stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
+		packet_time_ = std::numeric_limits<int64_t>().min();
 	}
 
 	void push(const std::shared_ptr<AVPacket>& packet)
@@ -139,13 +139,13 @@ public:
 			file_frame_number_ = static_cast<size_t>((frame_time_stamp * stream_->time_base.num * stream_->avg_frame_rate.num) / (stream_->time_base.den*stream_->avg_frame_rate.den));
 		else
 			++file_frame_number_;
-		if (decoded_frame->pkt_pts == AV_NOPTS_VALUE)
+		if (frame_time_stamp == AV_NOPTS_VALUE)
 			if (stream_->avg_frame_rate.num > 0)
 				packet_time_ = (AV_TIME_BASE * static_cast<int64_t>(file_frame_number_) * stream_->avg_frame_rate.den)/stream_->avg_frame_rate.num;
 			else
 				packet_time_ = std::numeric_limits<int64_t>().max();
 		else
-			packet_time_ = ((decoded_frame->pkt_pts - (stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_)) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
+			packet_time_ = ((frame_time_stamp - (stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_)) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
 		//packet_time = ((pkt->pts - (stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_)) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
 		//CASPAR_LOG(info) << "End decode packet of time: " << packet_time << " decoded frame time " << packet_time_;
 		//CASPAR_LOG(trace) << print() << "Packet time: " << packet_time_/1000;
@@ -172,7 +172,7 @@ public:
 		while (!packets_.empty())
 			packets_.pop();
 		avcodec_flush_buffers(codec_context_.get());
-		packet_time_ = 0;
+		packet_time_ = std::numeric_limits<int64_t>().min();
 		file_frame_number_ = 0;
 	}
 

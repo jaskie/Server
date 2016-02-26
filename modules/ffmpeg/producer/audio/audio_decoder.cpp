@@ -83,7 +83,7 @@ public:
 		, stream_start_pts_(stream_->start_time)
 	{
 		THROW_ON_ERROR2(swr_init(swr_.get()), "[audio_decoder]");
-		packet_time_ =  - (stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_);
+		packet_time_ = std::numeric_limits<int64_t>().min();
 		CASPAR_LOG(debug) << print() 
 				<< " Selected channel layout " << channel_layout_.name;
 	}
@@ -188,7 +188,7 @@ public:
 		while (!packets_.empty())
 			packets_.pop();
 		avcodec_flush_buffers(codec_context_.get());
-		packet_time_ = 0;
+		packet_time_ = std::numeric_limits<int64_t>().min();
 	}
 	
 	std::wstring print() const
