@@ -561,7 +561,8 @@ safe_ptr<core::frame_producer> create_producer(
 		filename = env::media_folder() + L"\\" + tokens[1];
 		if(!boost::filesystem::exists(filename))
 			filename = probe_stem(filename);
-
+		if (filename.empty() && boost::filesystem::exists(tokens[1]))
+			filename = tokens[1];		
 		//TODO fix these?
 		//vid_params->loop       = params.has(L"LOOP");
 		//vid_params->start     = params.get(L"SEEK", static_cast<uint32_t>(0));

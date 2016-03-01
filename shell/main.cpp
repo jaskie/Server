@@ -311,7 +311,7 @@ int main(int argc, wchar_t* argv[])
 						else if(wcmd.substr(0, 1) == L"3")
 							wcmd = L"MIXER 1-0 SATURATION 1 50";
 						else if(wcmd.substr(0, 1) == L"4")
-							wcmd = L"PLAY 1-1 DV FILTER yadif=1:-1 LOOP";
+							wcmd = L"LOAD 1-0 \"E:\\\\LXF\\\\DVCAM.MXF\"";
 						else if(wcmd.substr(0, 1) == L"5")
 						{
 							auto file = wcmd.substr(2, wcmd.length()-1);

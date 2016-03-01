@@ -522,11 +522,12 @@ std::wstring probe_stem(const std::wstring stem)
 {
 	auto stem2 = boost::filesystem2::wpath(stem);
 	auto dir = stem2.parent_path();
-	for(auto it = boost::filesystem2::wdirectory_iterator(dir); it != boost::filesystem2::wdirectory_iterator(); ++it)
-	{
-		if(boost::iequals(it->path().stem(), stem2.filename()) && is_valid_file(it->path().file_string()))
-			return it->path().file_string();
-	}
+	if (boost::filesystem::exists(dir))
+		for(auto it = boost::filesystem2::wdirectory_iterator(dir); it != boost::filesystem2::wdirectory_iterator(); ++it)
+		{
+			if(boost::iequals(it->path().stem(), stem2.filename()) && is_valid_file(it->path().file_string()))
+				return it->path().file_string();
+		}
 	return L"";
 }
 

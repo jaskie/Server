@@ -362,20 +362,6 @@ struct input::implementation : boost::noncopyable
 	{  	
 		if (!thumbnail_mode_)
 			CASPAR_LOG(debug) << print() << " Seeking: " << target;
-
-		//int flags = AVSEEK_FLAG_FRAME;
-		//if(target == 0)
-		//{
-		//	// Fix VP6 seeking
-		//	int vid_stream_index = av_find_best_stream(format_context_.get(), AVMEDIA_TYPE_VIDEO, -1, -1, 0, 0);
-		//	if(vid_stream_index >= 0)
-		//	{
-		//		auto codec_id = format_context_->streams[vid_stream_index]->codec->codec_id;
-		//		if(codec_id == CODEC_ID_VP6A || codec_id == CODEC_ID_VP6F || codec_id == CODEC_ID_VP6)
-		//			flags = AVSEEK_FLAG_BYTE;
-		//	}
-		//}
-		
 		start_ = target;
 		frame_number_ = target;
 		flush_packet_count_ = FLUSH_PACKET_COUNT;
@@ -407,15 +393,6 @@ struct input::implementation : boost::noncopyable
 		tick();
 	}	
 
-	//bool is_eof(int ret)
-	//{
-	//	if(ret == AVERROR(EIO))
-	//		CASPAR_LOG(trace) << print() << " Received EIO, assuming EOF. ";
-	//	if(ret == AVERROR_EOF)
-	//		CASPAR_LOG(trace) << print() << " Received EOF. ";
-
-	//	return ret == AVERROR_EOF || ret == AVERROR(EIO);// || (length_ < std::numeric_limits<uint32_t>().max() && frame_number_ >= length_ + MAX_GOP_SIZE); // av_read_frame doesn't always correctly return AVERROR_EOF // av_read_frame doesn't always correctly return AVERROR_EOF;
-	//}
 };
 
 input::input(const safe_ptr<diagnostics::graph>& graph, const std::wstring& filename, FFMPEG_Resource resource_type, bool loop, uint32_t start, uint32_t length, bool thumbnail_mode, const ffmpeg_producer_params& vid_params, double fps) 
