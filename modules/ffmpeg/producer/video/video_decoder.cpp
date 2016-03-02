@@ -43,6 +43,7 @@ extern "C"
 {
 	#include <libavcodec/avcodec.h>
 	#include <libavformat/avformat.h>
+	#include <libavutil/imgutils.h>
 }
 #if defined(_MSC_VER)
 #pragma warning (pop)
@@ -118,10 +119,10 @@ public:
 		//int64_t packet_time = ((pkt->pts - (stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_)) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
 		//CASPAR_LOG(info) << "Begin decode packet of time: " << packet_time;
 
-		std::shared_ptr<AVFrame> decoded_frame = create_frame();
+		AVFrame * decoded_frame = av_frame_alloc();
 
 		int got_picture_ptr = 0;
-		int bytes_consumed = avcodec_decode_video2(codec_context_.get(), decoded_frame.get(), &got_picture_ptr, pkt.get());//), "[video_decoder]");
+		int bytes_consumed = avcodec_decode_video2(codec_context_.get(), decoded_frame, &got_picture_ptr, pkt.get());//), "[video_decoder]");
 		
 		// If a decoder consumes less then the whole packet then something is wrong
 		// that might be just harmless padding at the end, or a problem with the
@@ -134,7 +135,7 @@ public:
 
 		if(decoded_frame->repeat_pict > 0)
 			CASPAR_LOG(warning) << "[video_decoder] Field repeat_pict not implemented.";
-		int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(decoded_frame.get());
+		int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(decoded_frame);
 		if (!(stream_->avg_frame_rate.den == 0 || frame_time_stamp == AV_NOPTS_VALUE))
 			file_frame_number_ = static_cast<size_t>((frame_time_stamp * stream_->time_base.num * stream_->avg_frame_rate.num) / (stream_->time_base.den*stream_->avg_frame_rate.den));
 		else
@@ -149,7 +150,38 @@ public:
 		//packet_time = ((pkt->pts - (stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_)) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
 		//CASPAR_LOG(info) << "End decode packet of time: " << packet_time << " decoded frame time " << packet_time_;
 		//CASPAR_LOG(trace) << print() << "Packet time: " << packet_time_/1000;
-		return decoded_frame;
+
+		return std::shared_ptr<AVFrame>(fix_IMX_frame(decoded_frame),  [](AVFrame* frame)
+		{
+			av_frame_free(&frame);
+		});
+	}
+
+	// remove VBI lines from IMX frame
+	AVFrame* fix_IMX_frame(AVFrame * frame) 
+	{
+		AVFrame * duplicate;
+		if (frame->width == 720 && frame->height == 608)
+		{
+			duplicate = av_frame_alloc();
+			duplicate->width = frame->width;
+			duplicate->interlaced_frame = frame->interlaced_frame;
+			duplicate->top_field_first = frame->top_field_first;
+			duplicate->format = frame->format;
+			duplicate->height = 576;
+			duplicate->flags = frame->flags;
+			for (int i = 0; i<4; i++)
+				duplicate->linesize[i] = frame->linesize[i];
+			if (av_frame_get_buffer(duplicate, 1)<0) goto error;
+			for (int i = 0; i<4; i++)
+				memcpy(duplicate->data[i], frame->data[i]+((32)*duplicate->linesize[i]), duplicate->linesize[i]*duplicate->height);
+			av_frame_free(&frame);
+			return duplicate;
+		}
+		return frame;
+error:
+		av_frame_free(&duplicate);
+		return frame;
 	}
 	
 	bool ready() const

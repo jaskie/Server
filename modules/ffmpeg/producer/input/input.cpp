@@ -118,12 +118,9 @@ struct input::implementation : boost::noncopyable
 		is_eof_			= false;
 		loop_			= loop;
 		buffer_size_	= 0;
-		queued_seek(start);
 		graph_->set_color("seek", diagnostics::color(1.0f, 0.5f, 0.0f));	
 		graph_->set_color("buffer-count", diagnostics::color(0.7f, 0.4f, 0.4f));
 		graph_->set_color("buffer-size", diagnostics::color(1.0f, 1.0f, 0.0f));	
-
-
 	}
 
 	bool get_flush_paket(std::shared_ptr<AVPacket> &pkt)
@@ -385,10 +382,10 @@ struct input::implementation : boost::noncopyable
 		if (seek_by_stream_time)
 			seek = (static_cast<int64_t>(target) * default_stream_->time_base.den * default_stream_->avg_frame_rate.den)/(default_stream_->time_base.num * default_stream_->avg_frame_rate.num) 
 			+ (stream_start_time ==		AV_NOPTS_VALUE ? 0 : stream_start_time) 
-			+ default_stream_->first_dts - 1024; //don't know why?		
+			+ default_stream_->first_dts;// - 1024; //don't know why?		
 		else
 			seek = static_cast<int64_t>(target / channel_fps_ * AV_TIME_BASE) + format_context_->start_time;
-		av_seek_frame(format_context_.get(), seek_by_stream_time ? default_stream_index_ : -1, seek, AVSEEK_FLAG_BACKWARD); // Again, why backward? but it just works.
+		THROW_ON_ERROR2(av_seek_frame(format_context_.get(), seek_by_stream_time ? default_stream_index_ : -1, seek, AVSEEK_FLAG_BACKWARD), "[input]"); // Again, why backward? but it just works.
 		avformat_flush(format_context_.get());
 		tick();
 	}	
