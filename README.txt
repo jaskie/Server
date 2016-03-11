@@ -1,9 +1,10 @@
 TVP's fork of CasparCG
 ======================
-This is fork of 2.06 Stable master branch with merged following fixes which are not in main distribution:
-1. Mpeg files with long-gop now are precisely seeked.
-2. When interlaced image is paused (assuming that displayed fields comes from different moments in time), there are no image trembling.
+This is fork of 2.06 Stable master branch with following fixes which are not included in main distribution:
+1. Mpeg files with long-gop now are precisely seeked. Improved H.264 decoding performance.
+2. When interlaced image is paused (assuming that displayed fields comes from different moments in time), there is no image trembling (only first field is displayed).
 3. Serwer process can't be closed with Ctrl-C.
+4. Fix for IMX MPEG PAL (e.g. Sony MXF) files, so 32 VBI lines above active video lines are not displayed anymore.
 
 CasparCG Server 2.0.6 Stable
 ============================
