@@ -166,5 +166,6 @@
     <ClInclude Include="memory\endian.h">
       <Filter>source\memory</Filter>
     </ClInclude>
+    <ClInclude Include="..\version.h" />
   </ItemGroup>
 </Project>
