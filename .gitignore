@@ -29,10 +29,6 @@
 /modules/decklink/tmp
 /modules/decklink/decklink.vcxproj.user
 
-# /modules/decklink/interop/
-/modules/decklink/interop/DeckLinkAPI_h.h
-/modules/decklink/interop/DeckLinkAPI_i.c
-
 # /modules/ffmpeg/
 /modules/ffmpeg/bin
 /modules/ffmpeg/tmp
@@ -100,3 +96,4 @@
 /modules/newtek/bin
 /modules/newtek/tmp
 /.vs
+/*.opendb
