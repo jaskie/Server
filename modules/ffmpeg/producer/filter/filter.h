@@ -49,6 +49,7 @@ public:
 	void push(const std::shared_ptr<AVFrame>& frame);
 	std::shared_ptr<AVFrame> poll();
 	std::vector<safe_ptr<AVFrame>> poll_all();
+	void clear();
 
 	std::wstring filter_str() const;
 			
@@ -89,6 +90,7 @@ public:
 	{
 		return is_deinterlacing(filter_str());
 	}
+
 private:
 	struct implementation;
 	safe_ptr<implementation> impl_;

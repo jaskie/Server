@@ -25,8 +25,6 @@
 
 #include "ffmpeg_consumer.h"
 
-#include "../ffmpeg_params.h"
-
 #include <core/parameters/parameters.h>
 #include <core/mixer/read_frame.h>
 #include <core/mixer/audio/audio_util.h>
@@ -116,7 +114,7 @@ struct output_format
 	AVCodecID		vcodec;
 	AVCodecID		acodec;
 
-	output_format(const core::video_format_desc& format_desc, const std::string& filename, std::vector<option>& options)
+	output_format(const core::video_format_desc& format_desc, const std::string& filename)
 		: format(av_guess_format(nullptr, filename.c_str(), nullptr))
 		, width(format_desc.width)
 		, height(format_desc.height)
@@ -126,11 +124,6 @@ struct output_format
 		if (format == nullptr)
 			BOOST_THROW_EXCEPTION(caspar_exception()
 				<< msg_info(filename + " not a supported file for recording"));
-
-		boost::range::remove_erase_if(options, [&](const option& o)
-		{
-			return set_opt(o.name, o.value);
-		});
 		
 		if(vcodec == AV_CODEC_ID_NONE)
 			vcodec = format->video_codec;
@@ -242,7 +235,7 @@ struct ffmpeg_consumer : boost::noncopyable
 	tbb::atomic<int64_t>					current_encoding_delay_;
 	
 public:
-	ffmpeg_consumer(const std::string& filename, const core::video_format_desc& format_desc, std::vector<option> options, bool key_only, const core::channel_layout& audio_channel_layout)
+	ffmpeg_consumer(const std::string& filename, const core::video_format_desc& format_desc, bool key_only, const core::channel_layout& audio_channel_layout)
 		: filename_(filename)
 		, video_outbuf_(1920*1080*8)
 		, audio_outbuf_(10000)
@@ -255,7 +248,7 @@ public:
 		, encode_executor_(print())
 		, in_frame_number_(0)
 		, out_frame_number_(0)
-		, output_format_(format_desc, filename, options)
+		, output_format_(format_desc, filename)
 		, key_only_(key_only)
 	{
 		current_encoding_delay_ = 0;
@@ -275,11 +268,10 @@ public:
 		strcpy_s(oc_->filename, filename_.c_str());
 		
 		//  Add the audio and video streams using the default format codecs	and initialize the codecs.
-		auto options2 = options;
-		video_st_ = add_video_stream(options2);
+		video_st_ = add_video_stream();
 
 		if (!key_only)
-			audio_st_ = add_audio_stream(options);
+			audio_st_ = add_audio_stream();
 				
 		av_dump_format(oc_.get(), 0, filename_.c_str(), 1);
 		 
@@ -289,11 +281,6 @@ public:
 				
 		THROW_ON_ERROR2(avformat_write_header(oc_.get(), nullptr), "[ffmpeg_consumer]");
 
-		if(options.size() > 0)
-		{
-			BOOST_FOREACH(auto& option, options)
-				CASPAR_LOG(warning) << L"Invalid option: -" << widen(option.name) << L" " << widen(option.value);
-		}
 
 		CASPAR_LOG(info) << print() << L" Successfully Initialized.";	
 	}
@@ -320,7 +307,7 @@ public:
 		return L"ffmpeg[" + widen(filename_) + L"]";
 	}
 
-	std::shared_ptr<AVStream> add_video_stream(std::vector<option>& options)
+	std::shared_ptr<AVStream> add_video_stream()
 	{ 
 		if(output_format_.vcodec == AV_CODEC_ID_NONE)
 			return nullptr;
@@ -381,12 +368,6 @@ public:
 		else if(c->codec_id == AV_CODEC_ID_H264)
 		{			   
 			c->pix_fmt = AV_PIX_FMT_YUV420P;    
-			if(options.empty())
-			{
-				av_opt_set(c->priv_data, "preset", "ultrafast", 0);
-				av_opt_set(c->priv_data, "tune",   "fastdecode",   0);
-				av_opt_set(c->priv_data, "crf",    "5",     0);
-			}
 		}
 		else if(c->codec_id == AV_CODEC_ID_QTRLE)
 		{
@@ -394,12 +375,6 @@ public:
 		}
 				
 		c->max_b_frames = 0; // b-frames not supported.
-				
-		boost::range::remove_erase_if(options, [&](const option& o)
-		{
-			return ffmpeg::av_opt_set(c, o.name.c_str(), o.value.c_str(), AV_OPT_SEARCH_CHILDREN) > -1 ||
-				   ffmpeg::av_opt_set(c->priv_data, o.name.c_str(), o.value.c_str(), AV_OPT_SEARCH_CHILDREN) > -1;
-		});
 				
 		if(output_format_.format->flags & AVFMT_GLOBALHEADER)
 			c->flags |= CODEC_FLAG_GLOBAL_HEADER;
@@ -419,7 +394,7 @@ public:
 		});
 	}
 		
-	std::shared_ptr<AVStream> add_audio_stream(std::vector<option>& options)
+	std::shared_ptr<AVStream> add_audio_stream()
 	{
 		if(output_format_.acodec == AV_CODEC_ID_NONE)
 			return nullptr;
@@ -449,11 +424,6 @@ public:
 		if(output_format_.format->flags & AVFMT_GLOBALHEADER)
 			c->flags |= CODEC_FLAG_GLOBAL_HEADER;
 				
-		boost::range::remove_erase_if(options, [&](const option& o)
-		{
-			return ffmpeg::av_opt_set(c, o.name.c_str(), o.value.c_str(), AV_OPT_SEARCH_CHILDREN) > -1;
-		});
-
 		THROW_ON_ERROR2(avcodec_open2(c, encoder, nullptr), "[ffmpeg_consumer]");
 
 		return std::shared_ptr<AVStream>(st, [](AVStream* st)
@@ -658,7 +628,6 @@ public:
 struct ffmpeg_consumer_proxy : public core::frame_consumer
 {
 	const std::wstring				filename_;
-	const std::vector<option>		options_;
 	const bool						separate_key_;
 	core::video_format_desc			format_desc_;
 
@@ -667,9 +636,8 @@ struct ffmpeg_consumer_proxy : public core::frame_consumer
 
 public:
 
-	ffmpeg_consumer_proxy(const std::wstring& filename, const std::vector<option>& options, bool separate_key_)
+	ffmpeg_consumer_proxy(const std::wstring& filename, bool separate_key_)
 		: filename_(filename)
-		, options_(options)
 		, separate_key_(separate_key_)
 	{
 	}
@@ -748,7 +716,6 @@ private:
 		consumer_.reset(new ffmpeg_consumer(
 				narrow(filename_),
 				format_desc_,
-				options_,
 				false,
 				channel_layout));
 
@@ -761,7 +728,6 @@ private:
 			key_only_consumer_.reset(new ffmpeg_consumer(
 					narrow(key_file),
 					format_desc_,
-					options_,
 					true,
 					channel_layout));
 		}
@@ -778,7 +744,6 @@ safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params)
 	auto filename	= (params2.size() > 1 ? params2[1] : L"");
 	bool separate_key = params2.remove_if_exists(L"SEPARATE_KEY");
 
-	std::vector<option> options;
 	
 	if (params2.size() >= 3)
 	{
@@ -795,12 +760,10 @@ safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params)
 				value = "libx264";
 			else if (value == "dvcpro")
 				value = "dvvideo";
-
-			options.push_back(option(name, value));
 		}
 	}
 		
-	return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, options, separate_key);
+	return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, separate_key);
 }
 
 safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptree& ptree)
@@ -809,10 +772,8 @@ safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptre
 	auto codec			= ptree.get(L"vcodec", L"libx264");
 	auto separate_key	= ptree.get(L"separate-key", false);
 
-	std::vector<option> options;
-	options.push_back(option("vcodec", narrow(codec)));
 	
-	return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, options, separate_key);
+	return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, separate_key);
 }
 
 }}

@@ -53,67 +53,41 @@ namespace caspar { namespace ffmpeg {
 	
 struct audio_decoder::implementation : boost::noncopyable
 {	
-	int															index_;
-	const safe_ptr<AVCodecContext>								codec_context_;		
+	input 														input_;
+	const safe_ptr<AVCodecContext>								codec_context_;
+	int															stream_index_;
 	const AVStream*												stream_;
-	const core::video_format_desc								format_desc_;
-
+	caspar::core::video_format_desc								format_;
 	const std::shared_ptr<SwrContext>							swr_;
-	//audio_resampler												resampler_;
 	std::vector<uint8_t,  tbb::cache_aligned_allocator<uint8_t>>	buffer1_;
-
-
-	std::queue<safe_ptr<AVPacket>>								packets_;
-	tbb::atomic<int64_t>										packet_time_;
 	core::channel_layout										channel_layout_;
 	const int64_t												stream_start_pts_;
+	tbb::atomic<int64_t>										seek_pts_;
 
 public:
-	explicit implementation(const safe_ptr<AVFormatContext>& context, const core::video_format_desc& format_desc, const std::wstring& custom_channel_order) 
-		: format_desc_(format_desc)	
-		, codec_context_(open_codec(*context, AVMEDIA_TYPE_AUDIO, index_))
-		/*, resampler_(codec_context_->channels,		codec_context_->channels,
-					 format_desc.audio_sample_rate, codec_context_->sample_rate,
-					 AV_SAMPLE_FMT_S32,				codec_context_->sample_fmt)
-		*/
+	explicit implementation(input input, caspar::core::video_format_desc format, const std::wstring& custom_channel_order)
+		: input_(input)
+		, codec_context_(input.open_audio_codec(stream_index_))
 		, buffer1_(0)
+		, format_(format)
 		, channel_layout_(get_audio_channel_layout(*codec_context_, custom_channel_order))
 		, swr_(alloc_resampler())
-		, stream_(context->streams[index_])
+		, stream_(input_.format_context()->streams[stream_index_])
 		, stream_start_pts_(stream_->start_time)
 	{
+		seek_pts_ = 0;
 		THROW_ON_ERROR2(swr_init(swr_.get()), "[audio_decoder]");
-		packet_time_ = std::numeric_limits<int64_t>().min();
 		CASPAR_LOG(debug) << print() 
 				<< " Selected channel layout " << channel_layout_.name;
 	}
-
-	void push(const std::shared_ptr<AVPacket>& packet)
-	{			
-		if(!packet)
-			return;
-
-		if(packet->stream_index == index_ || packet->data == nullptr)
-			packets_.push(make_safe_ptr(packet));
-	}	
 	
 	std::shared_ptr<core::audio_buffer> poll()
 	{
-		if(packets_.empty())
-			return nullptr;
-		auto packet = packets_.front();
-		packets_.pop();
-		if(packet->data == nullptr)
-		{			
-			if(codec_context_->codec->capabilities & CODEC_CAP_DELAY)
-			{
-				auto audio = decode(*packet);
-				if(audio)
-					return audio;
-			}
-			return nullptr;
-		}
-		return decode(*packet);
+		std::shared_ptr<core::audio_buffer> audio = nullptr;
+		std::shared_ptr<AVPacket> packet = nullptr;
+		while (!audio && input_.try_pop_audio(packet))
+			audio = decode(packet);
+		return audio;
 	}
 
 
@@ -124,7 +98,7 @@ public:
 				nullptr,
 				create_channel_layout_bitmask(codec_context_->channels),//get_ffmpeg_channel_layout(codec_context_.get()),
 				AV_SAMPLE_FMT_S32,
-				format_desc_.audio_sample_rate,
+				format_.audio_sample_rate,
 				create_channel_layout_bitmask(codec_context_->channels),//get_ffmpeg_channel_layout(codec_context_.get()),
 				codec_context_->sample_fmt,
 				codec_context_->sample_rate,
@@ -134,17 +108,14 @@ public:
 		return resampler;
 	}
 
-	std::shared_ptr<core::audio_buffer> decode(AVPacket& pkt)
+	std::shared_ptr<core::audio_buffer> decode(std::shared_ptr<AVPacket> pkt)
 	{		
 		int got_frame = 0;
 		safe_ptr<AVFrame> frame = create_frame();
-		int ret = THROW_ON_ERROR2(avcodec_decode_audio4(codec_context_.get(), frame.get(), &got_frame, &pkt), "[audio_decoder]");
-		if (ret>=0)
+		int ret = THROW_ON_ERROR2(avcodec_decode_audio4(codec_context_.get(), frame.get(), &got_frame, pkt.get()), "[audio_decoder]");
+		if (ret >= 0)
 		{
-		// There might be several frames in one packet.
-		pkt.size -= ret;
-		pkt.data += ret;
-		if (got_frame)
+			if (got_frame)
 			{
 				int  data_size = av_samples_get_buffer_size(NULL, codec_context_->channels, frame->nb_samples, AV_SAMPLE_FMT_S32, 0);
 				buffer1_.resize(data_size);
@@ -158,37 +129,23 @@ public:
 				if (n_samples > 0)
 				{
 
-					const auto samples = reinterpret_cast<uint32_t*>(buffer1_.data());
-		
 					int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(frame.get());
-					if (frame_time_stamp == AV_NOPTS_VALUE)
-						packet_time_= std::numeric_limits<int64_t>().max();
-					else
-						packet_time_ = ((frame_time_stamp - (stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_)) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
-					//CASPAR_LOG(trace) << print() << "Packet time: " << packet_time_/1000;
+					if (frame_time_stamp < seek_pts_)
+						return nullptr;
+					const auto samples = reinterpret_cast<uint32_t*>(buffer1_.data());
 					return std::make_shared<core::audio_buffer>(samples, samples + n_samples*codec_context_->channels);
 				}
 			}
 		}
-		return empty_audio();
+		return nullptr;
 	}
 
-	bool ready() const
-	{
-		return packets_.size() > 10;
-	}
 
-	bool empty() const
+	void seek(uint64_t time)
 	{
-		return packets_.size() == 0;
-	}
-
-	void clear()
-	{
-		while (!packets_.empty())
-			packets_.pop();
 		avcodec_flush_buffers(codec_context_.get());
-		packet_time_ = std::numeric_limits<int64_t>().min();
+		seek_pts_ = stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_
+			+ (time * stream_->time_base.den / (AV_TIME_BASE * stream_->time_base.num));
 	}
 	
 	std::wstring print() const
@@ -197,15 +154,10 @@ public:
 	}
 };
 
-audio_decoder::audio_decoder(const safe_ptr<AVFormatContext>& context, const core::video_format_desc& format_desc, const std::wstring& custom_channel_order) : impl_(new implementation(context, format_desc, custom_channel_order)){}
-void audio_decoder::push(const std::shared_ptr<AVPacket>& packet){impl_->push(packet);}
-bool audio_decoder::ready() const{return impl_->ready();}
-bool audio_decoder::empty() const{return impl_->empty();}
+audio_decoder::audio_decoder(input input, caspar::core::video_format_desc format, const std::wstring& custom_channel_order) : impl_(new implementation(input, format, custom_channel_order)){}
 std::shared_ptr<core::audio_buffer> audio_decoder::poll(){return impl_->poll();}
 const core::channel_layout& audio_decoder::channel_layout() const { return impl_->channel_layout_; }
 std::wstring audio_decoder::print() const{return impl_->print();}
-int64_t audio_decoder::packet_time() const {return impl_->packet_time_;}
-void audio_decoder::clear(){impl_->clear();}
-
+void audio_decoder::seek(uint64_t time) {impl_->seek(time);}
 
 }}

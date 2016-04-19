@@ -250,9 +250,8 @@ void init(const safe_ptr<core::media_info_repository>& media_info_repo)
 	avdevice_register_all();
     avfilter_register_all();
 	//fix_yadif_filter_format_query();
+	avformat_network_init();
 	av_register_all();
-    avformat_network_init();
-    avcodec_register_all();
 	
 	core::register_consumer_factory([](const core::parameters& params){return ffmpeg::create_consumer(params);});
 	core::register_producer_factory(create_producer);

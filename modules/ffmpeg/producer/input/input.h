@@ -20,7 +20,6 @@
 */
 
 #pragma once
-#include "../../ffmpeg_params.h"
 
 #include <common/memory/safe_ptr.h>
 
@@ -44,21 +43,23 @@ class graph;
 	 
 namespace ffmpeg {
 
-class input : boost::noncopyable
+class input
 {
 public:
-	explicit input(const safe_ptr<diagnostics::graph>& graph, const std::wstring& filename, FFMPEG_Resource resource_type, bool loop, uint32_t start, uint32_t length, bool thumbnail_mode, const ffmpeg_producer_params& vid_params, double fps);
+	explicit input(const safe_ptr<diagnostics::graph> graph, const std::wstring& filename, bool thumbnail_mode);
+	safe_ptr<AVCodecContext> open_audio_codec(int& index);
+	safe_ptr<AVCodecContext> open_video_codec(int& index);
 
-	bool try_pop(std::shared_ptr<AVPacket>& packet);
+	bool try_pop_audio(std::shared_ptr<AVPacket>& packet);
+	bool try_pop_video(std::shared_ptr<AVPacket>& packet);
 	bool eof() const;
-	bool empty() const;
 
 	void loop(bool value);
 	bool loop() const;
 
-	bool seek(uint32_t target);
+	bool seek(int64_t target_time);
+	safe_ptr<AVFormatContext> format_context();
 
-	safe_ptr<AVFormatContext> context();
 private:
 	struct implementation;
 	std::shared_ptr<implementation> impl_;

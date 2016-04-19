@@ -22,8 +22,8 @@
 #pragma once
 
 #include <common/memory/safe_ptr.h>
-
 #include <boost/noncopyable.hpp>
+#include "../input/input.h"
 
 struct AVFormatContext;
 struct AVFrame;
@@ -41,25 +41,15 @@ namespace ffmpeg {
 class video_decoder : boost::noncopyable
 {
 public:
-	explicit video_decoder(const safe_ptr<AVFormatContext>& context);
+	explicit video_decoder(input input);
 	
-	bool ready() const;
-	bool empty() const;
-	void push(const std::shared_ptr<AVPacket>& packet);
 	std::shared_ptr<AVFrame> poll();
-	
 	size_t	 width()		const;
-	size_t	 height()	const;
-
-	uint32_t nb_frames() const;
-	uint32_t file_frame_number() const;
-	int64_t packet_time() const;
-
+	size_t	 height()		const;
+	uint32_t nb_frames()	const;
 	bool	 is_progressive() const;
-
-	std::wstring print() const;
-
-	void clear();
+	std::wstring print()	const;
+	void seek(uint64_t time);
 
 private:
 	struct implementation;

@@ -27,6 +27,8 @@
 
 #include <boost/noncopyable.hpp>
 
+#include "..\input\input.h"
+
 struct AVPacket;
 struct AVFormatContext;
 
@@ -44,16 +46,11 @@ namespace ffmpeg {
 class audio_decoder : boost::noncopyable
 {
 public:
-	explicit audio_decoder(const safe_ptr<AVFormatContext>& context, const core::video_format_desc& format_desc, const std::wstring& custom_channel_order);
-	
-	bool ready() const;
-	bool empty() const;
-	void push(const std::shared_ptr<AVPacket>& packet);
+	explicit audio_decoder(input input, caspar::core::video_format_desc format,  const std::wstring& custom_channel_order);
 	std::shared_ptr<core::audio_buffer> poll();
-	int64_t packet_time() const;
 	const core::channel_layout& channel_layout() const;
 	std::wstring print() const;
-	void clear();
+	void seek(uint64_t time);
 private:
 	struct implementation;
 	safe_ptr<implementation> impl_;

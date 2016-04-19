@@ -27,10 +27,12 @@ EXPORTS
     av_codec_set_seek_preroll
     av_copy_packet
     av_copy_packet_side_data
+    av_cpb_properties_alloc
     av_d3d11va_alloc_context
     av_dct_calc
     av_dct_end
     av_dct_init
+    av_dirac_parse_sequence_header
     av_dup_packet
     av_dv_codec_profile
     av_dv_codec_profile2
@@ -43,6 +45,7 @@ EXPORTS
     av_fft_permute
     av_free_packet
     av_get_audio_frame_duration
+    av_get_audio_frame_duration2
     av_get_bits_per_sample
     av_get_codec_tag_string
     av_get_exact_bits_per_sample
@@ -53,6 +56,8 @@ EXPORTS
     av_imdct_calc
     av_imdct_half
     av_init_packet
+    av_jni_get_java_vm
+    av_jni_set_java_vm
     av_lockmgr_register
     av_log_ask_for_sample
     av_log_missing_feature
@@ -60,7 +65,11 @@ EXPORTS
     av_mdct_end
     av_mdct_init
     av_new_packet
+    av_packet_add_side_data
+    av_packet_alloc
+    av_packet_clone
     av_packet_copy_props
+    av_packet_free
     av_packet_free_side_data
     av_packet_from_data
     av_packet_get_side_data
@@ -148,7 +157,13 @@ EXPORTS
     avcodec_is_open
     avcodec_license
     avcodec_open2
+    avcodec_parameters_alloc
+    avcodec_parameters_copy
+    avcodec_parameters_free
+    avcodec_parameters_from_context
+    avcodec_parameters_to_context
     avcodec_pix_fmt_to_codec_tag
+    avcodec_profile_name
     avcodec_register
     avcodec_register_all
     avcodec_set_dimensions
@@ -164,17 +179,15 @@ EXPORTS
     avpriv_aac_parse_header
     avpriv_ac3_channel_layout_tab DATA
     avpriv_ac3_parse_header
-    avpriv_ac3_parse_header2
     avpriv_align_put_bits
     avpriv_bprint_to_extradata
-    avpriv_color_frame
     avpriv_copy_bits
     avpriv_copy_pce_data
     avpriv_dca_convert_bitstream
     avpriv_dca_sample_rates DATA
-    avpriv_dirac_parse_sequence_header
     avpriv_dnxhd_get_frame_size
     avpriv_dnxhd_get_interlaced
+    avpriv_dnxhd_parse_header_prefix
     avpriv_do_elbg
     avpriv_exif_decode_ifd
     avpriv_find_pix_fmt

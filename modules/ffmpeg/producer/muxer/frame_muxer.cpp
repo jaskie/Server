@@ -117,7 +117,7 @@ struct frame_muxer::implementation : boost::noncopyable
 		if(!video_frame)
 			return;
 		
-		/*if(video_frame == flush_video())
+		if (video_frame == flush_video())
 		{	
 			video_streams_.push(std::queue<safe_ptr<write_frame>>());
 			CASPAR_LOG(trace) << "Muxer::push flush video";
@@ -128,7 +128,7 @@ struct frame_muxer::implementation : boost::noncopyable
 			display_mode_ = display_mode::simple;
 			CASPAR_LOG(trace) << "Muxer::push empty video";
 		}
-		else*/
+		else
 		{
 			bool deinterlace_hint = (hints & core::frame_producer::DEINTERLACE_HINT) != 0;
 			if(auto_deinterlace_ && force_deinterlacing_ != deinterlace_hint)
@@ -152,7 +152,6 @@ struct frame_muxer::implementation : boost::noncopyable
 			{
 				if(video_frame->format == AV_PIX_FMT_GRAY8 && format == CASPAR_PIX_FMT_LUMA)
 					av_frame->format = format;
-
 				video_streams_.back().push(make_write_frame(this, av_frame, frame_factory_, hints, audio_channel_layout_));
 			}
 		}
@@ -166,7 +165,7 @@ struct frame_muxer::implementation : boost::noncopyable
 		if(!audio)	
 			return;
 
-		/*if(audio == flush_audio())
+		if(audio == flush_audio())
 		{
 			audio_streams_.push(core::audio_buffer());
 		}
@@ -174,7 +173,7 @@ struct frame_muxer::implementation : boost::noncopyable
 		{
 			boost::range::push_back(audio_streams_.back(), core::audio_buffer(audio_cadence_.front() * audio_channel_layout_.num_channels, 0));
 		}
-		else*/
+		else
 		{
 			boost::range::push_back(audio_streams_.back(), *audio);
 		}
@@ -382,13 +381,12 @@ struct frame_muxer::implementation : boost::noncopyable
 
 	void clear()
 	{
-		while(!video_streams_.empty())
-			video_streams_.pop();	
-		while(!audio_streams_.empty())
-			audio_streams_.pop();	
+		while(!video_streams_.back().empty())
+			video_streams_.back().pop();	
+		audio_streams_.back().clear();	
 		while(!frame_buffer_.empty())
 			frame_buffer_.pop();
-//		filter_.reset();
+		filter_.clear();
 	}
 };
 

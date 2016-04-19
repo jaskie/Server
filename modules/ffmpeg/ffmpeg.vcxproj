@@ -346,7 +346,6 @@
     <ClInclude Include="consumer\ffmpeg_consumer.h" />
     <ClInclude Include="ffmpeg.h" />
     <ClInclude Include="ffmpeg_error.h" />
-    <ClInclude Include="ffmpeg_params.h" />
     <ClInclude Include="producer\audio\audio_decoder.h" />
     <ClInclude Include="producer\ffmpeg_producer.h" />
     <ClInclude Include="producer\filter\filter.h" />

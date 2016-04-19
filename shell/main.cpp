@@ -294,7 +294,7 @@ int main(int argc, wchar_t* argv[])
 					//boost::to_upper(wcmd);  // TODO COMPILER crashes on this line, Strange!
 					auto upper_cmd = make_upper_case(wcmd);
 
-					if(upper_cmd == L"EXIT" || upper_cmd == L"Q" || upper_cmd == L"QUIT" || upper_cmd == L"BYE")
+					if(upper_cmd == L"EXIT" || upper_cmd == L"QUIT")
 					{
 						wait_for_keypress = true;
 						shutdown_server_now.set_value(false); // False to not restart server
@@ -305,7 +305,7 @@ int main(int argc, wchar_t* argv[])
 					{
 						// This is just dummy code for testing.
 						if(wcmd.substr(0, 1) == L"1")
-							wcmd = L"LOAD 1-0 MXF SEEK 300";
+							wcmd = L"PLAY 1-0 TC2 LENGTH 100 LOOP";
 						else if(wcmd.substr(0, 1) == L"2")
 							wcmd = L"CALL 1-0 SEEK 320";
 						else if(wcmd.substr(0, 1) == L"3")

@@ -118,7 +118,6 @@
     <li><a name="toc-x11grab" href="#x11grab">3.21 x11grab</a>
     <ul class="no-bullet">
       <li><a name="toc-Options-19" href="#Options-19">3.21.1 Options</a></li>
-      <li><a name="toc-grab_005fx-grab_005fy-AVOption" href="#grab_005fx-grab_005fy-AVOption">3.21.2 <var>grab_x</var> <var>grab_y</var> AVOption</a></li>
     </ul></li>
   </ul></li>
   <li><a name="toc-Output-Devices" href="#Output-Devices">4 Output Devices</a>
@@ -328,7 +327,7 @@ device names and indices.
 <dt><samp>-pixel_format &lt;FORMAT&gt;</samp></dt>
 <dd><p>Request the video device to use a specific pixel format.
 If the specified format is not supported, a list of available formats is given
-und the first one in this list is used instead. Available pixel formats are:
+and the first one in this list is used instead. Available pixel formats are:
 <code>monob, rgb555be, rgb555le, rgb565be, rgb565le, rgb24, bgr24, 0rgb, bgr0, 0bgr, rgb0,
  bgr48be, uyvy422, yuva444p, yuva444p16le, yuv444p, yuv422p16, yuv422p10, yuv444p10,
  yuv420p, nv12, yuyv422, gray</code>
@@ -425,7 +424,8 @@ On Windows, you need to run the IDL files through <code>widl</code>.
 <p>DeckLink is very picky about the formats it supports. Pixel format is
 uyvy422 or v210, framerate and video size must be determined for your device with
 <code>-list_formats 1</code>. Audio sample rate is always 48 kHz and the number
-of channels can be 2, 8 or 16.
+of channels can be 2, 8 or 16. Note that all audio channels are bundled in one single
+audio track.
 </p>
 <a name="Options-3"></a>
 <h4 class="subsection">3.4.1 Options<span class="pull-right"><a class="anchor hidden-xs" href="#Options-3" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Options-3" aria-hidden="true">TOC</a></span></h4>
@@ -444,6 +444,22 @@ Defaults to <samp>false</samp>.
 <dt><samp>bm_v210</samp></dt>
 <dd><p>If set to &lsquo;<samp>1</samp>&rsquo;, video is captured in 10 bit v210 instead
 of uyvy422. Not all Blackmagic devices support this option.
+</p>
+</dd>
+<dt><samp>teletext_lines</samp></dt>
+<dd><p>If set to nonzero, an additional teletext stream will be captured from the
+vertical ancillary data. This option is a bitmask of the VBI lines checked,
+specifically lines 6 to 22, and lines 318 to 335. Line 6 is the LSB in the mask.
+Selected lines which do not contain teletext information will be ignored. You
+can use the special <samp>all</samp> constant to select all possible lines, or
+<samp>standard</samp> to skip lines 6, 318 and 319, which are not compatible with all
+receivers. Capturing teletext only works for SD PAL sources in 8 bit mode.
+To use this option, ffmpeg needs to be compiled with <code>--enable-libzvbi</code>.
+</p>
+</dd>
+<dt><samp>channels</samp></dt>
+<dd><p>Defines number of audio channels to capture. Must be &lsquo;<samp>2</samp>&rsquo;, &lsquo;<samp>8</samp>&rsquo; or &lsquo;<samp>16</samp>&rsquo;.
+Defaults to &lsquo;<samp>2</samp>&rsquo;.
 </p>
 </dd>
 </dl>
@@ -470,6 +486,11 @@ of uyvy422. Not all Blackmagic devices support this option.
 </li><li> Capture video clip at 1080i50 10 bit:
 <div class="example">
 <pre class="example">ffmpeg -bm_v210 1 -f decklink -i 'UltraStudio Mini Recorder@11' -acodec copy -vcodec copy output.avi
+</pre></div>
+
+</li><li> Capture video clip at 1080i50 with 16 audio channels:
+<div class="example">
+<pre class="example">ffmpeg -channels 16 -f decklink -i 'UltraStudio Mini Recorder@11' -acodec copy -vcodec copy output.avi
 </pre></div>
 
 </li></ul>
@@ -1653,20 +1674,16 @@ Range is 1 to 128 and default is 3 (XCB-based x11grab only).
 <dd><p>Use the MIT-SHM extension for shared memory. Default value is <code>1</code>.
 It may be necessary to disable it for remote displays (legacy x11grab
 only).
+</p>
+</dd>
+<dt><samp>grab_x</samp></dt>
+<dt><samp>grab_y</samp></dt>
+<dd><p>Set the grabbing region coordinates. They are expressed as offset from
+the top left corner of the X11 window and correspond to the
+<var>x_offset</var> and <var>y_offset</var> parameters in the device name. The
+default value for both options is 0.
 </p></dd>
 </dl>
-
-<a name="grab_005fx-grab_005fy-AVOption"></a>
-<h4 class="subsection">3.21.2 <var>grab_x</var> <var>grab_y</var> AVOption<span class="pull-right"><a class="anchor hidden-xs" href="#grab_005fx-grab_005fy-AVOption" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-grab_005fx-grab_005fy-AVOption" aria-hidden="true">TOC</a></span></h4>
-
-<p>The syntax is:
-</p><div class="example">
-<pre class="example">-grab_x <var>x_offset</var> -grab_y <var>y_offset</var>
-</pre></div>
-
-<p>Set the grabbing region coordinates. They are expressed as offset from the top left
-corner of the X11 window. The default value is 0.
-</p>
 
 <a name="Output-Devices"></a>
 <h2 class="chapter">4 Output Devices<span class="pull-right"><a class="anchor hidden-xs" href="#Output-Devices" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Output-Devices" aria-hidden="true">TOC</a></span></h2>

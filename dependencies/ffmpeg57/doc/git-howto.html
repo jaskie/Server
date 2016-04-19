@@ -119,6 +119,21 @@ Most distribution and operating system provide a package for it.
 <p>This will put the FFmpeg sources into the directory <var>&lt;target&gt;</var> and let
 you push back your changes to the remote repository.
 </p>
+<div class="example">
+<pre class="example">git clone gil@ffmpeg.org:ffmpeg-web &lt;target&gt;
+</pre></div>
+
+<p>This will put the source of the FFmpeg website into the directory
+<var>&lt;target&gt;</var> and let you push back your changes to the remote repository.
+(Note that <var>gil</var> stands for GItoLite and is not a typo of <var>git</var>.)
+</p>
+<p>If you don&rsquo;t have write-access to the ffmpeg-web repository, you can
+create patches after making a read-only ffmpeg-web clone:
+</p>
+<div class="example">
+<pre class="example">git clone git://ffmpeg.org/ffmpeg-web &lt;target&gt;
+</pre></div>
+
 <p>Make sure that you do not have Windows line endings in your checkouts,
 otherwise you may experience spurious compilation failures. One way to
 achieve this is to run

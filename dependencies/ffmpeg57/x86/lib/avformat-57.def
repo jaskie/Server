@@ -1,6 +1,7 @@
 EXPORTS
     av_add_index_entry
     av_append_packet
+    av_apply_bitstream_filters
     av_codec_get_id
     av_codec_get_tag
     av_codec_get_tag2
@@ -55,6 +56,7 @@ EXPORTS
     av_probe_input_format
     av_probe_input_format2
     av_probe_input_format3
+    av_program_add_stream_index
     av_read_frame
     av_read_pause
     av_read_play
@@ -68,6 +70,7 @@ EXPORTS
     av_stream_get_r_frame_rate
     av_stream_get_recommended_encoder_configuration
     av_stream_get_side_data
+    av_stream_new_side_data
     av_stream_set_r_frame_rate
     av_stream_set_recommended_encoder_configuration
     av_url_split
@@ -168,8 +171,5 @@ EXPORTS
     ffio_set_buf_size
     ffurl_close
     ffurl_open
-    ffurl_read_complete
-    ffurl_seek
-    ffurl_size
     ffurl_write
     url_feof

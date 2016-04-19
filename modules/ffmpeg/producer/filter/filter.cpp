@@ -331,6 +331,12 @@ struct filter::implementation
 		}
 		*/
 	}
+
+	void clear()
+	{
+		while (!bypass_.empty())
+			bypass_.pop();
+	}
 };
 
 filter::filter(const std::wstring& filters, const std::vector<AVPixelFormat>& pix_fmts) : impl_(new implementation(filters, pix_fmts)){}
@@ -346,5 +352,6 @@ std::vector<safe_ptr<AVFrame>> filter::poll_all()
 		frames.push_back(make_safe_ptr(frame));
 	return frames;
 }
+void filter::clear() { impl_->clear(); }
 
 }}

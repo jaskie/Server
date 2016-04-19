@@ -60,6 +60,7 @@ std::shared_ptr<core::audio_buffer> flush_audio();
 std::shared_ptr<core::audio_buffer> empty_audio();
 std::shared_ptr<AVFrame>			flush_video();
 std::shared_ptr<AVFrame>			empty_video();
+safe_ptr<AVPacket>					flush_packet();
 
 // Utils
 
@@ -72,7 +73,7 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 safe_ptr<AVPacket> create_packet();
 safe_ptr<AVFrame> create_frame();
 
-safe_ptr<AVCodecContext> open_codec(AVFormatContext& context,  enum AVMediaType type, int& index);
+safe_ptr<AVCodecContext> open_codec(safe_ptr<AVFormatContext> context,  enum AVMediaType type, int& index);
 
 bool is_sane_fps(AVRational time_base);
 AVRational fix_time_base(AVRational time_base);
@@ -86,6 +87,8 @@ std::wstring probe_stem(const std::wstring stem);
 bool is_valid_file(const std::wstring filename, const std::vector<std::wstring>& invalid_exts);
 bool is_valid_file(const std::wstring filename);
 bool try_get_duration(const std::wstring filename, std::int64_t& duration, boost::rational<std::int64_t>& time_base);
+int64_t ffmpeg_time_from_frame_number(int32_t frame_number, double fps);
+int32_t frame_number_from_ffmpeg_time(int64_t time, double fps);
 
 core::channel_layout get_audio_channel_layout(const AVCodecContext& context, const std::wstring& custom_channel_order);
 std::int64_t create_channel_layout_bitmask(int num_channels);

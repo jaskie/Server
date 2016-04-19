@@ -63,30 +63,33 @@ extern "C"
 
 namespace caspar { namespace ffmpeg {
 		
-/*
 std::shared_ptr<core::audio_buffer> flush_audio()
 {
 	static std::shared_ptr<core::audio_buffer> audio(new core::audio_buffer());
 	return audio;
 }
-*/
 std::shared_ptr<core::audio_buffer> empty_audio()
 {
 	static std::shared_ptr<core::audio_buffer> audio(new core::audio_buffer());
 	return audio;
 }
-/*
 std::shared_ptr<AVFrame>			flush_video()
 {
 	static std::shared_ptr<AVFrame> video = create_frame();
 	return video;
 }
-*/
 std::shared_ptr<AVFrame>			empty_video()
 {
 	static std::shared_ptr<AVFrame> video = create_frame();
 	return video;
 }
+
+safe_ptr<AVPacket> flush_packet()
+{
+	static safe_ptr<AVPacket> packet((AVPacket*)av_malloc(sizeof(AVPacket)), av_free_packet);
+	return packet;
+}
+
 
 core::field_mode::type get_mode(const AVFrame& frame)
 {
@@ -417,12 +420,12 @@ safe_ptr<AVFrame> create_frame()
 	return frame;
 }
 
-safe_ptr<AVCodecContext> open_codec(AVFormatContext& context, enum AVMediaType type, int& index)
+safe_ptr<AVCodecContext> open_codec(safe_ptr<AVFormatContext> context, enum AVMediaType type, int& index)
 {	
 	AVCodec* decoder;
-	index = THROW_ON_ERROR2(av_find_best_stream(&context, type, -1, -1, &decoder, 0), "[open_codec}");
-	THROW_ON_ERROR2(tbb_avcodec_open(context.streams[index]->codec, decoder), "[open_codec]");
-	return safe_ptr<AVCodecContext>(context.streams[index]->codec, avcodec_close);
+	index = THROW_ON_ERROR2(av_find_best_stream(context.get(), type, -1, -1, &decoder, 0), "[open_codec}");
+	THROW_ON_ERROR2(tbb_avcodec_open(context->streams[index]->codec, decoder), "[open_codec]");
+	return safe_ptr<AVCodecContext>(context->streams[index]->codec, avcodec_close);
 }
 
 std::wstring print_mode(size_t width, size_t height, double fps, bool interlaced)
@@ -579,22 +582,14 @@ std::int64_t create_channel_layout_bitmask(int num_channels)
 	return static_cast<std::int64_t>(result);
 }
 
-//
-//void av_dup_frame(AVFrame* frame)
-//{
-//	AVFrame* new_frame = avcodec_alloc_frame();
-//
-//
-//	const uint8_t *src_data[4] = {0};
-//	memcpy(const_cast<uint8_t**>(&src_data[0]), frame->data, 4);
-//	const int src_linesizes[4] = {0};
-//	memcpy(const_cast<int*>(&src_linesizes[0]), frame->linesize, 4);
-//
-//	av_image_alloc(new_frame->data, new_frame->linesize, new_frame->width, new_frame->height, frame->format, 16);
-//
-//	av_image_copy(new_frame->data, new_frame->linesize, src_data, src_linesizes, frame->format, new_frame->width, new_frame->height);
-//
-//	frame =
-//}
+int64_t ffmpeg_time_from_frame_number(int32_t frame_number, double fps)
+{
+	return (int64_t)(frame_number * (int64_t)AV_TIME_BASE / fps);
+}
+
+int32_t frame_number_from_ffmpeg_time(int64_t time, double fps)
+{
+	return (int32_t)(time * fps / AV_TIME_BASE);
+}
 
 }}
