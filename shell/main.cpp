@@ -305,7 +305,7 @@ int main(int argc, wchar_t* argv[])
 					{
 						// This is just dummy code for testing.
 						if(wcmd.substr(0, 1) == L"1")
-							wcmd = L"PLAY 1-0 TC2 LENGTH 100 LOOP";
+							wcmd = L"PLAY 1-0 TC2 SEEK 100 LENGTH 100 LOOP";
 						else if(wcmd.substr(0, 1) == L"2")
 							wcmd = L"CALL 1-0 SEEK 320";
 						else if(wcmd.substr(0, 1) == L"3")

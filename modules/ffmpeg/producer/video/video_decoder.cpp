@@ -55,6 +55,7 @@ struct video_decoder::implementation : boost::noncopyable
 {
 	input 									input_;
 	const safe_ptr<AVCodecContext>			codec_context_;
+	const AVCodec*							codec_;
 	int										stream_index_;
 	const AVStream*							stream_;
 	const uint32_t							nb_frames_;
@@ -68,6 +69,7 @@ public:
 	explicit implementation(input input)
 		: input_(input)
 		, codec_context_(input.open_video_codec(stream_index_))
+		, codec_(codec_context_->codec)
 		, width_(codec_context_->width)
 		, height_(codec_context_->height)
 		, stream_(input_.format_context()->streams[stream_index_])
@@ -75,6 +77,7 @@ public:
 		, nb_frames_(static_cast<uint32_t>(stream_->nb_frames))
 	{
 		seek_pts_ = 0;
+		CASPAR_LOG(trace) << "Codec: " << codec_->long_name;
 	}
 
 	std::shared_ptr<AVFrame> poll()
@@ -88,8 +91,6 @@ public:
 
 	std::shared_ptr<AVFrame> decode(std::shared_ptr<AVPacket> pkt)
 	{
-		//int64_t packet_time = ((pkt->pts - (stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_)) * AV_TIME_BASE * stream_->time_base.num)/stream_->time_base.den;
-		//CASPAR_LOG(info) << "Begin decode packet of time: " << packet_time;
 
 		std::shared_ptr<AVFrame> decoded_frame = create_frame();
 
@@ -117,7 +118,7 @@ public:
 	// remove VBI lines from IMX frame
 	std::shared_ptr<AVFrame> fix_IMX_frame(std::shared_ptr<AVFrame> frame)
 	{
-		if (frame->width == 720 && frame->height == 608)
+		if (codec_context_->codec_id == AV_CODEC_ID_MPEG2VIDEO && frame->width == 720 && frame->height == 608)
 		{
 			auto duplicate = create_frame();
 			duplicate->width = frame->width;

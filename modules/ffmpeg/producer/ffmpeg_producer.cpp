@@ -144,8 +144,6 @@ public:
 		try
 		{
 			video_decoder_.reset(new video_decoder(input_));
-			if (!thumbnail_mode_)
-				CASPAR_LOG(info) << print() << L" " << video_decoder_->print();
 		}
 		catch(averror_stream_not_found&)
 		{
@@ -168,7 +166,6 @@ public:
 			{
 				audio_decoder_.reset(new audio_decoder(input_, frame_factory->get_video_format_desc(), custom_channel_order));
 				audio_channel_layout_ = audio_decoder_->channel_layout();
-				CASPAR_LOG(info) << print() << L" " << audio_decoder_->print();
 			}
 			catch(averror_stream_not_found&)
 			{
@@ -245,7 +242,7 @@ public:
 																			% static_cast<int32_t>(file_nb_frames())
 							<< core::monitor::message("/file/fps")			% fps_
 							<< core::monitor::message("/file/path")			% path_relative_to_media_
-							<< core::monitor::message("/loop")				% input_.loop();
+							<< core::monitor::message("/loop")				% loop_;
 	}
 	
 	safe_ptr<core::basic_frame> render_specific_frame(uint32_t file_position, int hints)
@@ -333,7 +330,7 @@ public:
 
 	virtual uint32_t nb_frames() const override
 	{
-		if(input_.loop()) 
+		if(loop_) 
 			return std::numeric_limits<uint32_t>::max();
 
 		uint32_t nb_frames = file_nb_frames();
@@ -372,7 +369,7 @@ public:
 		info.add(L"height",				video_decoder_ ? video_decoder_->height() : 0);
 		info.add(L"progressive",		video_decoder_ ? video_decoder_->is_progressive() : false);
 		info.add(L"fps",				fps_);
-		info.add(L"loop",				input_.loop());
+		info.add(L"loop",				loop_);
 		auto nb_frames2 = nb_frames();
 		info.add(L"nb-frames",			nb_frames2 == std::numeric_limits<int64_t>::max() ? -1 : nb_frames2);
 		info.add(L"file-frame-number",	file_frame_number_);
@@ -396,13 +393,13 @@ public:
 		if(boost::regex_match(param, what, loop_exp))
 		{
 			if(!what["VALUE"].str().empty())
-				input_.loop(boost::lexical_cast<bool>(what["VALUE"].str()));
-			return boost::lexical_cast<std::wstring>(input_.loop());
+				loop_=(boost::lexical_cast<bool>(what["VALUE"].str()));
+			return L"LOOP OK";
 		}
 		if(boost::regex_match(param, what, seek_exp))
 		{
 			seek(boost::lexical_cast<uint32_t>(what["VALUE"].str()));
-			return L"";
+			return L"SEEK OK";
 		}
 		BOOST_THROW_EXCEPTION(invalid_argument());
 	}
@@ -417,12 +414,12 @@ public:
 			audio_decoder_->seek(time_to_seek);
 		while (!frame_buffer_.empty())
 			frame_buffer_.pop();
-		file_frame_number_ = 0;
+		file_frame_number_ = frame;
 		muxer_->clear();
 	}
 
 
-	bool decode_frame(std::shared_ptr<AVFrame>& video, std::shared_ptr<core::audio_buffer>& audio)
+	void decode_frame(std::shared_ptr<AVFrame>& video, std::shared_ptr<core::audio_buffer>& audio)
 	{
 		std::shared_ptr<AVPacket>			pkt;
 		bool video_completed = false;
@@ -442,17 +439,14 @@ public:
 
 		video_completed = video || !video_decoder_;
 		audio_completed = audio || !audio_decoder_;
-		if (video_completed)
-			file_frame_number_++;
-		return video_completed && audio_completed;
 	}
 	
 	void try_decode_frame(int hints)
 	{
-		if (loop_ && (file_frame_number_ >= start_ + length_ || input_.eof()))
+		if (loop_ && (file_frame_number_ > start_ + length_ || input_.eof()))
 			seek(start_);
 
-		if (file_frame_number_ >= start_ + length_)
+		if (!loop_ && file_frame_number_ > start_ + length_)
 			return;
 
 		std::shared_ptr<AVFrame>			video;
@@ -475,8 +469,10 @@ public:
 				muxer_->push(empty_video(), 0);
 		}
 		
-		for(auto frame = muxer_->poll(); frame; frame = muxer_->poll())
-			frame_buffer_.push(std::make_pair(make_safe_ptr(frame), file_frame_number_));
+		for (auto frame = muxer_->poll(); frame; frame = muxer_->poll())
+		{
+			frame_buffer_.push(std::make_pair(make_safe_ptr(frame), file_frame_number_++));
+		}
 	}
 
 	core::monitor::subject& monitor_output()

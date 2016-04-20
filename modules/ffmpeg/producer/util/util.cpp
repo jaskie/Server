@@ -406,7 +406,10 @@ double read_fps(AVFormatContext& context, double fail_value)
 
 safe_ptr<AVPacket> create_packet()
 {
-	safe_ptr<AVPacket> packet((AVPacket*)av_malloc(sizeof(AVPacket)), av_free_packet);
+	safe_ptr<AVPacket> packet(av_packet_alloc(), [](AVPacket* packet)
+	{
+		av_packet_free(&packet);
+	});
 	av_init_packet(packet.get());
 	return packet;
 }

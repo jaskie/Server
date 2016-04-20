@@ -108,7 +108,9 @@ int tbb_avcodec_open(AVCodecContext* avctx, AVCodec* codec)
 	{
 		thread_init(avctx);
 	}	
-	return avcodec_open2(avctx, codec, nullptr); 
+	AVDictionary * options = NULL;
+	av_dict_set(&options, "refcounted_frames", "0", 0);
+	return avcodec_open2(avctx, codec, &options); 
 }
 
 }

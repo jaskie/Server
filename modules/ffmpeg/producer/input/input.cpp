@@ -63,7 +63,7 @@ extern "C"
 static const size_t MAX_BUFFER_COUNT    = 100;
 static const size_t MAX_BUFFER_COUNT_RT = 3;
 static const size_t MIN_BUFFER_COUNT    = 50;
-static const int32_t FLUSH_AV_PACKET_COUNT = 0x30;
+static const int32_t FLUSH_AV_PACKET_COUNT = 0x50;
 
 
 namespace caspar { namespace ffmpeg {
@@ -76,7 +76,6 @@ struct input::implementation : boost::noncopyable
 			
 	const std::wstring											filename_;
 	const bool													thumbnail_mode_;
-	tbb::atomic<bool>											loop_;
 	tbb::atomic<bool>											is_eof_;
 	tbb::atomic<int32_t>										flush_av_packet_count_;
 	tbb::atomic<int>											video_stream_index_;
@@ -197,7 +196,7 @@ struct input::implementation : boost::noncopyable
 				try
 				{
 					auto packet = create_packet();
-					auto ret = av_read_frame(format_context_.get(), packet.get()); // packet is only valid until next call of av_read_frame. Use av_dup_packet to extend its life.	
+					auto ret = av_read_frame(format_context_.get(), packet.get()); 
 					is_eof_ = ret == AVERROR(EIO) || ret == AVERROR_EOF;
 					if (is_eof_)
 						CASPAR_LOG(trace) << print() << " Reached EOF.";
@@ -206,13 +205,13 @@ struct input::implementation : boost::noncopyable
 						THROW_ON_ERROR(ret, "av_read_frame", print());
 						if (packet->stream_index == video_stream_index_)
 						{
-							THROW_ON_ERROR2(av_dup_packet(packet.get()), print());
+							//THROW_ON_ERROR2(av_dup_packet(packet.get()), print());
 							video_buffer_.try_push(packet);
 							graph_->set_value("video-buffer-count", (static_cast<double>(video_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
 						}
 						if (packet->stream_index == audio_stream_index_)
 						{
-							THROW_ON_ERROR2(av_dup_packet(packet.get()), print());
+							//THROW_ON_ERROR2(av_dup_packet(packet.get()), print());
 							audio_buffer_.try_push(packet);
 							graph_->set_value("audio-buffer-count", (static_cast<double>(audio_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
 						}
@@ -253,10 +252,9 @@ struct input::implementation : boost::noncopyable
 	void queued_seek(int64_t target)
 	{  	
 		if (!thumbnail_mode_)
-			CASPAR_LOG(debug) << print() << " Seeking: " << target;
+			CASPAR_LOG(trace) << print() << "Seeking: " << target / 1000;
 		flush_av_packet_count_ = FLUSH_AV_PACKET_COUNT;
 		is_eof_ = false;
-		CASPAR_LOG(trace) << print() << "Requested seek time: " << target / 1000;
 		THROW_ON_ERROR2(av_seek_frame(format_context_.get(), -1, target, AVSEEK_FLAG_BACKWARD), "[input]");
 		avformat_flush(format_context_.get());
 		tick();
@@ -270,8 +268,6 @@ bool input::eof() const {return impl_->is_eof();}
 bool input::try_pop_audio(std::shared_ptr<AVPacket>& packet){return impl_->try_pop_audio(packet);}
 bool input::try_pop_video(std::shared_ptr<AVPacket>& packet) { return impl_->try_pop_video(packet); }
 safe_ptr<AVFormatContext> input::format_context(){return impl_->format_context_;}
-void input::loop(bool value){impl_->loop_ = value;}
-bool input::loop() const{return impl_->loop_;}
 bool input::seek(int64_t target_time){return impl_->seek(target_time);}
 safe_ptr<AVCodecContext> input::open_audio_codec(int& index) { return impl_->open_audio_codec(index);}
 safe_ptr<AVCodecContext> input::open_video_codec(int& index) { return impl_->open_video_codec(index); }
