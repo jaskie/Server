@@ -202,7 +202,7 @@ public:
 		frame_timer_.restart();
 		auto disable_logging = temporary_disable_logging_for_thread(thumbnail_mode_);
 				
-		for(int n = 0; n < 16 && frame_buffer_.size() < 2; ++n)
+		for(int n = 0; n < 16 && frame_buffer_.size() < 4; ++n)
 			try_decode_frame(hints);
 		
 		graph_->set_value("frame-time", frame_timer_.elapsed()*format_desc_.fps*0.5);
@@ -250,29 +250,15 @@ public:
 		// Some trial and error and undeterministic stuff here
 		static const int NUM_RETRIES = 32;
 		
-		if (file_position > 0) // Assume frames are requested in sequential order,
-			                   // therefore no seeking should be necessary for the first frame.
-		{
-			input_.seek(ffmpeg_time_from_frame_number(file_position, fps_));
-			boost::this_thread::sleep(boost::posix_time::milliseconds(40));
-		}
+		seek(file_position);
 
 		for (int i = 0; i < NUM_RETRIES; ++i)
 		{
 			boost::this_thread::sleep(boost::posix_time::milliseconds(40));
-		
 			auto frame = render_frame(hints);
-
-			if (frame.second == std::numeric_limits<uint32_t>::max())
-			{
-				// Retry
-				continue;
-			}
-			else if (frame.second == file_position)
-				return frame.first;
+			return frame.first;
 		}
-		CASPAR_LOG(trace) << print() << " render_specific_frame: giving up finding frame at " << file_position;
-		return core::basic_frame::empty();
+		return caspar::core::basic_frame::empty();
 	}
 
 	virtual safe_ptr<core::basic_frame> create_thumbnail_frame() override
@@ -392,12 +378,16 @@ public:
 		boost::wsmatch what;
 		if(boost::regex_match(param, what, loop_exp))
 		{
-			if(!what["VALUE"].str().empty())
-				loop_=(boost::lexical_cast<bool>(what["VALUE"].str()));
-			return L"LOOP OK";
+			if (!what["VALUE"].str().empty())
+			{
+				loop_ = (boost::lexical_cast<bool>(what["VALUE"].str()));
+				return L"LOOP OK";
+			}
 		}
 		if(boost::regex_match(param, what, seek_exp))
 		{
+			while (!frame_buffer_.empty())
+				frame_buffer_.pop();
 			seek(boost::lexical_cast<uint32_t>(what["VALUE"].str()));
 			return L"SEEK OK";
 		}
@@ -412,8 +402,6 @@ public:
 			video_decoder_->seek(time_to_seek);
 		if (audio_decoder_)
 			audio_decoder_->seek(time_to_seek);
-		while (!frame_buffer_.empty())
-			frame_buffer_.pop();
 		file_frame_number_ = frame;
 		muxer_->clear();
 	}
@@ -443,10 +431,11 @@ public:
 	
 	void try_decode_frame(int hints)
 	{
-		if (loop_ && (file_frame_number_ > start_ + length_ || input_.eof()))
+		if (loop_ && 
+			((length_ != std::numeric_limits<uint32_t>().max() && file_frame_number_ >= start_ + length_) 
+				|| input_.eof()))
 			seek(start_);
-
-		if (!loop_ && file_frame_number_ > start_ + length_)
+		if (!loop_ && length_ != std::numeric_limits<uint32_t>().max() && file_frame_number_ >= start_ + length_)
 			return;
 
 		std::shared_ptr<AVFrame>			video;

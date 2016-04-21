@@ -196,7 +196,7 @@ struct input::implementation : boost::noncopyable
 				try
 				{
 					auto packet = create_packet();
-					auto ret = av_read_frame(format_context_.get(), packet.get()); 
+						auto ret = av_read_frame(format_context_.get(), packet.get()); 
 					is_eof_ = ret == AVERROR(EIO) || ret == AVERROR_EOF;
 					if (is_eof_)
 						CASPAR_LOG(trace) << print() << " Reached EOF.";
@@ -252,7 +252,7 @@ struct input::implementation : boost::noncopyable
 	void queued_seek(int64_t target)
 	{  	
 		if (!thumbnail_mode_)
-			CASPAR_LOG(trace) << print() << "Seeking: " << target / 1000;
+			CASPAR_LOG(debug) << print() << " Seeking: " << target / 1000;
 		flush_av_packet_count_ = FLUSH_AV_PACKET_COUNT;
 		is_eof_ = false;
 		THROW_ON_ERROR2(av_seek_frame(format_context_.get(), -1, target, AVSEEK_FLAG_BACKWARD), "[input]");
