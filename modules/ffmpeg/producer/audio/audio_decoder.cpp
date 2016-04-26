@@ -109,32 +109,26 @@ public:
 	}
 
 	std::shared_ptr<core::audio_buffer> decode(std::shared_ptr<AVPacket> pkt)
-	{		
+	{
 		int got_frame = 0;
 		safe_ptr<AVFrame> frame = create_frame();
 		int ret = THROW_ON_ERROR2(avcodec_decode_audio4(codec_context_.get(), frame.get(), &got_frame, pkt.get()), "[audio_decoder]");
-		if (ret >= 0)
+		int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(frame.get());
+		if (ret >= 0 && got_frame && frame_time_stamp >= seek_pts_)
 		{
-			if (got_frame)
+			int  data_size = av_samples_get_buffer_size(NULL, codec_context_->channels, frame->nb_samples, AV_SAMPLE_FMT_S32, 0);
+			buffer1_.resize(data_size);
+			const uint8_t **in = const_cast<const uint8_t**>(frame->extended_data);
+			uint8_t* out = buffer1_.data();
+			int n_samples = swr_convert(swr_.get(),
+				&out,
+				swr_get_out_samples(swr_.get(), frame->nb_samples),//static_cast<int>(buffer1_.size()) / codec_context_->channels / av_get_bytes_per_sample(AV_SAMPLE_FMT_S32),
+				in,
+				frame->nb_samples);
+			if (n_samples > 0)
 			{
-				int  data_size = av_samples_get_buffer_size(NULL, codec_context_->channels, frame->nb_samples, AV_SAMPLE_FMT_S32, 0);
-				buffer1_.resize(data_size);
-				const uint8_t **in	= const_cast<const uint8_t**>(frame->extended_data);
-				uint8_t* out		= buffer1_.data();
-				int n_samples = swr_convert(swr_.get(), 
-											&out, 
-											static_cast<int>(buffer1_.size()) / codec_context_->channels / av_get_bytes_per_sample(AV_SAMPLE_FMT_S32),
-											in, 
-											frame->nb_samples);
-				if (n_samples > 0)
-				{
-
-					int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(frame.get());
-					if (frame_time_stamp < seek_pts_)
-						return nullptr;
-					const auto samples = reinterpret_cast<uint32_t*>(buffer1_.data());
-					return std::make_shared<core::audio_buffer>(samples, samples + n_samples*codec_context_->channels);
-				}
+				const auto samples = reinterpret_cast<uint32_t*>(buffer1_.data());
+				return std::make_shared<core::audio_buffer>(samples, samples + n_samples*codec_context_->channels);
 			}
 		}
 		return nullptr;
