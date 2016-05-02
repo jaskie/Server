@@ -122,18 +122,16 @@ struct input::implementation : boost::noncopyable
 		return ret;
 	}
 
-	bool get_flush_av_packet(std::shared_ptr<AVPacket> &pkt)
+	std::shared_ptr<AVPacket> get_flush_av_packet()
 	{
 		if (flush_av_packet_count_-- >= 0 && is_eof_)
 		{
-			AVPacket * packet = (AVPacket*)av_malloc(sizeof(AVPacket));
-			av_init_packet(packet);
+			std::shared_ptr<AVPacket> packet = create_packet();
 			packet->data = nullptr;
 			packet->size = 0;
-			pkt = std::shared_ptr<AVPacket>(packet, av_free_packet);
-			return true;
+			return packet;
 		}
-		return false;
+		return nullptr;
 	}
 	
 	bool try_pop_audio(std::shared_ptr<AVPacket>& packet)
@@ -142,7 +140,7 @@ struct input::implementation : boost::noncopyable
 		if(result)
 			tick();
 		else
-			result = get_flush_av_packet(packet);
+			result = packet = get_flush_av_packet();
 		graph_->set_value("audio-buffer-count", (static_cast<double>(audio_buffer_.size())+0.001)/MAX_BUFFER_COUNT);
 		return result;
 	}
@@ -153,7 +151,7 @@ struct input::implementation : boost::noncopyable
 		if (result)
 			tick();
 		else
-			result = get_flush_av_packet(packet);
+			result = packet = get_flush_av_packet();
 		graph_->set_value("video-buffer-count", (static_cast<double>(video_buffer_.size()) + 0.001)/MAX_BUFFER_COUNT);
 		return result;
 	}
@@ -199,19 +197,19 @@ struct input::implementation : boost::noncopyable
 						auto ret = av_read_frame(format_context_.get(), packet.get()); 
 					is_eof_ = ret == AVERROR(EIO) || ret == AVERROR_EOF;
 					if (is_eof_)
-						CASPAR_LOG(trace) << print() << " Reached EOF.";
+						;// CASPAR_LOG(trace) << print() << " Reached EOF.";
 					else
 					{
 						THROW_ON_ERROR(ret, "av_read_frame", print());
 						if (packet->stream_index == video_stream_index_)
 						{
-							//THROW_ON_ERROR2(av_dup_packet(packet.get()), print());
+							THROW_ON_ERROR2(av_dup_packet(packet.get()), print());
 							video_buffer_.try_push(packet);
 							graph_->set_value("video-buffer-count", (static_cast<double>(video_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
 						}
 						if (packet->stream_index == audio_stream_index_)
 						{
-							//THROW_ON_ERROR2(av_dup_packet(packet.get()), print());
+							THROW_ON_ERROR2(av_dup_packet(packet.get()), print());
 							audio_buffer_.try_push(packet);
 							graph_->set_value("audio-buffer-count", (static_cast<double>(audio_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
 						}
@@ -251,8 +249,8 @@ struct input::implementation : boost::noncopyable
 
 	void queued_seek(int64_t target)
 	{  	
-		if (!thumbnail_mode_)
-			CASPAR_LOG(debug) << print() << " Seeking: " << target / 1000;
+		/*if (!thumbnail_mode_)
+			CASPAR_LOG(debug) << print() << " Seeking: " << target / 1000;*/
 		flush_av_packet_count_ = FLUSH_AV_PACKET_COUNT;
 		is_eof_ = false;
 		THROW_ON_ERROR2(av_seek_frame(format_context_.get(), -1, target, AVSEEK_FLAG_BACKWARD), "[input]");

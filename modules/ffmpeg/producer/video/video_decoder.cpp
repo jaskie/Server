@@ -97,10 +97,6 @@ public:
 		int got_picture_ptr = 0;
 		int bytes_consumed = avcodec_decode_video2(codec_context_.get(), decoded_frame.get(), &got_picture_ptr, pkt.get());//), "[video_decoder]");
 		
-		// If a decoder consumes less then the whole packet then something is wrong
-		// that might be just harmless padding at the end, or a problem with the
-		// AVParser or demuxer which puted more then one frame in a AVPacket.
-
 		if(got_picture_ptr == 0 || bytes_consumed < 0)	
 			return nullptr;
 
