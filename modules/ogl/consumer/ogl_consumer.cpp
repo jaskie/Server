@@ -398,7 +398,8 @@ public:
 
 	void render(safe_ptr<AVFrame> av_frame, int image_data_size)
 	{
-		if(av_frame->linesize[0] != static_cast<int>(format_desc_.width*4))
+		if(av_frame->pict_type != AV_PICTURE_TYPE_NONE
+			&& av_frame->linesize[0] != static_cast<int>(format_desc_.width*4))
 		{
 			const uint8_t *src_data[4] = {0};
 			memcpy(const_cast<uint8_t**>(&src_data[0]), av_frame->data, 4);
@@ -406,13 +407,15 @@ public:
 			memcpy(const_cast<int*>(&src_linesizes[0]), av_frame->linesize, 4);
 
 			auto av_frame2 = get_av_frame();
-			av_image_alloc(av_frame2->data, av_frame2->linesize, av_frame2->width, av_frame2->height, AV_PIX_FMT_BGRA, 16);
-			av_frame = safe_ptr<AVFrame>(av_frame2.get(), [=](AVFrame*)
+			int ret = av_image_alloc(av_frame2->data, av_frame2->linesize, av_frame2->width, av_frame2->height, AV_PIX_FMT_BGRA, 16);
+			if (ret > 0)
 			{
-				av_freep(&av_frame2->data[0]);
-			});
-
-			av_image_copy(av_frame2->data, av_frame2->linesize, src_data, src_linesizes, AV_PIX_FMT_BGRA, av_frame2->width, av_frame2->height);
+				av_frame = safe_ptr<AVFrame>(av_frame2.get(), [=](AVFrame*)
+				{
+					av_freep(&av_frame2->data[0]);
+				});
+				av_image_copy(av_frame2->data, av_frame2->linesize, src_data, src_linesizes, AV_PIX_FMT_BGRA, av_frame2->width, av_frame2->height);
+			}
 		}
 
 		glBindTexture(GL_TEXTURE_2D, texture_);

@@ -122,36 +122,51 @@ struct input::implementation : boost::noncopyable
 		return ret;
 	}
 
-	std::shared_ptr<AVPacket> get_flush_av_packet()
+	bool get_flush_av_packet(std::shared_ptr<AVPacket>& packet)
 	{
-		if (flush_av_packet_count_-- >= 0 && is_eof_)
+		if (flush_av_packet_count_-- >= 0)
 		{
-			std::shared_ptr<AVPacket> packet = create_packet();
+			packet = create_packet();
 			packet->data = nullptr;
 			packet->size = 0;
-			return packet;
+			return true;
 		}
-		return nullptr;
+		packet = nullptr;
+		return false;
 	}
 	
 	bool try_pop_audio(std::shared_ptr<AVPacket>& packet)
-	{
-		auto result = audio_buffer_.try_pop(packet);
+	{	
+		bool result = false;
+		for (int i = 0; i<16 && !result; ++i)
+		{
+			result = audio_buffer_.try_pop(packet);
+			if (!result)
+				if (is_eof_)
+					return get_flush_av_packet(packet);
+				else
+					boost::this_thread::sleep(boost::posix_time::milliseconds(10));
+		}
 		if(result)
 			tick();
-		else
-			result = packet = get_flush_av_packet();
 		graph_->set_value("audio-buffer-count", (static_cast<double>(audio_buffer_.size())+0.001)/MAX_BUFFER_COUNT);
 		return result;
 	}
 
 	bool try_pop_video(std::shared_ptr<AVPacket>& packet)
 	{
-		auto result = video_buffer_.try_pop(packet);
-		if (result)
+		bool result = false;
+		for (int i = 0; i<16 && !result; ++i)
+		{
+			result = video_buffer_.try_pop(packet);
+			if (!result)
+				if (is_eof_)
+					return get_flush_av_packet(packet);
+				else
+					boost::this_thread::sleep(boost::posix_time::milliseconds(10));
+		}
+		if(result)
 			tick();
-		else
-			result = packet = get_flush_av_packet();
 		graph_->set_value("video-buffer-count", (static_cast<double>(video_buffer_.size()) + 0.001)/MAX_BUFFER_COUNT);
 		return result;
 	}
