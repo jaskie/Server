@@ -122,7 +122,7 @@ public:
 			uint8_t* out = buffer1_.data();
 			int n_samples = swr_convert(swr_.get(),
 				&out,
-				swr_get_out_samples(swr_.get(), frame->nb_samples),//static_cast<int>(buffer1_.size()) / codec_context_->channels / av_get_bytes_per_sample(AV_SAMPLE_FMT_S32),
+				static_cast<int>(buffer1_.size()) / codec_context_->channels / av_get_bytes_per_sample(AV_SAMPLE_FMT_S32),
 				in,
 				frame->nb_samples);
 			if (n_samples > 0)
