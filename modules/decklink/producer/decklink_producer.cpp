@@ -38,6 +38,7 @@
 #include <common/exception/win32_exception.h>
 #include <common/log/log.h>
 #include <common/memory/memclr.h>
+#include <common/utility/string.h>
 
 #include <core/parameters/parameters.h>
 #include <core/monitor/monitor.h>
@@ -52,6 +53,7 @@
 #include <boost/foreach.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/timer.hpp>
+#include <boost/locale.hpp>
 
 #if defined(_MSC_VER)
 #pragma warning (push)
@@ -127,7 +129,7 @@ public:
 		, filter_(filter)
 		, format_desc_(format_desc)
 		, audio_cadence_(format_desc.audio_cadence)
-		, muxer_(format_desc.fps, frame_factory, false, audio_channel_layout, filter)
+		, muxer_(format_desc.fps, frame_factory, false, audio_channel_layout, narrow(filter))
 		, sync_buffer_(format_desc.audio_cadence.size())
 		, frame_factory_(frame_factory)
 		, audio_channel_layout_(audio_channel_layout)

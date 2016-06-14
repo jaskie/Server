@@ -36,8 +36,6 @@
 #include <common/concurrency/executor.h>
 #include <common/exception/win32_exception.h>
 
-#include <ffmpeg/producer/filter/filter.h>
-
 #include <core/parameters/parameters.h>
 #include <core/video_format.h>
 #include <core/mixer/read_frame.h>
@@ -61,13 +59,6 @@
 #pragma warning (push)
 #pragma warning (disable : 4244)
 #endif
-extern "C" 
-{
-	#define __STDC_CONSTANT_MACROS
-	#define __STDC_LIMIT_MACROS
-	#include <libavcodec/avcodec.h>
-	#include <libavutil/imgutils.h>
-}
 #if defined(_MSC_VER)
 #pragma warning (pop)
 #endif
@@ -149,7 +140,6 @@ struct ogl_consumer : boost::noncopyable
 	tbb::atomic<bool>		is_running_;
 	tbb::atomic<int64_t>	current_presentation_age_;
 	
-	ffmpeg::filter			filter_;
 public:
 	ogl_consumer(const configuration& config, const core::video_format_desc& format_desc, int channel_index) 
 		: config_(config)
@@ -161,7 +151,6 @@ public:
 		, screen_height_(format_desc.height)
 		, square_width_(format_desc.square_width)
 		, square_height_(format_desc.square_height)
-		, filter_(format_desc.field_mode == core::field_mode::progressive || !config.auto_deinterlace ? L"" : L"YADIF=1:-1", boost::assign::list_of(AV_PIX_FMT_BGRA))
 	{		
 		if(format_desc_.format == core::video_format::ntsc && config_.aspect == configuration::aspect_4_3)
 		{
@@ -340,21 +329,6 @@ public:
 		wait_timer_.tick(0.0);
 	}
 	
-	safe_ptr<AVFrame> get_av_frame()
-	{		
-		safe_ptr<AVFrame> av_frame = safe_ptr<AVFrame>(av_frame_alloc(), [](AVFrame* frame)
-		{
-			av_frame_free(&frame);
-		});
-		av_frame->linesize[0]		= format_desc_.width*4;			
-		av_frame->format			= AV_PIX_FMT_BGRA;
-		av_frame->width				= format_desc_.width;
-		av_frame->height			= format_desc_.height;
-		av_frame->interlaced_frame	= format_desc_.field_mode != core::field_mode::progressive;
-		av_frame->top_field_first	= format_desc_.field_mode == core::field_mode::upper ? 1 : 0;
-
-		return av_frame;
-	}
 
 	void render_and_draw_frame(const safe_ptr<core::read_frame>& frame)
 	{
@@ -362,61 +336,15 @@ public:
 			return;
 					
 		perf_timer_.restart();
-		auto av_frame = get_av_frame();
-		av_frame->data[0] = const_cast<uint8_t*>(frame->image_data().begin());
+		render(frame);
+		graph_->set_value("frame-time", perf_timer_.elapsed() * format_desc_.fps * 0.5);
 
-		filter_.push(av_frame);
-		auto frames = filter_.poll_all();
-
-		if (frames.empty())
-			return;
-
-		if (frames.size() == 1)
-		{
-			render(frames[0], frame->image_data().size());
-			graph_->set_value("frame-time", perf_timer_.elapsed() * format_desc_.fps * 0.5);
-
-			wait_for_vblank_and_display(); // progressive frame
-		}
-		else if (frames.size() == 2)
-		{
-			render(frames[0], frame->image_data().size());
-			double perf_elapsed = perf_timer_.elapsed();
-
-			wait_for_vblank_and_display(); // field1
-
-			perf_timer_.restart();
-			render(frames[1], frame->image_data().size());
-			perf_elapsed += perf_timer_.elapsed();
-			graph_->set_value("frame-time", perf_elapsed * format_desc_.fps * 0.5);
-
-			wait_for_vblank_and_display(); // field2
-		}
-
+		wait_for_vblank_and_display(); 
 		current_presentation_age_ = frame->get_age_millis();
 	}
 
-	void render(safe_ptr<AVFrame> av_frame, int image_data_size)
+	void render(const safe_ptr<core::read_frame>& frame)
 	{
-		if(av_frame->pict_type != AV_PICTURE_TYPE_NONE
-			&& av_frame->linesize[0] != static_cast<int>(format_desc_.width*4))
-		{
-			const uint8_t *src_data[4] = {0};
-			memcpy(const_cast<uint8_t**>(&src_data[0]), av_frame->data, 4);
-			const int src_linesizes[4] = {0};
-			memcpy(const_cast<int*>(&src_linesizes[0]), av_frame->linesize, 4);
-
-			auto av_frame2 = get_av_frame();
-			int ret = av_image_alloc(av_frame2->data, av_frame2->linesize, av_frame2->width, av_frame2->height, AV_PIX_FMT_BGRA, 16);
-			if (ret > 0)
-			{
-				av_frame = safe_ptr<AVFrame>(av_frame2.get(), [=](AVFrame*)
-				{
-					av_freep(&av_frame2->data[0]);
-				});
-				av_image_copy(av_frame2->data, av_frame2->linesize, src_data, src_linesizes, AV_PIX_FMT_BGRA, av_frame2->width, av_frame2->height);
-			}
-		}
 
 		glBindTexture(GL_TEXTURE_2D, texture_);
 
@@ -430,9 +358,9 @@ public:
 		if(ptr)
 		{
 			if(config_.key_only)
-				fast_memshfl(reinterpret_cast<char*>(ptr), av_frame->data[0], image_data_size, 0x0F0F0F0F, 0x0B0B0B0B, 0x07070707, 0x03030303);
+				fast_memshfl(reinterpret_cast<char*>(ptr), std::begin(frame->image_data()), frame->image_data().size(), 0x0F0F0F0F, 0x0B0B0B0B, 0x07070707, 0x03030303);
 			else
-				fast_memcpy(reinterpret_cast<char*>(ptr), av_frame->data[0], image_data_size);
+				fast_memcpy(reinterpret_cast<char*>(ptr), std::begin(frame->image_data()), frame->image_data().size());
 
 			glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER); // release the mapped buffer
 		}

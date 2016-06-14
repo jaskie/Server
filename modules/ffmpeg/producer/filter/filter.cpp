@@ -35,6 +35,8 @@
 #include <boost/assign.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/foreach.hpp>
+#include <boost/format.hpp>
+#include <boost/rational.hpp>
 
 #include <cstdio>
 #include <sstream>
@@ -52,11 +54,16 @@ extern "C"
 	#include <libavfilter/avfiltergraph.h>
 	#include <libavfilter/buffersink.h>
 	#include <libavfilter/buffersrc.h>
+	#include <libavutil/opt.h>
 }
 #if defined(_MSC_VER)
 #pragma warning (pop)
 #endif
+#if defined(FF)
+#undef FF
+#endif
 
+#define FF(call) THROW_ON_ERROR2(call, "[filter]")
 
 namespace caspar { namespace ffmpeg {
 
@@ -104,18 +111,28 @@ namespace caspar { namespace ffmpeg {
 
 struct filter::implementation
 {
-	std::wstring					filters_;
-	std::shared_ptr<AVFilterGraph>	graph_;	
-	AVFilterContext*				buffersink_ctx_;
-	AVFilterContext*				buffersrc_ctx_;
-	std::shared_ptr<void>			parallel_yadif_ctx_;
+	std::string						filtergraph_;
+	std::shared_ptr<AVFilterGraph>	video_graph_;	
+    AVFilterContext*				video_graph_in_;
+    AVFilterContext*				video_graph_out_;
 	std::vector<AVPixelFormat>		pix_fmts_;
-	std::queue<safe_ptr<AVFrame>>	bypass_;
-		
-	implementation(const std::wstring& filters, const std::vector<AVPixelFormat>& pix_fmts) 
-		: filters_(filters)
-		, parallel_yadif_ctx_(nullptr)
-		, pix_fmts_(pix_fmts)
+	std::queue<std::shared_ptr<AVFrame>>	fast_path_;
+	implementation(const std::string& filtergraph) 
+		: filtergraph_()
+	{
+	}
+
+	implementation(
+		int in_width,
+		int in_height,
+		boost::rational<int> in_time_base,
+		boost::rational<int> in_frame_rate,
+		boost::rational<int> in_sample_aspect_ratio,
+		AVPixelFormat in_pix_fmt,
+		std::vector<AVPixelFormat> out_pix_fmts,
+		const std::string& filtergraph
+		) 
+		: filtergraph_(boost::to_lower_copy(filtergraph))
 	{
 		if(pix_fmts_.empty())
 		{
@@ -130,144 +147,150 @@ struct filter::implementation
 				(AV_PIX_FMT_RGBA)
 				(AV_PIX_FMT_ABGR)
 				(AV_PIX_FMT_GRAY8);
-		}
-		
+		}		
 		pix_fmts_.push_back(AV_PIX_FMT_NONE);
+		video_graph_.reset(
+			avfilter_graph_alloc(), 
+			[](AVFilterGraph* p)
+			{
+				avfilter_graph_free(&p);
+			});
+		video_graph_->nb_threads  = 0;
+		video_graph_->thread_type = AVFILTER_THREAD_SLICE;
+				
+		const auto vsrc_options = (boost::format("video_size=%1%x%2%:pix_fmt=%3%:time_base=%4%/%5%:pixel_aspect=%6%/%7%:frame_rate=%8%/%9%")
+			% in_width % in_height
+			% in_pix_fmt
+			% in_time_base.numerator() % in_time_base.denominator()
+			% in_sample_aspect_ratio.numerator() % in_sample_aspect_ratio.denominator()
+			% in_frame_rate.numerator() % in_frame_rate.denominator()).str();
+
+		AVFilterContext* filt_vsrc = nullptr;			
+		FF(avfilter_graph_create_filter(
+			&filt_vsrc,
+			avfilter_get_by_name("buffer"), 
+			"filter_buffer",
+			vsrc_options.c_str(), 
+			nullptr, 
+			video_graph_.get()));
+				
+		AVFilterContext* filt_vsink = nullptr;
+		FF(avfilter_graph_create_filter(
+			&filt_vsink,
+			avfilter_get_by_name("buffersink"), 
+			"filter_buffersink",
+			nullptr, 
+			nullptr, 
+			video_graph_.get()));
+		
+#pragma warning (push)
+#pragma warning (disable : 4245)
+
+		FF(av_opt_set_int_list(
+			filt_vsink, 
+			"pix_fmts", 
+			pix_fmts_.data(), 
+			-1,
+			AV_OPT_SEARCH_CHILDREN));
+
+#pragma warning (pop)
+			
+		configure_filtergraph(
+			*video_graph_, 
+			filtergraph_,
+			*filt_vsrc,
+			*filt_vsink);
+
+		video_graph_in_  = filt_vsrc;
+		video_graph_out_ = filt_vsink;
+	
+		CASPAR_LOG(trace) << L"Filter configured" << avfilter_graph_dump(video_graph_.get(), nullptr);
 	}
 	
-	void push(const std::shared_ptr<AVFrame>& frame)
-	{		
-		if(!frame)
-			return;
+	void configure_filtergraph(
+		AVFilterGraph& graph, 
+		const std::string& filtergraph, 
+		AVFilterContext& source_ctx, 
+		AVFilterContext& sink_ctx)
+	{
+		AVFilterInOut* outputs = nullptr;
+		AVFilterInOut* inputs = nullptr;
 
-		if(frame->data[0] == nullptr || frame->width < 1)
-			BOOST_THROW_EXCEPTION(invalid_argument());
-
-		if(filters_.empty())
-		{
-			bypass_.push(make_safe_ptr(frame));
-			return;
-		}
-		
 		try
 		{
-			if(!graph_)
+			if(!filtergraph.empty()) 
 			{
-				try
-				{
-					graph_.reset(avfilter_graph_alloc(), [](AVFilterGraph* p){avfilter_graph_free(&p);});
-								
-					// Input
-					std::stringstream args;
-					args << frame->width << ":" << frame->height << ":" << frame->format << ":" << 0 << ":" << 0 << ":" << 0 << ":" << 0; // don't care about pts and aspect_ratio
-					THROW_ON_ERROR2(avfilter_graph_create_filter(&buffersrc_ctx_, avfilter_get_by_name("buffer"), "src", args.str().c_str(), NULL, graph_.get()), "[filter]");
-					
-#if FF_API_OLD_VSINK_API
-					THROW_ON_ERROR2(avfilter_graph_create_filter(&buffersink_ctx_, avfilter_get_by_name("buffersink"), "out", NULL, pix_fmts_.data(), graph_.get()), "[filter]");
-#else
-					safe_ptr<AVBufferSinkParams> buffersink_params(av_buffersink_params_alloc(), av_free);
-					buffersink_params->pixel_fmts = pix_fmts_.data();
-					THROW_ON_ERROR2(avfilter_graph_create_filter(&buffersink_ctx_, avfilter_get_by_name("buffersink"), "out", NULL, buffersink_params.get(), graph_.get()), "[filter]");
-#endif
-					AVFilterInOut* inputs  = avfilter_inout_alloc();
-					AVFilterInOut* outputs = avfilter_inout_alloc();
-								
-					outputs->name			= av_strdup("in");
-					outputs->filter_ctx		= buffersrc_ctx_;
-					outputs->pad_idx		= 0;
-					outputs->next			= nullptr;
+				outputs = avfilter_inout_alloc();
+				inputs  = avfilter_inout_alloc();
 
-					inputs->name			= av_strdup("out");
-					inputs->filter_ctx		= buffersink_ctx_;
-					inputs->pad_idx			= 0;
-					inputs->next			= nullptr;
-			
-					std::string filters = boost::to_lower_copy(narrow(filters_));
-					THROW_ON_ERROR2(avfilter_graph_parse(graph_.get(), filters.c_str(), inputs, outputs, NULL), "[filter]");
-			
-					auto yadif_filter = boost::adaptors::filtered([&](AVFilterContext* p){return strstr(p->name, "yadif") != 0;});
+				CASPAR_VERIFY(outputs && inputs);
 
-				/*	BOOST_FOREACH(auto filter_ctx, boost::make_iterator_range(graph_->filters, graph_->filters + graph_->filter_count) | yadif_filter)
-					{
-						// Don't trust that libavfilter chooses optimal format.
-						filter_ctx->filter->query_formats = [&]() -> int (*)(AVFilterContext*)
-						{
-							switch(frame->format)
-							{
-							case AV_PIX_FMT_YUV444P16: 
-							case AV_PIX_FMT_YUV444P10: 
-							case AV_PIX_FMT_YUV444P9:  	
-							case AV_PIX_FMT_YUV444P:	
-							case AV_PIX_FMT_BGR24:		
-							case AV_PIX_FMT_RGB24:	
-								return query_formats_444;
-							case AV_PIX_FMT_YUV422P16: 
-							case AV_PIX_FMT_YUV422P10: 
-							case AV_PIX_FMT_YUV422P9:  
-							case AV_PIX_FMT_YUV422P:	
-							case AV_PIX_FMT_UYVY422:	
-							case AV_PIX_FMT_YUYV422:	
-								return query_formats_422;
-							case AV_PIX_FMT_YUV420P16: 
-							case AV_PIX_FMT_YUV420P10: 
-							case AV_PIX_FMT_YUV420P9:  
-							case AV_PIX_FMT_YUV420P:	
-								return query_formats_420;
-							case AV_PIX_FMT_YUVA420P:	
-							case AV_PIX_FMT_BGRA:		
-							case AV_PIX_FMT_RGBA:		
-							case AV_PIX_FMT_ABGR:		
-							case AV_PIX_FMT_ARGB:		
-								return query_formats_420a;
-							case AV_PIX_FMT_UYYVYY411: 
-							case AV_PIX_FMT_YUV411P:	
-								return query_formats_411;
-							case AV_PIX_FMT_YUV410P:	
-								return query_formats_410;
-							default:				
-								return filter_ctx->filter->query_formats;
-							}
-						}();
-					}
-					*/
-					THROW_ON_ERROR2(avfilter_graph_config(graph_.get(), NULL), "[filter]");	
-					
-					//BOOST_FOREACH(auto filter_ctx, boost::make_iterator_range(graph_->filters, graph_->filters + graph_->nb_filters) | yadif_filter)						
-					//	parallel_yadif_ctx_ = make_parallel_yadif(filter_ctx);						
-				}
-				catch(...)
-				{
-					graph_ = nullptr;
-					throw;
-				}
+				outputs->name       = av_strdup("in");
+				outputs->filter_ctx = &source_ctx;
+				outputs->pad_idx    = 0;
+				outputs->next       = nullptr;
+
+				inputs->name        = av_strdup("out");
+				inputs->filter_ctx  = &sink_ctx;
+				inputs->pad_idx     = 0;
+				inputs->next        = nullptr;
+
+				FF(avfilter_graph_parse(
+					&graph, 
+					filtergraph.c_str(), 
+					inputs,
+					outputs,
+					nullptr));
+			} 
+			else 
+			{
+				FF(avfilter_link(
+					&source_ctx, 
+					0, 
+					&sink_ctx, 
+					0));
 			}
-		
-			THROW_ON_ERROR2(av_buffersrc_add_frame(buffersrc_ctx_, frame.get()), "[filter]");
-		}
-		catch(ffmpeg_error&)
-		{
-			throw;
+
+			FF(avfilter_graph_config(
+				&graph, 
+				nullptr));
 		}
 		catch(...)
 		{
-			BOOST_THROW_EXCEPTION(ffmpeg_error() << boost::errinfo_nested_exception(boost::current_exception()));
+			//avfilter_inout_free(&outputs);
+			//avfilter_inout_free(&inputs);
+			throw;
 		}
+	}
+
+
+	bool fast_path() const
+	{
+		return filtergraph_.empty();
+	}
+
+	void push(const std::shared_ptr<AVFrame>& frame)
+	{		
+		if (fast_path())
+			fast_path_.push(frame);
+		else
+			FF(av_buffersrc_add_frame(
+				video_graph_in_, 
+				frame.get()));
 	}
 
 	std::shared_ptr<AVFrame> poll()
 	{
-		if(filters_.empty())
+		if (fast_path())
 		{
-			if(bypass_.empty())
+			if (fast_path_.empty())
 				return nullptr;
-			auto frame = bypass_.front();
-			bypass_.pop();
-			return frame;
+
+			auto result = fast_path_.front();
+			fast_path_.pop();
+			return result;
 		}
 
-		if(!graph_)
-			return nullptr;
-		
 		std::shared_ptr<AVFrame> filt_frame(
 			av_frame_alloc(), 
 			[](AVFrame* p)
@@ -276,7 +299,7 @@ struct filter::implementation
 			});
 		
 		const auto ret = av_buffersink_get_frame(
-			buffersink_ctx_, 
+			video_graph_out_, 
 			filt_frame.get());
 				
 		if(ret == AVERROR_EOF || ret == AVERROR(EAGAIN))
@@ -284,67 +307,40 @@ struct filter::implementation
 					
 		FF_RET(ret, "poll");
 
-		return filt_frame;
-		/*
-		try
-		{
-			if(avfilter_poll_frame(buffersink_ctx_->inputs[0])) 
-			{
-				AVFilterBufferRef *picref;
-				THROW_ON_ERROR2(av_buffersink_get_buffer_ref(buffersink_ctx_, &picref, 0), "[filter]");
-
-				if (!picref) 
-					return nullptr;
-				
-				safe_ptr<AVFrame> frame(avcodec_alloc_frame(), [=](AVFrame* p)
-				{
-					av_free(p);
-					avfilter_unref_buffer(picref);
-				});
-
-				avcodec_get_frame_defaults(frame.get());	
-
-				memcpy(frame->data,     picref->data,     sizeof(frame->data));
-				memcpy(frame->linesize, picref->linesize, sizeof(frame->linesize));
-				frame->format				= picref->format;
-				frame->width				= picref->video->w;
-				frame->height				= picref->video->h;
-				frame->pkt_pos				= picref->pos;
-				frame->interlaced_frame		= picref->video->interlaced;
-				frame->top_field_first		= picref->video->top_field_first;
-				frame->key_frame			= picref->video->key_frame;
-				frame->pict_type			= picref->video->pict_type;
-				frame->sample_aspect_ratio	= picref->video->sample_aspect_ratio;
-					
-				return frame;				
-			}
-
-			return nullptr;
-		}
-		catch(ffmpeg_error&)
-		{
-			throw;
-		}
-		catch(...)
-		{
-			BOOST_THROW_EXCEPTION(ffmpeg_error() << boost::errinfo_nested_exception(boost::current_exception()));
-		}
-		*/
+		return filt_frame;	
 	}
 
 	void clear()
 	{
-		while (!bypass_.empty())
-			bypass_.pop();
+		while (!fast_path_.empty())
+			fast_path_.pop();
 	}
 };
 
-filter::filter(const std::wstring& filters, const std::vector<AVPixelFormat>& pix_fmts) : impl_(new implementation(filters, pix_fmts)){}
+filter::filter(
+		int in_width,
+		int in_height,
+		boost::rational<int> in_time_base,
+		boost::rational<int> in_frame_rate,
+		boost::rational<int> in_sample_aspect_ratio,
+		AVPixelFormat in_pix_fmt,
+		std::vector<AVPixelFormat> out_pix_fmts,
+		const std::string& filtergraph) 
+		: impl_(new implementation(
+			in_width,
+			in_height,
+			in_time_base,
+			in_frame_rate,
+			in_sample_aspect_ratio,
+			in_pix_fmt,
+			out_pix_fmts,
+			filtergraph)){}
+filter::filter(const std::string& filtergraph): impl_(new implementation(filtergraph)){}
 filter::filter(filter&& other) : impl_(std::move(other.impl_)){}
 filter& filter::operator=(filter&& other){impl_ = std::move(other.impl_); return *this;}
 void filter::push(const std::shared_ptr<AVFrame>& frame){impl_->push(frame);}
 std::shared_ptr<AVFrame> filter::poll(){return impl_->poll();}
-std::wstring filter::filter_str() const{return impl_->filters_;}
+std::string filter::filter_str() const{return impl_->filtergraph_;}
 std::vector<safe_ptr<AVFrame>> filter::poll_all()
 {	
 	std::vector<safe_ptr<AVFrame>> frames;

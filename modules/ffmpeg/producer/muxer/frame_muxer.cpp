@@ -81,7 +81,7 @@ struct frame_muxer::implementation : boost::noncopyable
 	safe_ptr<core::frame_factory>					frame_factory_;
 	
 	filter											filter_;
-	const std::wstring								filter_str_;
+	const std::string								filter_str_;
 	const bool										thumbnail_mode_;
 	bool											force_deinterlacing_;
 	const core::channel_layout						audio_channel_layout_;
@@ -89,7 +89,7 @@ struct frame_muxer::implementation : boost::noncopyable
 	implementation(
 			double in_fps,
 			const safe_ptr<core::frame_factory>& frame_factory,
-			const std::wstring& filter_str,
+			const std::string& filter_str,
 			bool thumbnail_mode,
 			const core::channel_layout& audio_channel_layout)
 		: display_mode_(display_mode::invalid)
@@ -100,6 +100,7 @@ struct frame_muxer::implementation : boost::noncopyable
 		, audio_cadence_(format_desc_.audio_cadence)
 		, frame_factory_(frame_factory)
 		, filter_str_(filter_str)
+		, filter_(filter_str_)
 		, thumbnail_mode_(thumbnail_mode)
 		, force_deinterlacing_(false)
 		, audio_channel_layout_(audio_channel_layout)
@@ -302,7 +303,7 @@ struct frame_muxer::implementation : boost::noncopyable
 				
 	void update_display_mode(const std::shared_ptr<AVFrame>& frame, bool force_deinterlace)
 	{
-		std::wstring filter_str = filter_str_;
+		std::string filter_str = filter_str_;
 
 		display_mode_ = display_mode::simple;
 		if(auto_transcode_)
@@ -336,9 +337,9 @@ struct frame_muxer::implementation : boost::noncopyable
 			}
 
 			if(display_mode_ == display_mode::deinterlace)
-				filter_str = append_filter(filter_str, L"YADIF=0:-1");
+				filter_str = append_filter(filter_str, "YADIF=0:-1");
 			else if(display_mode_ == display_mode::deinterlace_bob || display_mode_ == display_mode::deinterlace_bob_reinterlace)
-				filter_str = append_filter(filter_str, L"YADIF=1:-1");
+				filter_str = append_filter(filter_str, "YADIF=1:-1");
 		}
 
 		if(display_mode_ == display_mode::invalid)
@@ -395,7 +396,7 @@ frame_muxer::frame_muxer(
 		const safe_ptr<core::frame_factory>& frame_factory,
 		bool thumbnail_mode,
 		const core::channel_layout& audio_channel_layout,
-		const std::wstring& filter)
+		const std::string& filter)
 	: impl_(new implementation(in_fps, frame_factory, filter, thumbnail_mode, audio_channel_layout)){}
 void frame_muxer::push(const std::shared_ptr<AVFrame>& video_frame, int hints){impl_->push(video_frame, hints);}
 void frame_muxer::push(const std::shared_ptr<core::audio_buffer>& audio_samples){return impl_->push(audio_samples);}

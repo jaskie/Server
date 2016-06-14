@@ -112,7 +112,7 @@ public:
 	{
 		int got_frame = 0;
 		safe_ptr<AVFrame> frame = create_frame();
-		int ret = THROW_ON_ERROR2(avcodec_decode_audio4(codec_context_.get(), frame.get(), &got_frame, pkt.get()), "[audio_decoder]");
+		int ret = avcodec_decode_audio4(codec_context_.get(), frame.get(), &got_frame, pkt.get());
 		int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(frame.get());
 		if (ret >= 0 && got_frame && frame_time_stamp >= seek_pts_)
 		{

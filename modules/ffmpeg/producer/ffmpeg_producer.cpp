@@ -35,6 +35,7 @@
 #include <common/env.h>
 #include <common/utility/assert.h>
 #include <common/diagnostics/graph.h>
+#include <common/utility/string.h>
 
 #include <core/monitor/monitor.h>
 #include <core/video_format.h>
@@ -52,6 +53,7 @@
 #include <boost/range/algorithm/find_if.hpp>
 #include <boost/range/algorithm/find.hpp>
 #include <boost/regex.hpp>
+#include <boost/locale.hpp>
 
 #include <tbb/parallel_invoke.h>
 
@@ -112,7 +114,7 @@ struct ffmpeg_producer : public core::frame_producer
 	uint32_t													start_;
 	const uint32_t												length_;
 	const bool													thumbnail_mode_;
-	const std::wstring											filter_;
+	const std::string											filter_;
 	bool														loop_;
 
 	safe_ptr<core::basic_frame>									last_frame_;
@@ -133,7 +135,7 @@ public:
 		, length_(length)
 		, thumbnail_mode_(thumbnail_mode)
 		, last_frame_(core::basic_frame::empty())
-		, filter_(filter)
+		, filter_(narrow(filter))
 		, custom_channel_order_(custom_channel_order)
 		, loop_(loop)
 		, start_(start)

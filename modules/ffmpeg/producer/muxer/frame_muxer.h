@@ -54,7 +54,7 @@ public:
 			const safe_ptr<core::frame_factory>& frame_factory,
 			bool thumbnail_mode,
 			const core::channel_layout& audio_channel_layout,
-			const std::wstring& filter = L"");
+			const std::string& filter = "");
 	
 	void push(const std::shared_ptr<AVFrame>& video_frame, int hints = 0);
 	void push(const std::shared_ptr<core::audio_buffer>& audio_samples);
