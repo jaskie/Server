@@ -67,48 +67,6 @@ extern "C"
 
 namespace caspar { namespace ffmpeg {
 
-//static int query_formats_444(AVFilterContext *ctx)
-//{
-//    static const int pix_fmts[] = {AV_PIX_FMT_YUV444P, AV_PIX_FMT_NONE};
-//    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
-//    return 0;
-//}
-//
-//static int query_formats_422(AVFilterContext *ctx)
-//{
-//    static const int pix_fmts[] = {AV_PIX_FMT_YUV422P, AV_PIX_FMT_NONE};
-//    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
-//    return 0;
-//}
-//
-//static int query_formats_420(AVFilterContext *ctx)
-//{
-//    static const int pix_fmts[] = {AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE};
-//    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
-//    return 0;
-//}
-//
-//static int query_formats_420a(AVFilterContext *ctx)
-//{
-//    static const int pix_fmts[] = {AV_PIX_FMT_YUVA420P, AV_PIX_FMT_NONE};
-//    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
-//    return 0;
-//}
-//
-//static int query_formats_411(AVFilterContext *ctx)
-//{
-//    static const int pix_fmts[] = {AV_PIX_FMT_YUV411P, AV_PIX_FMT_NONE};
-//    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
-//    return 0;
-//}
-//
-//static int query_formats_410(AVFilterContext *ctx)
-//{
-//    static const int pix_fmts[] = {AV_PIX_FMT_YUV410P, AV_PIX_FMT_NONE};
-//    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
-//    return 0;
-//}
-
 struct filter::implementation
 {
 	std::string						filtergraph_;
@@ -257,8 +215,8 @@ struct filter::implementation
 		}
 		catch(...)
 		{
-			//avfilter_inout_free(&outputs);
-			//avfilter_inout_free(&inputs);
+			avfilter_inout_free(&outputs);
+			avfilter_inout_free(&inputs);
 			throw;
 		}
 	}

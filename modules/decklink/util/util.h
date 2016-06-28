@@ -108,7 +108,7 @@ static core::video_format::type get_caspar_video_format(BMDDisplayMode fmt)
 }
 
 template<typename T, typename F>
-BMDDisplayMode get_display_mode(const T& device, BMDDisplayMode format, BMDPixelFormat pix_fmt, F flag)
+CComPtr<IDeckLinkDisplayMode> get_display_mode(const T& device, BMDDisplayMode format, BMDPixelFormat pix_fmt, F flag)
 {
 	CComPtr<IDeckLinkDisplayModeIterator> iterator;
 	CComPtr<IDeckLinkDisplayMode>    	  mode;
@@ -134,11 +134,11 @@ BMDDisplayMode get_display_mode(const T& device, BMDDisplayMode format, BMDPixel
 	else if(displayModeSupport == bmdDisplayModeSupportedWithConversion)
 		CASPAR_LOG(warning) << L"Device supports video-format with conversion: " << mode->GetDisplayMode();
 
-	return mode->GetDisplayMode();
+	return mode;
 }
 
 template<typename T, typename F>
-static BMDDisplayMode get_display_mode(const T& device, core::video_format::type fmt, BMDPixelFormat pix_fmt, F flag)
+static CComPtr<IDeckLinkDisplayMode> get_display_mode(const T& device, core::video_format::type fmt, BMDPixelFormat pix_fmt, F flag)
 {	
 	return get_display_mode(device, get_decklink_video_format(fmt), pix_fmt, flag);
 }

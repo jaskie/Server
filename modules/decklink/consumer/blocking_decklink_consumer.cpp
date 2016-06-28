@@ -115,7 +115,7 @@ public:
 		graph_->set_text(print());
 		diagnostics::register_graph(graph_);
 		
-		enable_video(get_display_mode(output_, format_desc_.format, bmdFormat8BitBGRA, bmdVideoOutputFlagDefault));
+		enable_video(get_display_mode(output_, format_desc_.format, bmdFormat8BitBGRA, bmdVideoOutputFlagDefault)->GetDisplayMode());
 				
 		if(config.embedded_audio)
 			enable_audio();

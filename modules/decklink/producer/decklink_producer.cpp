@@ -93,8 +93,9 @@ class decklink_producer : boost::noncopyable, public IDeckLinkInputCallback
 	std::unique_ptr<thread_safe_decklink_allocator>				allocator_;
 	CComPtr<IDeckLink>											decklink_;
 	CComQIPtr<IDeckLinkInput>									input_;
-	CComQIPtr<IDeckLinkAttributes >								attributes_;
-	
+	CComQIPtr<IDeckLinkAttributes>								attributes_;
+	CComQIPtr<IDeckLinkDisplayMode>								current_display_mode_;
+
 	const std::wstring											model_name_;
 	const size_t												device_index_;
 	const std::wstring											filter_;
@@ -143,7 +144,9 @@ public:
 			num_input_channels_ = 8;
 		else
 			num_input_channels_ = 16;
-		
+
+		current_display_mode_ = get_display_mode(input_, format_desc_.format, bmdFormat8BitYUV, bmdVideoInputFlagDefault);
+
 		graph_->set_color("tick-time", diagnostics::color(0.0f, 0.6f, 0.9f));	
 		graph_->set_color("late-frame", diagnostics::color(0.6f, 0.3f, 0.3f));
 		graph_->set_color("frame-time", diagnostics::color(1.0f, 0.0f, 0.0f));
@@ -152,7 +155,6 @@ public:
 		graph_->set_text(print());
 		diagnostics::register_graph(graph_);
 		
-		auto display_mode = get_display_mode(input_, format_desc_.format, bmdFormat8BitYUV, bmdVideoInputFlagDefault);
 		
 		allocator_.reset(new thread_safe_decklink_allocator(print()));
 
@@ -161,8 +163,28 @@ public:
 									<< msg_info(narrow(print()) + " Could not enable use of custom allocator.")
 									<< boost::errinfo_api_function("SetVideoInputFrameMemoryAllocator"));
 
+		if (FAILED(input_->SetCallback(this)) != S_OK)
+			BOOST_THROW_EXCEPTION(caspar_exception() 
+									<< msg_info(narrow(print()) + " Failed to set input callback.")
+									<< boost::errinfo_api_function("SetCallback"));
+
+		
+		BOOL supportsFormatDetection = false;
+		if (FAILED(attributes_->GetFlag(BMDDeckLinkSupportsInputFormatDetection, &supportsFormatDetection)))
+			supportsFormatDetection = false;
+		
+		open_input(current_display_mode_->GetDisplayMode(), supportsFormatDetection ? bmdVideoInputEnableFormatDetection : bmdVideoInputFlagDefault);
+	}
+
+	~decklink_producer()
+	{
+		close_input();
+	}
+
+	void open_input(BMDDisplayMode displayMode, BMDVideoInputFlags bmdVideoInputFlags)
+	{
 		// NOTE: bmdFormat8BitARGB is currently not supported by any decklink card. (2011-05-08)
-		if(FAILED(input_->EnableVideoInput(display_mode, bmdFormat8BitYUV, bmdVideoInputFlagDefault))) 
+		if(FAILED(input_->EnableVideoInput(displayMode, bmdFormat8BitYUV, bmdVideoInputFlags))) 
 			BOOST_THROW_EXCEPTION(caspar_exception() 
 									<< msg_info(narrow(print()) + " Could not enable video input.")
 									<< boost::errinfo_api_function("EnableVideoInput"));
@@ -172,22 +194,18 @@ public:
 									<< msg_info(narrow(print()) + " Could not enable audio input.")
 									<< boost::errinfo_api_function("EnableAudioInput"));
 			
-		if (FAILED(input_->SetCallback(this)) != S_OK)
-			BOOST_THROW_EXCEPTION(caspar_exception() 
-									<< msg_info(narrow(print()) + " Failed to set input callback.")
-									<< boost::errinfo_api_function("SetCallback"));
-			
 		if(FAILED(input_->StartStreams()))
 			BOOST_THROW_EXCEPTION(caspar_exception() 
 									<< msg_info(narrow(print()) + " Failed to start input stream.")
 									<< boost::errinfo_api_function("StartStreams"));
 	}
 
-	~decklink_producer()
+	void close_input()
 	{
 		if(input_ != nullptr) 
 		{
 			input_->StopStreams();
+			input_->DisableAudioInput();
 			input_->DisableVideoInput();
 		}
 	}
@@ -198,6 +216,17 @@ public:
 		
 	virtual HRESULT STDMETHODCALLTYPE VideoInputFormatChanged(BMDVideoInputFormatChangedEvents notificationEvents, IDeckLinkDisplayMode* newDisplayMode, BMDDetectedVideoInputFormatFlags /*detectedSignalFlags*/)
 	{
+		close_input();
+		open_input(newDisplayMode->GetDisplayMode(), bmdVideoInputEnableFormatDetection);
+		current_display_mode_ = newDisplayMode;
+		BSTR displayModeString = NULL; 
+		if (!FAILED(newDisplayMode->GetName(&displayModeString)) && displayModeString != NULL)
+		{
+			std::wstring modeName(displayModeString, SysStringLen(displayModeString));
+			SysFreeString(displayModeString);
+			CASPAR_LOG(info) << model_name_ << L"[" << device_index_ << L"]: Changed input video mode to " << modeName;
+			graph_->set_text(print());
+		}
 		return S_OK;
 	}
 
@@ -227,8 +256,9 @@ public:
 			av_frame->format			= AV_PIX_FMT_UYVY422;
 			av_frame->width				= video->GetWidth();
 			av_frame->height			= video->GetHeight();
-			av_frame->interlaced_frame	= format_desc_.field_mode != core::field_mode::progressive;
-			av_frame->top_field_first	= format_desc_.field_mode == core::field_mode::upper ? 1 : 0;
+			auto fieldDominance = current_display_mode_->GetFieldDominance();
+			av_frame->interlaced_frame	= fieldDominance == bmdLowerFieldFirst || fieldDominance == bmdUpperFieldFirst;
+			av_frame->top_field_first	= fieldDominance == bmdUpperFieldFirst;
 				
 			std::shared_ptr<core::audio_buffer> audio_buffer;
 
@@ -323,7 +353,14 @@ public:
 	
 	std::wstring print() const
 	{
-		return model_name_ + L" [" + boost::lexical_cast<std::wstring>(device_index_) + L"|" + format_desc_.name + L"]";
+		BSTR displayModeString = NULL;
+		if (!FAILED(current_display_mode_->GetName(&displayModeString)) && displayModeString != NULL)
+		{
+			std::wstring modeName(displayModeString, SysStringLen(displayModeString));
+			SysFreeString(displayModeString);
+			return model_name_ + L" [" + boost::lexical_cast<std::wstring>(device_index_) + L"|" + modeName + L"]";
+		}
+		return model_name_ + L" [" + boost::lexical_cast<std::wstring>(device_index_) + L"]";
 	}
 
 	core::monitor::subject& monitor_output()
