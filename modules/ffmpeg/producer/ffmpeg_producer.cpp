@@ -124,7 +124,7 @@ struct ffmpeg_producer : public core::frame_producer
 	
 		
 public:
-	explicit ffmpeg_producer(const safe_ptr<core::frame_factory>& frame_factory, const std::wstring& filename, const std::wstring& filter, bool loop, uint32_t start, uint32_t length, bool thumbnail_mode, const std::wstring& custom_channel_order)
+	explicit ffmpeg_producer(const safe_ptr<core::frame_factory>& frame_factory, const std::wstring& filename, const std::wstring& filter, bool loop, uint32_t start, uint32_t length, bool thumbnail_mode, const std::wstring& custom_channel_order, bool field_order_inverted)
 		: filename_(filename)
 		, path_relative_to_media_(get_relative_or_original(filename, env::media_folder()))
 		, frame_factory_(frame_factory)		
@@ -145,7 +145,7 @@ public:
 		diagnostics::register_graph(graph_);
 		try
 		{
-			video_decoder_.reset(new video_decoder(input_));
+			video_decoder_.reset(new video_decoder(input_, field_order_inverted));
 		}
 		catch(averror_stream_not_found&)
 		{
@@ -376,6 +376,7 @@ public:
 	{
 		static const boost::wregex loop_exp(L"LOOP\\s*(?<VALUE>\\d?)?", boost::regex::icase);
 		static const boost::wregex seek_exp(L"SEEK\\s+(?<VALUE>\\d+)", boost::regex::icase);
+		static const boost::wregex field_order_inverted_exp(L"FIELD_ORDER_INVERTED\\s+(?<VALUE>\\d+)", boost::regex::icase);
 		
 		boost::wsmatch what;
 		if(boost::regex_match(param, what, loop_exp))
@@ -386,6 +387,7 @@ public:
 				return L"LOOP OK";
 			}
 		}
+
 		if(boost::regex_match(param, what, seek_exp))
 		{
 			while (!frame_buffer_.empty())
@@ -393,6 +395,13 @@ public:
 			seek(boost::lexical_cast<uint32_t>(what["VALUE"].str()));
 			return L"SEEK OK";
 		}
+		if(boost::regex_match(param, what, field_order_inverted_exp))
+		{
+			if (video_decoder_)
+				video_decoder_->invert_field_order(boost::lexical_cast<bool>(what["VALUE"].str()));
+			return L"FIELD_ORDER_INVERTED OK";
+		}
+		
 		BOOST_THROW_EXCEPTION(invalid_argument());
 	}
 
@@ -494,11 +503,12 @@ safe_ptr<core::frame_producer> create_producer(
 	auto length		= params.get(L"LENGTH", std::numeric_limits<uint32_t>::max());
 	auto filter_str = params.get(L"FILTER", L""); 	
 	auto custom_channel_order	= params.get(L"CHANNEL_LAYOUT", L"");
+	auto field_order_inverted = params.has(L"FIELD_ORDER_INVERTED");
 
 	boost::replace_all(filter_str, L"DEINTERLACE", L"YADIF=0:-1");
 	boost::replace_all(filter_str, L"DEINTERLACE_BOB", L"YADIF=1:-1");
 	
-	return create_producer_destroy_proxy(make_safe<ffmpeg_producer>(frame_factory, filename, filter_str, loop, start, length, false, custom_channel_order));
+	return create_producer_destroy_proxy(make_safe<ffmpeg_producer>(frame_factory, filename, filter_str, loop, start, length, false, custom_channel_order, field_order_inverted));
 }
 
 safe_ptr<core::frame_producer> create_thumbnail_producer(
@@ -513,7 +523,7 @@ safe_ptr<core::frame_producer> create_thumbnail_producer(
 	if(filename.empty())
 		return core::frame_producer::empty();
 	
-	return make_safe<ffmpeg_producer>(frame_factory, filename, L"", false, 0, std::numeric_limits<uint32_t>::max(), true, L"");
+	return make_safe<ffmpeg_producer>(frame_factory, filename, L"", false, 0, std::numeric_limits<uint32_t>::max(), true, L"", false);
 }
 
 }}

@@ -41,7 +41,7 @@ namespace ffmpeg {
 class video_decoder : boost::noncopyable
 {
 public:
-	explicit video_decoder(input input);
+	explicit video_decoder(input input, bool invert_field_order);
 	
 	std::shared_ptr<AVFrame> poll();
 	size_t	 width()		const;
@@ -50,6 +50,7 @@ public:
 	bool	 is_progressive() const;
 	std::wstring print()	const;
 	void seek(uint64_t time);
+	void invert_field_order(bool invert);
 
 private:
 	struct implementation;

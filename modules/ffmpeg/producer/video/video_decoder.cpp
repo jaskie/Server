@@ -64,9 +64,9 @@ struct video_decoder::implementation : boost::noncopyable
 	bool									is_progressive_;
 	const int64_t							stream_start_pts_;
 	tbb::atomic<int64_t>					seek_pts_;
-
+	tbb::atomic<bool>						invert_field_order_;
 public:
-	explicit implementation(input input)
+	explicit implementation(input input, bool invert_field_order)
 		: input_(input)
 		, codec_context_(input.open_video_codec(stream_index_))
 		, codec_(codec_context_->codec)
@@ -75,7 +75,9 @@ public:
 		, stream_(input_.format_context()->streams[stream_index_])
 		, stream_start_pts_(stream_->start_time)
 		, nb_frames_(static_cast<uint32_t>(stream_->nb_frames))
+		
 	{
+		invert_field_order_ = invert_field_order;
 		seek_pts_ = 0;
 		CASPAR_LOG(trace) << "Codec: " << codec_->long_name;
 	}
@@ -101,6 +103,8 @@ public:
 			return nullptr;
 
 		is_progressive_ = !decoded_frame->interlaced_frame;
+		if (invert_field_order_)
+			decoded_frame->top_field_first = (!decoded_frame->top_field_first & 0x1);
 
 		if(decoded_frame->repeat_pict > 0)
 			CASPAR_LOG(warning) << "[video_decoder] Field repeat_pict not implemented.";
@@ -141,19 +145,24 @@ public:
 			+ (time * stream_->time_base.den / (AV_TIME_BASE * stream_->time_base.num));
 	}
 
+	void invert_field_order (bool invert)
+	{
+		invert_field_order_ = invert;
+	}
+
 	std::wstring print() const
 	{		
 		return L"[video-decoder] " + widen(codec_context_->codec->long_name);
 	}
 };
 
-video_decoder::video_decoder(input input) : impl_(new implementation(input)){}
+video_decoder::video_decoder(input input, bool invert_field_order) : impl_(new implementation(input, invert_field_order)){}
 std::shared_ptr<AVFrame> video_decoder::poll(){return impl_->poll();}
 size_t video_decoder::width() const{return impl_->width_;}
 size_t video_decoder::height() const{return impl_->height_;}
 uint32_t video_decoder::nb_frames() const{return impl_->nb_frames_;}
 bool	video_decoder::is_progressive() const{return impl_->is_progressive_;}
 std::wstring video_decoder::print() const{return impl_->print();}
-void video_decoder::seek(uint64_t time) { impl_->seek(time); }
-
+void video_decoder::seek(uint64_t time) { impl_->seek(time);}
+void video_decoder::invert_field_order(bool invert) {impl_-> invert_field_order(invert);}
 }}
