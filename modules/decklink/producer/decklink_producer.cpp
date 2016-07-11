@@ -224,7 +224,7 @@ public:
 		{
 			std::wstring modeName(displayModeString, SysStringLen(displayModeString));
 			SysFreeString(displayModeString);
-			CASPAR_LOG(info) << model_name_ << L"[" << device_index_ << L"]: Changed input video mode to " << modeName;
+			CASPAR_LOG(info) << model_name_ << L" [" << device_index_ << L"]: Changed input video mode to " << modeName;
 			graph_->set_text(print());
 		}
 		return S_OK;

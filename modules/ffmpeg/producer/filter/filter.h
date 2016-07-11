@@ -52,7 +52,6 @@ public:
 		AVPixelFormat in_pix_fmt,
 		std::vector<AVPixelFormat> out_pix_fmts,
 		const std::string& filtergraph);
-	filter(const std::string& filtergraph);
 	filter(filter&& other);
 	filter& operator=(filter&& other);
 

@@ -75,10 +75,6 @@ struct filter::implementation
     AVFilterContext*				video_graph_out_;
 	std::vector<AVPixelFormat>		pix_fmts_;
 	std::queue<std::shared_ptr<AVFrame>>	fast_path_;
-	implementation(const std::string& filtergraph) 
-		: filtergraph_()
-	{
-	}
 
 	implementation(
 		int in_width,
@@ -293,7 +289,6 @@ filter::filter(
 			in_pix_fmt,
 			out_pix_fmts,
 			filtergraph)){}
-filter::filter(const std::string& filtergraph): impl_(new implementation(filtergraph)){}
 filter::filter(filter&& other) : impl_(std::move(other.impl_)){}
 filter& filter::operator=(filter&& other){impl_ = std::move(other.impl_); return *this;}
 void filter::push(const std::shared_ptr<AVFrame>& frame){impl_->push(frame);}
