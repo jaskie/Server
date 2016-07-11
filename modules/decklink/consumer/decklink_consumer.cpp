@@ -24,7 +24,6 @@
 #include "decklink_consumer.h"
 
 #include "../util/util.h"
-#include "../util/decklink_allocator.h"
 
 #include "../interop/DeckLinkAPI_h.h"
 
@@ -56,7 +55,6 @@ struct decklink_consumer : public IDeckLinkVideoOutputCallback, public IDeckLink
 	const int							channel_index_;
 	const configuration					config_;
 
-	std::unique_ptr<thread_safe_decklink_allocator>	allocator_;
 	CComPtr<IDeckLink>					decklink_;
 	CComQIPtr<IDeckLinkOutput>			output_;
 	CComQIPtr<IDeckLinkKeyer>			keyer_;
@@ -175,16 +173,6 @@ public:
 
 	void enable_video(BMDDisplayMode display_mode)
 	{
-		if (config_.custom_allocator)
-		{
-			allocator_.reset(new thread_safe_decklink_allocator(print()));
-
-			if (FAILED(output_->SetVideoOutputFrameMemoryAllocator(allocator_.get())))
-				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Could not set custom memory allocator."));
-
-			CASPAR_LOG(info) << print() << L" Using custom allocator.";
-		}
-
 		if(FAILED(output_->EnableVideoOutput(display_mode, bmdVideoOutputFlagDefault))) 
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Could not enable video output."));
 		
@@ -530,7 +518,6 @@ safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptre
 	config.device_index			= ptree.get(L"device",				config.device_index);
 	config.embedded_audio		= ptree.get(L"embedded-audio",		config.embedded_audio);
 	config.base_buffer_depth	= ptree.get(L"buffer-depth",		config.base_buffer_depth);
-	config.custom_allocator		= ptree.get(L"custom-allocator",	config.custom_allocator);
 	config.audio_layout =
 		core::default_channel_layout_repository().get_by_name(
 				boost::to_upper_copy(ptree.get(L"channel-layout", L"STEREO")));

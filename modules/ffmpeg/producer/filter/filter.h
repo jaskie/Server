@@ -59,47 +59,10 @@ public:
 	std::shared_ptr<AVFrame> poll();
 	std::vector<safe_ptr<AVFrame>> poll_all();
 	void clear();
+	bool is_frame_format_changed(const std::shared_ptr<AVFrame>& frame);
 
 	std::string filter_str() const;
 			
-	static bool is_double_rate(const std::string& filters)
-	{
-		if(boost::to_upper_copy(filters).find("YADIF=1") != std::string::npos)
-			return true;
-	
-		if(boost::to_upper_copy(filters).find("YADIF=3") != std::string::npos)
-			return true;
-
-		return false;
-	}
-
-	static bool is_deinterlacing(const std::string& filters)
-	{
-		if(boost::to_upper_copy(filters).find("YADIF") != std::string::npos)
-			return true;	
-		return false;
-	}	
-	
-	static int delay(const std::string& filters)
-	{
-		return is_double_rate(filters) ? 1 : 1;
-	}
-
-	int delay() const
-	{
-		return delay(filter_str());
-	}
-
-	bool is_double_rate() const
-	{
-		return is_double_rate(filter_str());
-	}
-	
-	bool is_deinterlacing() const
-	{
-		return is_deinterlacing(filter_str());
-	}
-
 private:
 	struct implementation;
 	safe_ptr<implementation> impl_;

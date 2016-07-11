@@ -25,7 +25,6 @@
 
 #include "../interop/DeckLinkAPI_h.h"
 #include "../util/util.h"
-#include "../util/decklink_allocator.h"
 
 #include "../../ffmpeg/producer/filter/filter.h"
 #include "../../ffmpeg/producer/util/util.h"
@@ -90,7 +89,6 @@ class decklink_producer : boost::noncopyable, public IDeckLinkInputCallback
 	boost::timer												tick_timer_;
 	boost::timer												frame_timer_;
 
-	std::unique_ptr<thread_safe_decklink_allocator>				allocator_;
 	CComPtr<IDeckLink>											decklink_;
 	CComQIPtr<IDeckLinkInput>									input_;
 	CComQIPtr<IDeckLinkAttributes>								attributes_;
@@ -155,25 +153,16 @@ public:
 		graph_->set_text(print());
 		diagnostics::register_graph(graph_);
 		
-		
-		allocator_.reset(new thread_safe_decklink_allocator(print()));
-
-		if(FAILED(input_->SetVideoInputFrameMemoryAllocator(allocator_.get()))) 
-			BOOST_THROW_EXCEPTION(caspar_exception()
-									<< msg_info(narrow(print()) + " Could not enable use of custom allocator.")
-									<< boost::errinfo_api_function("SetVideoInputFrameMemoryAllocator"));
-
-		if (FAILED(input_->SetCallback(this)) != S_OK)
-			BOOST_THROW_EXCEPTION(caspar_exception() 
-									<< msg_info(narrow(print()) + " Failed to set input callback.")
-									<< boost::errinfo_api_function("SetCallback"));
-
-		
 		BOOL supportsFormatDetection = false;
 		if (FAILED(attributes_->GetFlag(BMDDeckLinkSupportsInputFormatDetection, &supportsFormatDetection)))
 			supportsFormatDetection = false;
 		
 		open_input(current_display_mode_->GetDisplayMode(), supportsFormatDetection ? bmdVideoInputEnableFormatDetection : bmdVideoInputFlagDefault);
+
+		if (FAILED(input_->SetCallback(this)) != S_OK)
+			BOOST_THROW_EXCEPTION(caspar_exception() 
+									<< msg_info(narrow(print()) + " Failed to set input callback.")
+									<< boost::errinfo_api_function("SetCallback"));
 	}
 
 	~decklink_producer()
@@ -183,7 +172,6 @@ public:
 
 	void open_input(BMDDisplayMode displayMode, BMDVideoInputFlags bmdVideoInputFlags)
 	{
-		// NOTE: bmdFormat8BitARGB is currently not supported by any decklink card. (2011-05-08)
 		if(FAILED(input_->EnableVideoInput(displayMode, bmdFormat8BitYUV, bmdVideoInputFlags))) 
 			BOOST_THROW_EXCEPTION(caspar_exception() 
 									<< msg_info(narrow(print()) + " Could not enable video input.")
@@ -256,6 +244,7 @@ public:
 			av_frame->format			= AV_PIX_FMT_UYVY422;
 			av_frame->width				= video->GetWidth();
 			av_frame->height			= video->GetHeight();
+			av_frame->pict_type			= AV_PICTURE_TYPE_I;
 			auto fieldDominance = current_display_mode_->GetFieldDominance();
 			av_frame->interlaced_frame	= fieldDominance == bmdLowerFieldFirst || fieldDominance == bmdUpperFieldFirst;
 			av_frame->top_field_first	= fieldDominance == bmdUpperFieldFirst;

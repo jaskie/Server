@@ -26,6 +26,7 @@
 //#include "parallel_yadif.h"
 
 #include "../../ffmpeg_error.h"
+#include "../util/util.h"
 
 #include <common/exception/exceptions.h>
 
@@ -74,6 +75,9 @@ struct filter::implementation
     AVFilterContext*				video_graph_in_;
     AVFilterContext*				video_graph_out_;
 	std::vector<AVPixelFormat>		pix_fmts_;
+	const AVPixelFormat				pix_format_;
+	const int						width_;
+	const int						height_;
 	std::queue<std::shared_ptr<AVFrame>>	fast_path_;
 
 	implementation(
@@ -87,7 +91,13 @@ struct filter::implementation
 		const std::string& filtergraph
 		) 
 		: filtergraph_(boost::to_lower_copy(filtergraph))
+		, pix_format_(in_pix_fmt)
+		, width_(in_width)
+		, height_(in_height)
 	{
+		if (filtergraph.empty())
+			return; 
+
 		if(pix_fmts_.empty())
 		{
 			pix_fmts_ = boost::assign::list_of
@@ -158,7 +168,7 @@ struct filter::implementation
 		video_graph_in_  = filt_vsrc;
 		video_graph_out_ = filt_vsink;
 	
-		CASPAR_LOG(trace) << L"Filter configured" << avfilter_graph_dump(video_graph_.get(), nullptr);
+		CASPAR_LOG(trace) << L"Filter configured:\n" << avfilter_graph_dump(video_graph_.get(), nullptr);
 	}
 	
 	void configure_filtergraph(
@@ -245,12 +255,7 @@ struct filter::implementation
 			return result;
 		}
 
-		std::shared_ptr<AVFrame> filt_frame(
-			av_frame_alloc(), 
-			[](AVFrame* p)
-			{
-				av_frame_free(&p);
-			});
+		auto filt_frame = ffmpeg::create_frame();
 		
 		const auto ret = av_buffersink_get_frame(
 			video_graph_out_, 
@@ -266,9 +271,18 @@ struct filter::implementation
 
 	void clear()
 	{
-		while (!fast_path_.empty())
+		if (fast_path())
+		{ 
+			while (!fast_path_.empty())
 			fast_path_.pop();
+		}
 	}
+
+	bool is_frame_format_changed(const std::shared_ptr<AVFrame>& frame)
+	{
+		return pix_format_ != frame->format || width_ != frame->width || height_ != frame->height;
+	}
+
 };
 
 filter::filter(
@@ -302,5 +316,6 @@ std::vector<safe_ptr<AVFrame>> filter::poll_all()
 	return frames;
 }
 void filter::clear() { impl_->clear(); }
+bool filter::is_frame_format_changed(const std::shared_ptr<AVFrame>& frame) { return impl_->is_frame_format_changed(frame);}
 
 }}

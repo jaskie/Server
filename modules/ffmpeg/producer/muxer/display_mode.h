@@ -34,7 +34,7 @@ struct display_mode
 		half,
 		interlace,
 		deinterlace_bob,
-		deinterlace_bob_reinterlace,
+		scale_interlaced,
 		deinterlace,
 		count,
 		invalid
@@ -49,7 +49,7 @@ struct display_mode
 			case half:							return L"half";
 			case interlace:						return L"interlace";
 			case deinterlace_bob:				return L"deinterlace_bob";
-			case deinterlace_bob_reinterlace:	return L"deinterlace_bob_reinterlace";
+			case scale_interlaced:				return L"scale_interlaced";
 			case deinterlace:					return L"deinterlace";
 			default:							return L"invalid";
 		}
@@ -78,8 +78,6 @@ static display_mode::type get_display_mode(const core::field_mode::type in_mode,
 	{
 		if(in_mode != core::field_mode::progressive && out_mode == core::field_mode::progressive)
 			return display_mode::deinterlace;
-		//else if(in_mode == core::field_mode::progressive && out_mode != core::field_mode::progressive)
-		//	simple(); // interlace_duplicate();
 		else
 			return display_mode::simple;
 	}
