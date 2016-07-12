@@ -305,7 +305,7 @@ void ogl_device::viewport(size_t x, size_t y, size_t width, size_t height)
 {
 	if(x != viewport_[0] || y != viewport_[1] || width != viewport_[2] || height != viewport_[3])
 	{		
-		glViewport(x, y, width, height);
+		glViewport(static_cast<GLint>(x), static_cast<GLint>(y), static_cast<GLsizei>(width), static_cast<GLsizei>(height));
 		viewport_[0] = x;
 		viewport_[1] = y;
 		viewport_[2] = width;
@@ -317,7 +317,7 @@ void ogl_device::scissor(size_t x, size_t y, size_t width, size_t height)
 {
 	if(x != scissor_[0] || y != scissor_[1] || width != scissor_[2] || height != scissor_[3])
 	{		
-		glScissor(x, y, width, height);
+		glScissor(static_cast<GLint>(x), static_cast<GLint>(y), static_cast<GLsizei>(width), static_cast<GLsizei>(height));
 		scissor_[0] = x;
 		scissor_[1] = y;
 		scissor_[2] = width;

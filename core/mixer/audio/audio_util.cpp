@@ -52,7 +52,7 @@ int channel_layout::channel_index(const std::wstring& channel_name) const
 	if (iter == channel_names.end())
 		return -1;
 
-	return iter - channel_names.begin();
+	return static_cast<int>(iter - channel_names.begin());
 }
 
 bool channel_layout::has_channel(const std::wstring& channel_name) const
@@ -145,7 +145,7 @@ channel_layout create_layout_from_string(
 				boost::token_compress_on);
 
 	layout.num_channels = num_channels == -1
-			? layout.channel_names.size() : num_channels;
+			? static_cast<int>(layout.channel_names.size()) : num_channels;
 
 	return layout;
 }

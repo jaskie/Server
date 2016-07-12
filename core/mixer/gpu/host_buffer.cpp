@@ -126,7 +126,7 @@ public:
 	{
 		unmap();
 		bind();
-		GL(glReadPixels(0, 0, width, height, format, GL_UNSIGNED_BYTE, NULL));
+		GL(glReadPixels(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height), format, GL_UNSIGNED_BYTE, NULL));
 		unbind();
 		fence_.set();
 	}

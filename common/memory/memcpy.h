@@ -41,7 +41,7 @@ static void* fast_memcpy_aligned_impl(void* dest, const void* source, size_t cou
 
 	if(count == 0)
 		return dest;
-
+#ifdef _M_IX86
 	__asm   
 	{      
 		mov esi, source;          
@@ -76,6 +76,9 @@ static void* fast_memcpy_aligned_impl(void* dest, const void* source, size_t cou
 			dec ebx;      
 		jnz cpy;  
 	}   
+#else
+
+#endif
 	return dest;
 }
 
