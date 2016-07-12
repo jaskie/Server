@@ -28,15 +28,16 @@
 namespace caspar { namespace core {
 
 class ogl_device;
-		
-class host_buffer : boost::noncopyable
-{
-public:
-	enum usage_t
+
+enum usage_t
 	{
 		write_only,
 		read_only
 	};
+		
+class host_buffer : boost::noncopyable
+{
+public:
 	
 	const void* data() const;
 	void* data();

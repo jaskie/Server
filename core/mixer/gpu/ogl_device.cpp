@@ -128,14 +128,14 @@ safe_ptr<device_buffer> ogl_device::create_device_buffer(size_t width, size_t he
 	});
 }
 
-safe_ptr<host_buffer> ogl_device::allocate_host_buffer(size_t size, host_buffer::usage_t usage)
+safe_ptr<host_buffer> ogl_device::allocate_host_buffer(size_t size, usage_t usage)
 {
 	std::shared_ptr<host_buffer> buffer;
 
 	try
 	{
 		buffer.reset(new host_buffer(size, usage));
-		if(usage == host_buffer::write_only)
+		if(usage == write_only)
 			buffer->map();
 		else
 			buffer->unmap();			
@@ -151,7 +151,7 @@ safe_ptr<host_buffer> ogl_device::allocate_host_buffer(size_t size, host_buffer:
 
 			// Try again
 			buffer.reset(new host_buffer(size, usage));
-			if(usage == host_buffer::write_only)
+			if(usage == write_only)
 				buffer->map();
 			else
 				buffer->unmap();	
@@ -166,9 +166,9 @@ safe_ptr<host_buffer> ogl_device::allocate_host_buffer(size_t size, host_buffer:
 	return make_safe_ptr(buffer);
 }
 	
-safe_ptr<host_buffer> ogl_device::create_host_buffer(size_t size, host_buffer::usage_t usage)
+safe_ptr<host_buffer> ogl_device::create_host_buffer(size_t size, usage_t usage)
 {
-	CASPAR_VERIFY(usage == host_buffer::write_only || usage == host_buffer::read_only);
+	CASPAR_VERIFY(usage == write_only || usage == read_only);
 	CASPAR_VERIFY(size > 0);
 	auto& pool = host_pools_[usage][size];
 	std::shared_ptr<host_buffer> buffer;
@@ -182,7 +182,7 @@ safe_ptr<host_buffer> ogl_device::create_host_buffer(size_t size, host_buffer::u
 	{
 		self->executor_.begin_invoke([=]() mutable
 		{		
-			if(usage == host_buffer::write_only)
+			if(usage == write_only)
 				buffer->map();
 			else
 				buffer->unmap();

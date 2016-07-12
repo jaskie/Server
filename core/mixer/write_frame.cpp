@@ -67,7 +67,7 @@ struct write_frame::implementation
 	{
 		std::transform(desc.planes.begin(), desc.planes.end(), std::back_inserter(buffers_), [&](const core::pixel_format_desc::plane& plane)
 		{
-			return ogl_->create_host_buffer(plane.size, host_buffer::write_only);
+			return ogl_->create_host_buffer(plane.size, write_only);
 		});
 		std::transform(desc.planes.begin(), desc.planes.end(), std::back_inserter(textures_), [&](const core::pixel_format_desc::plane& plane)
 		{
