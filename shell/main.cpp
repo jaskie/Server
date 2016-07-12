@@ -305,11 +305,11 @@ int main(int argc, wchar_t* argv[])
 					{
 						// This is just dummy code for testing.
 						if(wcmd.substr(0, 1) == L"1")
-							wcmd = L"PLAY 1-0 SPOT";
+							wcmd = L"PLAY 1-0 SHREK SEEK 1500 SQUEEZE 100 LEFT 20";
 						else if(wcmd.substr(0, 1) == L"2")
-							wcmd = L"CALL 1-0 SEEK 200";
+							wcmd = L"PLAY 1-0 SHREK SEEK 1500 SQUEEZE 100 RIGHT 20";
 						else if(wcmd.substr(0, 1) == L"3")
-							wcmd = L"MIXER 1-0 SATURATION 1 50";
+							wcmd = L"PLAY 1-0 SHREK SEEK 1500 SQUEEZE 100 RIGHT";
 						else if(wcmd.substr(0, 1) == L"4")
 							wcmd = L"PLAY 1-0 DECKLINK 2";
 						else if(wcmd.substr(0, 1) == L"5")

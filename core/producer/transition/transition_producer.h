@@ -40,7 +40,8 @@ struct transition
 		mix,
 		push,
 		slide,
-		wipe
+		wipe,
+		squeeze,
 	};
 };
 
@@ -59,12 +60,15 @@ struct transition_info
 		: type(transition::cut)
 		, duration(0)
 		, direction(transition_direction::from_left)
-		, tweener(get_tweener(L"linear")){}
+		, tweener(get_tweener(L"linear"))
+		, pause(0)
+	{}
 		
-	size_t						duration;
+	unsigned int			    duration;
 	transition_direction::type	direction;
 	transition::type			type;
 	tweener_t					tweener;
+	unsigned int				pause;
 };
 
 safe_ptr<frame_producer> create_transition_producer(const field_mode::type& mode, const safe_ptr<frame_producer>& destination, const transition_info& info);

@@ -1070,12 +1070,13 @@ bool LoadbgCommand::DoExecute()
 	for(size_t n = 0; n < _parameters.size(); ++n)
 		message += _parameters[n] + L" ";
 		
-	static const boost::wregex expr(L".*(?<TRANSITION>CUT|PUSH|SLIDE|WIPE|MIX)\\s*(?<DURATION>\\d+)\\s*(?<TWEEN>(LINEAR)|(EASE[^\\s]*))?\\s*(?<DIRECTION>FROMLEFT|FROMRIGHT|LEFT|RIGHT)?.*");
+	static const boost::wregex expr(L".*(?<TRANSITION>CUT|PUSH|SLIDE|SQUEEZE|WIPE|MIX)\\s*(?<DURATION>\\d+)\\s*(?<TWEEN>(LINEAR)|(EASE[^\\s]*))?\\s*(?<DIRECTION>FROMLEFT|FROMRIGHT|LEFT|RIGHT)?\\s*(?<PAUSE>\\d*).*");
 	boost::wsmatch what;
 	if(boost::regex_match(message, what, expr))
 	{
 		auto transition = what["TRANSITION"].str();
-		transitionInfo.duration = lexical_cast_or_default<size_t>(what["DURATION"].str());
+		transitionInfo.duration = lexical_cast_or_default<unsigned int>(what["DURATION"].str());
+		transitionInfo.pause = lexical_cast_or_default<unsigned int>(what["PAUSE"].str());
 		auto direction = what["DIRECTION"].matched ? what["DIRECTION"].str() : L"";
 		auto tween = what["TWEEN"].matched ? what["TWEEN"].str() : L"";
 		transitionInfo.tweener = get_tweener(tween);		
@@ -1090,6 +1091,8 @@ bool LoadbgCommand::DoExecute()
 			transitionInfo.type = transition::slide;
 		else if(transition == TEXT("WIPE"))
 			transitionInfo.type = transition::wipe;
+		else if(transition == TEXT("SQUEEZE"))
+			transitionInfo.type = transition::squeeze;
 		
 		if(direction == TEXT("FROMLEFT"))
 			transitionInfo.direction = transition_direction::from_left;

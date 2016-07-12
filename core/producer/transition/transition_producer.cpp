@@ -80,7 +80,7 @@ struct transition_producer : public frame_producer
 
 	virtual safe_ptr<basic_frame> receive(int hints) override
 	{
-		if(++current_frame_ >= info_.duration)
+		if(++current_frame_ >= info_.duration + info_.pause)
 			return basic_frame::eof();
 		
 		auto dest = basic_frame::empty();
@@ -100,17 +100,18 @@ struct transition_producer : public frame_producer
 				source = source_producer_->last_frame();
 		});
 
-		*monitor_subject_ << monitor::message("/transition/frame") % static_cast<std::int32_t>(current_frame_) % static_cast<std::int32_t>(info_.duration)
+		*monitor_subject_ << monitor::message("/transition/frame") % static_cast<std::int32_t>(current_frame_) % static_cast<std::int32_t>(info_.duration+info_.pause)
 		                  << monitor::message("/transition/type") % [&]() -> std::string
 																{
 																	switch(info_.type)
 																	{
-																	case transition::mix:	return "mix";
-																	case transition::wipe:	return "wipe";
-																	case transition::slide:	return "slide";
-																	case transition::push:	return "push";
-																	case transition::cut:	return "cut";
-																	default:				return "n/a";
+																	case transition::mix:		return "mix";
+																	case transition::wipe:		return "wipe";
+																	case transition::squeeze:	return "squeeze";
+																	case transition::slide:		return "slide";
+																	case transition::push:		return "push";
+																	case transition::cut:		return "cut";
+																	default:					return "n/a";
 																	}
 																}();
 
@@ -147,9 +148,14 @@ struct transition_producer : public frame_producer
 	{	
 		if(info_.type == transition::cut)		
 			return src_frame;
-										
-		const double delta1 = info_.tweener(current_frame_*2-1, 0.0, 1.0, static_cast<double>(info_.duration*2));
-		const double delta2 = info_.tweener(current_frame_*2, 0.0, 1.0, static_cast<double>(info_.duration*2));  
+		unsigned int doubled_duration = info_.duration * 2;
+		bool is_paused = current_frame_ * 2 > info_.duration && (static_cast<int>(current_frame_) - static_cast<int>(info_.pause)) * 2 < static_cast<int>(info_.duration);
+		const unsigned int doubled_position = (current_frame_ * 2 > info_.duration ? (current_frame_ - info_.pause) : current_frame_ ) * 2;
+		const double delta1 = is_paused ? 
+			info_.tweener(info_.duration, 0.0, 1.0, static_cast<double>(doubled_duration)) :
+			info_.tweener(doubled_position-1, 0.0, 1.0, static_cast<double>(doubled_duration));
+		const double delta2 = is_paused ? delta1 :
+			info_.tweener(doubled_position, 0.0, 1.0, static_cast<double>(doubled_duration));  
 
 		const double dir = info_.direction == transition_direction::from_left ? 1.0 : -1.0;		
 		
@@ -179,7 +185,7 @@ struct transition_producer : public frame_producer
 			s_frame2->get_frame_transform().opacity = 1.0-delta2;	
 			s_frame2->get_frame_transform().is_mix = true;
 		}
-		if(info_.type == transition::slide)
+		else if(info_.type == transition::slide)
 		{
 			d_frame1->get_frame_transform().fill_translation[0] = (-1.0+delta1)*dir;	
 			d_frame2->get_frame_transform().fill_translation[0] = (-1.0+delta2)*dir;		
@@ -197,6 +203,17 @@ struct transition_producer : public frame_producer
 			d_frame1->get_frame_transform().clip_scale[0] = delta1;	
 			d_frame2->get_frame_transform().clip_scale[0] = delta2;			
 		}
+		else if(info_.type == transition::squeeze)		
+		{
+			d_frame1->get_frame_transform().fill_translation[0] = info_.direction == transition_direction::from_left ? 1.0 - delta1 : 0.0;	
+			d_frame2->get_frame_transform().fill_translation[0] = info_.direction == transition_direction::from_left ? 1.0 - delta2 : 0.0;
+			d_frame1->get_frame_transform().fill_scale[0] = 0.0+delta1;
+			d_frame2->get_frame_transform().fill_scale[0] = 0.0+delta2;
+			s_frame1->get_frame_transform().fill_translation[0] = info_.direction == transition_direction::from_left ? 0.0 : delta1;	
+			s_frame2->get_frame_transform().fill_translation[0] = info_.direction == transition_direction::from_left ? 0.0 : delta2;
+			s_frame1->get_frame_transform().fill_scale[0] = 1.0-delta1;	
+			s_frame2->get_frame_transform().fill_scale[0] = 1.0-delta2;		
+		} 
 				
 		const auto s_frame = s_frame1->get_frame_transform() == s_frame2->get_frame_transform() ? s_frame2 : basic_frame::interlace(s_frame1, s_frame2, mode_);
 		const auto d_frame = d_frame1->get_frame_transform() == d_frame2->get_frame_transform() ? d_frame2 : basic_frame::interlace(d_frame1, d_frame2, mode_);
