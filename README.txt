@@ -1,9 +1,9 @@
 TVP's fork of CasparCG
 ======================
 This is fork of 2.06 Stable master branch with following fixes which are not included in main distribution:
-1. Mpeg files with long-gop now are precisely seeked. Improved H.264 decoding performance.
+1. Long-GOP files are now precisely seeked. Improved H.264 decoding performance.
 2. When interlaced image is paused (assuming that displayed fields comes from different moments in time), there is no image trembling (only first field is displayed).
-3. Serwer process can't be closed with Ctrl-C.
+3. Server process can't be closed with Ctrl-C.
 4. Fix for IMX MPEG PAL (e.g. Sony MXF) files, so 32 VBI lines above active video lines are not displayed anymore.
 5. Added FIELD_ORDER_INVERTED parameter when playing file, it allows fix such a file. Also available as layer CALL (like LOOP), efects immediately.
 6. Decklink producer auto-detects input signal format on supported cards and scale it to channel format (works only with the same framerate formats).
