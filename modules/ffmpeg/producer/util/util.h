@@ -60,7 +60,7 @@ std::shared_ptr<core::audio_buffer> flush_audio();
 std::shared_ptr<core::audio_buffer> empty_audio();
 std::shared_ptr<AVFrame>			flush_video();
 std::shared_ptr<AVFrame>			empty_video();
-safe_ptr<AVPacket>					flush_packet();
+std::shared_ptr<AVPacket>			flush_packet();
 
 // Utils
 

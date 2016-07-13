@@ -75,21 +75,43 @@ std::shared_ptr<core::audio_buffer> empty_audio()
 }
 std::shared_ptr<AVFrame>			flush_video()
 {
-	static std::shared_ptr<AVFrame> video = create_frame();
-	return video;
+	static safe_ptr<AVFrame> frame(av_frame_alloc(), [](AVFrame* frame){});
+	return frame;
 }
 std::shared_ptr<AVFrame>			empty_video()
 {
-	static std::shared_ptr<AVFrame> video = create_frame();
-	return video;
+	static safe_ptr<AVFrame> frame(av_frame_alloc(), [](AVFrame* frame){});
+	return frame;
 }
 
-safe_ptr<AVPacket> flush_packet()
+std::shared_ptr<AVPacket>			flush_packet()
 {
-	static safe_ptr<AVPacket> packet((AVPacket*)av_malloc(sizeof(AVPacket)), av_free_packet);
+	static std::shared_ptr<AVPacket> packet(
+		[]() -> AVPacket* { 
+		AVPacket* p = av_packet_alloc(); 
+		p->data = nullptr;
+		p->size =  0;
+		return p;
+		}(),
+		[](AVPacket* p){} //empty deletor
+		);
 	return packet;
 }
 
+safe_ptr<AVPacket> create_packet()
+{
+	safe_ptr<AVPacket> packet(av_packet_alloc(), [](AVPacket* p)
+	{
+		av_packet_free(&p);
+	});
+	return packet;
+}
+
+safe_ptr<AVFrame> create_frame()
+{	
+	safe_ptr<AVFrame> frame(av_frame_alloc(), av_frame_unref);
+	return frame;
+}
 
 core::field_mode::type get_mode(const AVFrame& frame)
 {
@@ -404,23 +426,6 @@ double read_fps(AVFormatContext& context, double fail_value)
 	return fail_value;	
 }
 
-safe_ptr<AVPacket> create_packet()
-{
-	safe_ptr<AVPacket> packet(av_packet_alloc(), [](AVPacket* p)
-	{
-		av_packet_free(&p);
-	});
-	return packet;
-}
-
-safe_ptr<AVFrame> create_frame()
-{	
-	safe_ptr<AVFrame> frame(av_frame_alloc(), [](AVFrame* f)
-		{
-			av_frame_free(&f);
-		});
-	return frame;
-}
 
 safe_ptr<AVCodecContext> open_codec(safe_ptr<AVFormatContext> context, enum AVMediaType type, int& index)
 {	

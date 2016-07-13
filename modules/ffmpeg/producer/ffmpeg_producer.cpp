@@ -418,24 +418,17 @@ public:
 
 	void decode_frame(std::shared_ptr<AVFrame>& video, std::shared_ptr<core::audio_buffer>& audio)
 	{
-		std::shared_ptr<AVPacket>			pkt;
-		bool video_completed = false;
-		bool audio_completed = false;
-
 		tbb::parallel_invoke(
 			[&]
 		{
-			if (!muxer_->video_ready() && video_decoder_ && !video_completed)
+			if (!muxer_->video_ready() && video_decoder_)
 				video = video_decoder_->poll();
 		},
 			[&]
 		{
-			if (!muxer_->audio_ready() && audio_decoder_ && !audio_completed)
+			if (!muxer_->audio_ready() && audio_decoder_)
 				audio = audio_decoder_->poll();
 		});
-
-		video_completed = video || !video_decoder_;
-		audio_completed = audio || !audio_decoder_;
 	}
 	
 	void try_decode_frame(int hints)
@@ -455,12 +448,10 @@ public:
 		muxer_->push(video, hints);
 		muxer_->push(audio);
 
-		if(!audio_decoder_)
-		{
-			if(!muxer_->audio_ready())
+		if((!audio_decoder_ || (audio == nullptr && input_.eof()))
+			&& !muxer_->audio_ready())
 				muxer_->push(empty_audio());
-		}
-
+		
 		if(!video_decoder_)
 		{
 			if(!muxer_->video_ready())

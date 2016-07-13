@@ -489,7 +489,7 @@ public:
 		//if(out_size == 0)
 		//	return;
 				
-		safe_ptr<AVPacket> pkt(new AVPacket, [](AVPacket* p)
+		safe_ptr<AVPacket> pkt(av_packet_alloc(), [](AVPacket* p)
 		{
 			av_free_packet(p);
 			delete p;

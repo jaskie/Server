@@ -60,10 +60,10 @@ extern "C"
 #pragma warning (pop)
 #endif
 
-static const size_t MAX_BUFFER_COUNT    = 100;
+static const size_t MAX_BUFFER_COUNT    = 500;
 static const size_t MAX_BUFFER_COUNT_RT = 3;
 static const size_t MIN_BUFFER_COUNT    = 50;
-static const int32_t FLUSH_AV_PACKET_COUNT = 0x50;
+static const int32_t FLUSH_AV_PACKET_COUNT = 0x150;
 
 
 namespace caspar { namespace ffmpeg {
@@ -77,7 +77,7 @@ struct input::implementation : boost::noncopyable
 	const std::wstring											filename_;
 	const bool													thumbnail_mode_;
 	tbb::atomic<bool>											is_eof_;
-	tbb::atomic<int32_t>										flush_av_packet_count_;
+	tbb::atomic<int>											flush_av_packet_count_;
 	tbb::atomic<int>											video_stream_index_;
 	tbb::atomic<int>											audio_stream_index_;
 	tbb::concurrent_bounded_queue<std::shared_ptr<AVPacket>>	audio_buffer_;
@@ -124,11 +124,10 @@ struct input::implementation : boost::noncopyable
 
 	bool get_flush_av_packet(std::shared_ptr<AVPacket>& packet)
 	{
-		if (flush_av_packet_count_-- >= 0)
+		if (flush_av_packet_count_ >= 0)
 		{
-			packet = create_packet();
-			packet->data = nullptr;
-			packet->size = 0;
+			flush_av_packet_count_ --;
+			packet = flush_packet();
 			return true;
 		}
 		packet = nullptr;
@@ -145,7 +144,10 @@ struct input::implementation : boost::noncopyable
 				if (is_eof_)
 					return get_flush_av_packet(packet);
 				else
+				{
 					boost::this_thread::sleep(boost::posix_time::milliseconds(10));
+					result = audio_buffer_.try_pop(packet);
+				}
 		}
 		if(result)
 			tick();
@@ -163,7 +165,10 @@ struct input::implementation : boost::noncopyable
 				if (is_eof_)
 					return get_flush_av_packet(packet);
 				else
+				{
 					boost::this_thread::sleep(boost::posix_time::milliseconds(10));
+					result = video_buffer_.try_pop(packet);
+				}
 		}
 		if(result)
 			tick();
@@ -216,13 +221,13 @@ struct input::implementation : boost::noncopyable
 					else
 					{
 						THROW_ON_ERROR(ret, "av_read_frame", print());
-						if (packet->stream_index == video_stream_index_)
+						if (packet->stream_index == video_stream_index_ && packet->size > 0)
 						{
 							THROW_ON_ERROR2(av_dup_packet(packet.get()), print());
 							video_buffer_.try_push(packet);
 							graph_->set_value("video-buffer-count", (static_cast<double>(video_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
 						}
-						if (packet->stream_index == audio_stream_index_)
+						if (packet->stream_index == audio_stream_index_ && packet->size > 0)
 						{
 							THROW_ON_ERROR2(av_dup_packet(packet.get()), print());
 							audio_buffer_.try_push(packet);
@@ -252,7 +257,6 @@ struct input::implementation : boost::noncopyable
 	{
 		return executor_.begin_invoke([=]() -> bool
 		{
-			std::shared_ptr<AVPacket> packet;
 			audio_buffer_.clear();
 			video_buffer_.clear();
 			graph_->set_value("audio-buffer-count", (static_cast<double>(audio_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
