@@ -314,13 +314,7 @@ int main(int argc, wchar_t* argv[])
 							wcmd = L"PLAY 1-0 DECKLINK 2";
 						else if(wcmd.substr(0, 1) == L"5")
 						{
-							auto file = wcmd.substr(2, wcmd.length()-1);
-							wcmd = L"PLAY 1-1 " + file + L" LOOP\r\n" 
-									L"PLAY 1-2 " + file + L" LOOP\r\n" 
-									L"PLAY 1-3 " + file + L" LOOP\r\n"
-									L"PLAY 2-1 " + file + L" LOOP\r\n" 
-									L"PLAY 2-2 " + file + L" LOOP\r\n" 
-									L"PLAY 2-3 " + file + L" LOOP\r\n";
+							wcmd = L"PLAY 1-0 SYNCHRO4S SQUEEZE 50 10";
 						}
 						else if(upper_cmd.substr(0, 1) == L"X")
 						{

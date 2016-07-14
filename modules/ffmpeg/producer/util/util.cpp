@@ -480,7 +480,7 @@ bool is_valid_file(const std::wstring filename, const std::vector<std::wstring>&
 
 bool is_valid_file(const std::wstring filename)
 {
-	static const std::vector<std::wstring> invalid_exts = boost::assign::list_of(L".png")(L".tga")(L".bmp")(L".jpg")(L".jpeg")(L".gif")(L".tiff")(L".tif")(L".jp2")(L".jpx")(L".j2k")(L".j2c")(L".swf")(L".ct");
+	static const std::vector<std::wstring> invalid_exts = boost::assign::list_of(L".png")(L".tga")(L".bmp")(L".jpg")(L".jpeg")(L".gif")(L".tiff")(L".tif")(L".jp2")(L".jpx")(L".j2k")(L".j2c")(L".swf")(L".ct")(L".db");
 	
 	return is_valid_file(filename, invalid_exts);
 }
@@ -496,8 +496,8 @@ bool try_get_duration(const std::wstring filename, std::int64_t& duration, boost
 		avformat_close_input(&p);
 	});
 	
-	context->probesize = context->probesize / 10;
-	context->max_analyze_duration = context->probesize / 10;
+	context->probesize = context->probesize / 5;
+	context->max_analyze_duration = context->max_analyze_duration / 5;
 
 	if(avformat_find_stream_info(context.get(), nullptr) < 0)
 		return false;

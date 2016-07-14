@@ -78,6 +78,9 @@ struct filter::implementation
 	const AVPixelFormat				pix_format_;
 	const int						width_;
 	const int						height_;
+	const boost::rational<int>		in_time_base_;
+	const boost::rational<int>		in_frame_rate_;
+	const boost::rational<int>		in_sample_aspect_ratio_;
 	std::queue<std::shared_ptr<AVFrame>>	fast_path_;
 
 	implementation(
@@ -94,10 +97,10 @@ struct filter::implementation
 		, pix_format_(in_pix_fmt)
 		, width_(in_width)
 		, height_(in_height)
+		, in_time_base_(in_time_base)
+		, in_frame_rate_(in_frame_rate)
+		, in_sample_aspect_ratio_(in_sample_aspect_ratio)
 	{
-		if (filtergraph.empty())
-			return; 
-
 		if(pix_fmts_.empty())
 		{
 			pix_fmts_ = boost::assign::list_of
@@ -113,6 +116,14 @@ struct filter::implementation
 				(AV_PIX_FMT_GRAY8);
 		}		
 		pix_fmts_.push_back(AV_PIX_FMT_NONE);
+
+		configure_filtergraph();
+	}
+	void configure_filtergraph()
+	{
+		if (filtergraph_.empty())
+			return; 
+
 		video_graph_.reset(
 			avfilter_graph_alloc(), 
 			[](AVFilterGraph* p)
@@ -123,11 +134,11 @@ struct filter::implementation
 		video_graph_->thread_type = AVFILTER_THREAD_SLICE;
 				
 		const auto vsrc_options = (boost::format("video_size=%1%x%2%:pix_fmt=%3%:time_base=%4%/%5%:pixel_aspect=%6%/%7%:frame_rate=%8%/%9%")
-			% in_width % in_height
-			% in_pix_fmt
-			% in_time_base.numerator() % in_time_base.denominator()
-			% in_sample_aspect_ratio.numerator() % in_sample_aspect_ratio.denominator()
-			% in_frame_rate.numerator() % in_frame_rate.denominator()).str();
+			% width_ % height_
+			% pix_format_
+			% in_time_base_.numerator() % in_time_base_.denominator()
+			% in_sample_aspect_ratio_.numerator() % in_sample_aspect_ratio_.denominator()
+			% in_frame_rate_.numerator() % in_frame_rate_.denominator()).str();
 
 		AVFilterContext* filt_vsrc = nullptr;			
 		FF(avfilter_graph_create_filter(
@@ -276,6 +287,8 @@ struct filter::implementation
 			while (!fast_path_.empty())
 			fast_path_.pop();
 		}
+		else
+			configure_filtergraph();
 	}
 
 	bool is_frame_format_changed(const std::shared_ptr<AVFrame>& frame)

@@ -75,6 +75,7 @@ public:
 		, stream_(input_.format_context()->streams[stream_index_])
 		, stream_start_pts_(stream_->start_time)
 	{
+		codec_context_->refcounted_frames = 1;
 		seek_pts_ = 0;
 		THROW_ON_ERROR2(swr_init(swr_.get()), "[audio_decoder]");
 		CASPAR_LOG(debug) << print() 

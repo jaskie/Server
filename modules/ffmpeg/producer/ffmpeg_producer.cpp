@@ -114,7 +114,7 @@ struct ffmpeg_producer : public core::frame_producer
 	uint32_t													start_;
 	const uint32_t												length_;
 	const bool													thumbnail_mode_;
-	const std::string											filter_;
+	const std::string											filter_str_;
 	bool														loop_;
 
 	safe_ptr<core::basic_frame>									last_frame_;
@@ -135,7 +135,7 @@ public:
 		, length_(length)
 		, thumbnail_mode_(thumbnail_mode)
 		, last_frame_(core::basic_frame::empty())
-		, filter_(narrow(filter))
+		, filter_str_(narrow(filter))
 		, custom_channel_order_(custom_channel_order)
 		, loop_(loop)
 		, start_(start)
@@ -183,7 +183,7 @@ public:
 		if(!video_decoder_ && !audio_decoder_)
 			BOOST_THROW_EXCEPTION(averror_stream_not_found() << msg_info("No streams found"));
 
-		muxer_.reset(new frame_muxer(format_desc_.fps, frame_factory, thumbnail_mode_, audio_channel_layout_, filter_));
+		muxer_.reset(new frame_muxer(format_desc_.fps, frame_factory, thumbnail_mode_, audio_channel_layout_, filter_str_));
 		seek(start);
 	}
 
@@ -390,6 +390,7 @@ public:
 		{
 			while (!frame_buffer_.empty())
 				frame_buffer_.pop();
+			muxer_->clear();
 			seek(boost::lexical_cast<uint32_t>(what["VALUE"].str()));
 			return L"SEEK OK";
 		}
@@ -412,7 +413,6 @@ public:
 		if (audio_decoder_)
 			audio_decoder_->seek(time_to_seek);
 		file_frame_number_ = frame;
-		muxer_->clear();
 	}
 
 

@@ -176,6 +176,10 @@ typedef struct AVFrameSideData {
  * Similarly fields that are marked as to be only accessed by
  * av_opt_ptr() can be reordered. This allows 2 forks to add fields
  * without breaking compatibility with each other.
+ *
+ * Fields can be accessed through AVOptions, the name string used, matches the
+ * C structure field name for fields accessable through AVOptions. The AVClass
+ * for AVFrame can be obtained from avcodec_get_frame_class()
  */
 typedef struct AVFrame {
 #define AV_NUM_DATA_POINTERS 8
@@ -324,7 +328,7 @@ typedef struct AVFrame {
     int palette_has_changed;
 
     /**
-     * reordered opaque 64bit (generally an integer or a double precision float
+     * reordered opaque 64 bits (generally an integer or a double precision float
      * PTS but can be anything).
      * The user sets AVCodecContext.reordered_opaque to represent the input at
      * that time,
@@ -424,12 +428,6 @@ typedef struct AVFrame {
     enum AVChromaLocation chroma_location;
 
     /**
-     * For hwaccel-format frames, this should be a reference to the
-     * AVHWFramesContext describing the frame.
-     */
-    AVBufferRef *hw_frames_ctx;
-
-    /**
      * frame timestamp estimated using various heuristics, in stream time base
      * Code outside libavutil should access this field using:
      * av_frame_get_best_effort_timestamp(frame)
@@ -520,6 +518,11 @@ typedef struct AVFrame {
      */
     AVBufferRef *qp_table_buf;
 #endif
+    /**
+     * For hwaccel-format frames, this should be a reference to the
+     * AVHWFramesContext describing the frame.
+     */
+    AVBufferRef *hw_frames_ctx;
 } AVFrame;
 
 /**

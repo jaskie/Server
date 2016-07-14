@@ -77,6 +77,7 @@ public:
 		, nb_frames_(static_cast<uint32_t>(stream_->nb_frames))
 		
 	{
+		codec_context_->refcounted_frames = 1;
 		invert_field_order_ = invert_field_order;
 		seek_pts_ = 0;
 		CASPAR_LOG(trace) << "Codec: " << codec_->long_name;
@@ -97,7 +98,7 @@ public:
 		std::shared_ptr<AVFrame> decoded_frame = create_frame();
 
 		int got_picture_ptr = 0;
-		int bytes_consumed = avcodec_decode_video2(codec_context_.get(), decoded_frame.get(), &got_picture_ptr, pkt.get());//), "[video_decoder]");
+		int bytes_consumed = avcodec_decode_video2(codec_context_.get(), decoded_frame.get(), &got_picture_ptr, pkt.get());
 		
 		if(got_picture_ptr == 0 || bytes_consumed < 0)	
 			return nullptr;

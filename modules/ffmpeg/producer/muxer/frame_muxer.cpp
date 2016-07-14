@@ -105,6 +105,11 @@ struct frame_muxer::implementation : boost::noncopyable
 		, force_deinterlacing_(false)
 		, audio_channel_layout_(audio_channel_layout)
 	{
+		video_streams_.push(std::queue<safe_ptr<write_frame>>());
+		audio_streams_.push(core::audio_buffer());
+		// Note: Uses 1 step rotated cadence for 1001 modes (1602, 1602, 1601, 1602, 1601)
+		// This cadence fills the audio mixer most optimally.
+		boost::range::rotate(audio_cadence_, std::end(audio_cadence_)-1);
 	}
 
 
@@ -361,18 +366,15 @@ struct frame_muxer::implementation : boost::noncopyable
 	{
 		while(!video_streams_.empty())
 			video_streams_.pop();
+		audio_streams_.back().clear();
 		while (!audio_streams_.empty())
 			audio_streams_.pop();	
 		while(!frame_buffer_.empty())
 			frame_buffer_.pop();
 		if (filter_)
 			filter_->clear();
-				video_streams_.push(std::queue<safe_ptr<write_frame>>());
+		video_streams_.push(std::queue<safe_ptr<write_frame>>());
 		audio_streams_.push(core::audio_buffer());
-		
-		// Note: Uses 1 step rotated cadence for 1001 modes (1602, 1602, 1601, 1602, 1601)
-		// This cadence fills the audio mixer most optimally.
-		boost::range::rotate(audio_cadence_, std::end(audio_cadence_)-1);
 	}
 };
 

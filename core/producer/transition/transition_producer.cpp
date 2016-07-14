@@ -149,11 +149,13 @@ struct transition_producer : public frame_producer
 		if(info_.type == transition::cut)		
 			return src_frame;
 		unsigned int doubled_duration = info_.duration * 2;
-		bool is_paused = current_frame_ * 2 > info_.duration && (static_cast<int>(current_frame_) - static_cast<int>(info_.pause)) * 2 < static_cast<int>(info_.duration);
+		bool is_paused = (current_frame_ * 2 > info_.duration) 
+			&& (static_cast<int>(current_frame_) - static_cast<int>(info_.pause)) * 2 < static_cast<int>(info_.duration);
+		bool end_pause = (current_frame_ - info_.pause) * 2 == info_.duration;
 		const unsigned int doubled_position = (current_frame_ * 2 > info_.duration ? (current_frame_ - info_.pause) : current_frame_ ) * 2;
 		const double delta1 = is_paused ? 
 			info_.tweener(info_.duration, 0.0, 1.0, static_cast<double>(doubled_duration)) :
-			info_.tweener(doubled_position-1, 0.0, 1.0, static_cast<double>(doubled_duration));
+			info_.tweener(end_pause ? doubled_position : doubled_position-1, 0.0, 1.0, static_cast<double>(doubled_duration));
 		const double delta2 = is_paused ? delta1 :
 			info_.tweener(doubled_position, 0.0, 1.0, static_cast<double>(doubled_duration));  
 

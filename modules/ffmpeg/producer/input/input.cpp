@@ -257,26 +257,26 @@ struct input::implementation : boost::noncopyable
 	{
 		return executor_.begin_invoke([=]() -> bool
 		{
-			audio_buffer_.clear();
-			video_buffer_.clear();
+			if (audio_buffer_.size() > 0 || video_buffer_.size() > 0)
+			{
+				audio_buffer_.clear();
+				video_buffer_.clear();
+				audio_buffer_.try_push(flush_packet());
+				video_buffer_.try_push(flush_packet());
+				avformat_flush(format_context_.get());
+			}
 			graph_->set_value("audio-buffer-count", (static_cast<double>(audio_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
 			graph_->set_value("video-buffer-count", (static_cast<double>(video_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
-			queued_seek(target_time);
+			if (!thumbnail_mode_)
+				CASPAR_LOG(trace) << print() << " Seeking: " << target_time / 1000;
+			flush_av_packet_count_ = FLUSH_AV_PACKET_COUNT;
+			is_eof_ = false;
+			av_seek_frame(format_context_.get(), -1, target_time, AVSEEK_FLAG_BACKWARD);
+			tick();
 			return true;
 		}, high_priority).get();
 	}
-
-	void queued_seek(int64_t target)
-	{  	
-		/*if (!thumbnail_mode_)
-			CASPAR_LOG(debug) << print() << " Seeking: " << target / 1000;*/
-		flush_av_packet_count_ = FLUSH_AV_PACKET_COUNT;
-		is_eof_ = false;
-		THROW_ON_ERROR2(av_seek_frame(format_context_.get(), -1, target, AVSEEK_FLAG_BACKWARD), "[input]");
-		avformat_flush(format_context_.get());
-		tick();
-	}	
-	
+		
 };
 
 input::input(const safe_ptr<diagnostics::graph> graph, const std::wstring& filename, bool thumbnail_mode)
