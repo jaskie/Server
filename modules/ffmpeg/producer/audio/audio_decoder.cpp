@@ -59,21 +59,21 @@ struct audio_decoder::implementation : boost::noncopyable
 	const AVStream*												stream_;
 	caspar::core::video_format_desc								format_;
 	const std::shared_ptr<SwrContext>							swr_;
-	std::vector<uint8_t,  tbb::cache_aligned_allocator<uint8_t>>	buffer1_;
 	core::channel_layout										channel_layout_;
 	const int64_t												stream_start_pts_;
 	tbb::atomic<int64_t>										seek_pts_;
+	std::vector<uint8_t>										buffer_;
 
 public:
 	explicit implementation(input input, caspar::core::video_format_desc format, const std::wstring& custom_channel_order)
 		: input_(input)
 		, codec_context_(input.open_audio_codec(stream_index_))
-		, buffer1_(0)
 		, format_(format)
 		, channel_layout_(get_audio_channel_layout(*codec_context_, custom_channel_order))
 		, swr_(alloc_resampler())
 		, stream_(input_.format_context()->streams[stream_index_])
 		, stream_start_pts_(stream_->start_time)
+		, buffer_(480000 * 4)
 	{
 		codec_context_->refcounted_frames = 1;
 		seek_pts_ = 0;
@@ -117,25 +117,26 @@ public:
 		int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(frame.get());
 		if (ret >= 0 && got_frame && frame_time_stamp >= seek_pts_)
 		{
-			int  data_size = av_samples_get_buffer_size(NULL, codec_context_->channels, frame->nb_samples, AV_SAMPLE_FMT_S32, 0);
-			buffer1_.resize(data_size);
+			int dst_nb_samples = codec_context_->sample_rate == static_cast<int>(format_.audio_sample_rate) ?
+				frame->nb_samples :
+				static_cast<int>(av_rescale_rnd(swr_get_delay(swr_.get(), codec_context_->sample_rate) + frame->nb_samples, format_.audio_sample_rate, codec_context_->sample_rate, AV_ROUND_UP));
 			const uint8_t **in = const_cast<const uint8_t**>(frame->extended_data);
-			uint8_t* out = buffer1_.data();
+			uint8_t* out[] = {buffer_.data()};
 			int n_samples = swr_convert(swr_.get(),
-				&out,
-				static_cast<int>(buffer1_.size()) / codec_context_->channels / av_get_bytes_per_sample(AV_SAMPLE_FMT_S32),
+				out,
+				dst_nb_samples,
 				in,
 				frame->nb_samples);
 			if (n_samples > 0)
 			{
-				const auto samples = reinterpret_cast<uint32_t*>(buffer1_.data());
+				const auto samples = reinterpret_cast<uint32_t*>(*out);
 				return std::make_shared<core::audio_buffer>(samples, samples + n_samples*codec_context_->channels);
 			}
+			av_freep(&out[0]);
 		}
 		return nullptr;
 	}
-
-
+	
 	void seek(uint64_t time)
 	{
 		avcodec_flush_buffers(codec_context_.get());
