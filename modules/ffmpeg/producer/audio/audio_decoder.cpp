@@ -53,6 +53,7 @@ namespace caspar { namespace ffmpeg {
 	
 struct audio_decoder::implementation : boost::noncopyable
 {	
+	static const int BUFFER_SIZE = 480000 * 2;
 	input 														input_;
 	const safe_ptr<AVCodecContext>								codec_context_;
 	int															stream_index_;
@@ -62,7 +63,7 @@ struct audio_decoder::implementation : boost::noncopyable
 	core::channel_layout										channel_layout_;
 	const int64_t												stream_start_pts_;
 	tbb::atomic<int64_t>										seek_pts_;
-	std::vector<uint8_t>										buffer_;
+	std::vector<int32_t,  tbb::cache_aligned_allocator<int32_t>> buffer_;
 
 public:
 	explicit implementation(input input, caspar::core::video_format_desc format, const std::wstring& custom_channel_order)
@@ -73,7 +74,7 @@ public:
 		, swr_(alloc_resampler())
 		, stream_(input_.format_context()->streams[stream_index_])
 		, stream_start_pts_(stream_->start_time)
-		, buffer_(480000 * 4)
+		, buffer_(BUFFER_SIZE)
 	{
 		codec_context_->refcounted_frames = 1;
 		seek_pts_ = 0;
@@ -117,14 +118,11 @@ public:
 		int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(frame.get());
 		if (ret >= 0 && got_frame && frame_time_stamp >= seek_pts_)
 		{
-			int dst_nb_samples = codec_context_->sample_rate == static_cast<int>(format_.audio_sample_rate) ?
-				frame->nb_samples :
-				static_cast<int>(av_rescale_rnd(swr_get_delay(swr_.get(), codec_context_->sample_rate) + frame->nb_samples, format_.audio_sample_rate, codec_context_->sample_rate, AV_ROUND_UP));
 			const uint8_t **in = const_cast<const uint8_t**>(frame->extended_data);
-			uint8_t* out[] = {buffer_.data()};
+			uint8_t* out[] =  { reinterpret_cast<uint8_t*>(buffer_.data()) };
 			int n_samples = swr_convert(swr_.get(),
 				out,
-				dst_nb_samples,
+				BUFFER_SIZE / codec_context_->channels,
 				in,
 				frame->nb_samples);
 			if (n_samples > 0)
@@ -136,10 +134,21 @@ public:
 		}
 		return nullptr;
 	}
+
+	void flush_resampler()
+	{
+		uint8_t* out[] =  { reinterpret_cast<uint8_t*>(buffer_.data()) };
+		while (swr_convert(swr_.get(),
+				out,
+				BUFFER_SIZE / codec_context_->channels,
+				NULL,
+				0)>0) {};
+	}
 	
 	void seek(uint64_t time)
 	{
 		avcodec_flush_buffers(codec_context_.get());
+		flush_resampler();
 		seek_pts_ = stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_
 			+ (time * stream_->time_base.den / (AV_TIME_BASE * stream_->time_base.num));
 	}
