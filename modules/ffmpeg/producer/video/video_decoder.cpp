@@ -77,7 +77,7 @@ public:
 		, nb_frames_(static_cast<uint32_t>(stream_->nb_frames))
 		
 	{
-		codec_context_->refcounted_frames = 1;
+		codec_context_->refcounted_frames = 0;
 		invert_field_order_ = invert_field_order;
 		seek_pts_ = 0;
 		CASPAR_LOG(trace) << "Codec: " << codec_->long_name;

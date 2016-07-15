@@ -109,7 +109,7 @@ safe_ptr<AVPacket> create_packet()
 
 safe_ptr<AVFrame> create_frame()
 {	
-	safe_ptr<AVFrame> frame(av_frame_alloc(), av_frame_unref);
+	safe_ptr<AVFrame> frame(av_frame_alloc(), [](AVFrame* f) { av_frame_free(&f);});
 	return frame;
 }
 
