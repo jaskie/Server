@@ -775,6 +775,10 @@ encode. It is of little use elsewise.
 <dd><p>Set sample aspect ratio.
 </p>
 </dd>
+<dt><samp>sar <var>rational number</var> (<em>encoding,video</em>)</samp></dt>
+<dd><p>Set sample aspect ratio. Alias to <var>aspect</var>.
+</p>
+</dd>
 <dt><samp>debug <var>flags</var> (<em>decoding/encoding,audio,video,subtitles</em>)</samp></dt>
 <dd><p>Print specific debug info.
 </p>
@@ -1491,6 +1495,50 @@ scene_change_score.
 <dt><samp>ticks_per_frame <var>integer</var> (<em>decoding/encoding,audio,video</em>)</samp></dt>
 <dt><samp>color_primaries <var>integer</var> (<em>decoding/encoding,video</em>)</samp></dt>
 <dt><samp>color_trc <var>integer</var> (<em>decoding/encoding,video</em>)</samp></dt>
+<dd><p>Possible values:
+</p><dl compact="compact">
+<dt>&lsquo;<samp>bt709</samp>&rsquo;</dt>
+<dd><p>BT.709
+</p></dd>
+<dt>&lsquo;<samp>gamma22</samp>&rsquo;</dt>
+<dd><p>BT.470 M
+</p></dd>
+<dt>&lsquo;<samp>gamma28</samp>&rsquo;</dt>
+<dd><p>BT.470 BG
+</p></dd>
+<dt>&lsquo;<samp>linear</samp>&rsquo;</dt>
+<dd><p>SMPTE 170 M
+</p></dd>
+<dt>&lsquo;<samp>log</samp>&rsquo;</dt>
+<dd><p>SMPTE 240 M
+</p></dd>
+<dt>&lsquo;<samp>log_sqrt</samp>&rsquo;</dt>
+<dd><p>Linear
+</p></dd>
+<dt>&lsquo;<samp>iec61966_2_4</samp>&rsquo;</dt>
+<dd><p>Log
+</p></dd>
+<dt>&lsquo;<samp>bt1361</samp>&rsquo;</dt>
+<dd><p>Log square root
+</p></dd>
+<dt>&lsquo;<samp>iec61966_2_1</samp>&rsquo;</dt>
+<dd><p>IEC 61966-2-4
+</p></dd>
+<dt>&lsquo;<samp>bt2020_10bit</samp>&rsquo;</dt>
+<dd><p>BT.1361
+</p></dd>
+<dt>&lsquo;<samp>bt2020_12bit</samp>&rsquo;</dt>
+<dd><p>IEC 61966-2-1
+</p></dd>
+<dt>&lsquo;<samp>smpte2084</samp>&rsquo;</dt>
+<dd><p>BT.2020 - 10 bit
+</p></dd>
+<dt>&lsquo;<samp>smpte428_1</samp>&rsquo;</dt>
+<dd><p>BT.2020 - 12 bit
+</p></dd>
+</dl>
+
+</dd>
 <dt><samp>colorspace <var>integer</var> (<em>decoding/encoding,video</em>)</samp></dt>
 <dt><samp>color_range <var>integer</var> (<em>decoding/encoding,video</em>)</samp></dt>
 <dd><p>If used as input parameter, it serves as a hint to the decoder, which
@@ -1941,7 +1989,7 @@ Default value is 1.
 </p></dd>
 <dt><samp>txt_duration</samp></dt>
 <dd><p>Sets the display duration of the decoded teletext pages or subtitles in
-miliseconds. Default value is 30000 which is 30 seconds.
+milliseconds. Default value is 30000 which is 30 seconds.
 </p></dd>
 <dt><samp>txt_transparent</samp></dt>
 <dd><p>Force transparent background of the generated teletext bitmaps. Default value
@@ -3340,6 +3388,18 @@ narrowband, mediumband, wideband, super wideband, and fullband
 respectively. The default is 0 (cutoff disabled).
 </p>
 </dd>
+<dt><samp>mapping_family (<em>mapping_family</em>)</samp></dt>
+<dd><p>Set channel mapping family to be used by the encoder. The default value of -1
+uses mapping family 0 for mono and stereo inputs, and mapping family 1
+otherwise. The default also disables the surround masking and LFE bandwidth
+optimzations in libopus, and requires that the input contains 8 channels or
+fewer.
+</p>
+<p>Other values include 0 for mono and stereo, 1 for surround sound with masking
+and LFE bandwidth optimizations, and 255 for independent streams with an
+unspecified channel layout.
+</p>
+</dd>
 </dl>
 
 <a name="libvorbis"></a>
@@ -3580,7 +3640,7 @@ is 0. This is only used when <samp>slice_mode</samp> is set to
 </p>
 </dd>
 <dt><samp>slice_mode</samp></dt>
-<dd><p>Set slice mode. Can assume one of the follwing possible values:
+<dd><p>Set slice mode. Can assume one of the following possible values:
 </p>
 <dl compact="compact">
 <dt>&lsquo;<samp>fixed</samp>&rsquo;</dt>

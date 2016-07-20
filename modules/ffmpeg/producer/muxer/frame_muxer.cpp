@@ -323,13 +323,15 @@ struct frame_muxer::implementation : boost::noncopyable
 			
 		if((frame->height != 480 || format_desc_.height != 486) && // don't deinterlace for NTSC DV
 				display_mode_ == display_mode::simple && mode != core::field_mode::progressive && format_desc_.field_mode != core::field_mode::progressive && 
-				(size_t)frame->height != format_desc_.height)
+				((size_t)frame->height != format_desc_.height && !(frame->width == 720 && frame->height == 608 && format_desc_.height == 576)))
 			display_mode_ = display_mode::scale_interlaced; // The frame will be scaled	
 
 		// ALWAYS de-interlace, until we have GPU de-interlacing.
 		if(force_deinterlacing_ && frame->interlaced_frame && display_mode_ != display_mode::deinterlace_bob && display_mode_ != display_mode::deinterlace)
 			display_mode_ = display_mode::scale_interlaced;
 		
+		if (frame->height == 608 && frame->width == 720 && format_desc_.height == 576) // fix for IMX frames with VBI lines
+			filter_str = append_filter(filter_str, "CROP=720:576:0:32");
 		if(display_mode_ == display_mode::deinterlace)
 			filter_str = append_filter(filter_str, "YADIF=0:-1");
 		else if(display_mode_ == display_mode::deinterlace_bob)

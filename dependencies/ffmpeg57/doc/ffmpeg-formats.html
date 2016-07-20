@@ -1475,7 +1475,8 @@ segmentation.
 </p>
 <dl compact="compact">
 <dt><samp>hls_time <var>seconds</var></samp></dt>
-<dd><p>Set the segment length in seconds. Default value is 2.
+<dd><p>Set the target segment length in seconds. Default value is 2.
+Segment will be cut on the next key frame after this time has passed.
 </p>
 </dd>
 <dt><samp>hls_list_size <var>size</var></samp></dt>
@@ -1624,6 +1625,13 @@ For example:
 equal to the duration of the segment plus the duration of the playlist.
 </p>
 </dd>
+<dt><samp>hls_flags split_by_time</samp></dt>
+<dd><p>If this flags is set, allow segments to start on frames other than keyframes.
+This improves behavior on some players when the time between keyframes is
+inconsistent, but may make things worse on others, and can cause some oddities
+during seeking. This flag should be used with hls_time option.
+</p>
+</dd>
 <dt><samp>hls_playlist_type event</samp></dt>
 <dd><p>Emit <code>#EXT-X-PLAYLIST-TYPE:EVENT</code> in the m3u8 header. Forces
 <samp>hls_list_size</samp> to 0; the playlist can only be appended to.
@@ -1632,6 +1640,18 @@ equal to the duration of the segment plus the duration of the playlist.
 <dt><samp>hls_playlist_type vod</samp></dt>
 <dd><p>Emit <code>#EXT-X-PLAYLIST-TYPE:VOD</code> in the m3u8 header. Forces
 <samp>hls_list_size</samp> to 0; the playlist must not change.
+</p>
+</dd>
+<dt><samp>method</samp></dt>
+<dd><p>Use the given HTTP method to create the hls files.
+</p><div class="example">
+<pre class="example">ffmpeg -re -i in.ts -f hls -method PUT http://example.com/live/out.m3u8
+</pre></div>
+<p>This example will upload all the mpegts segment files to the HTTP
+server using the HTTP PUT method, and update the m3u8 files every
+<code>refresh</code> times using the same method.
+Note that the HTTP server must support the given method for uploading
+files.
 </p></dd>
 </dl>
 
@@ -2079,35 +2099,35 @@ and <code>service_name</code>. If they are not set the default for
 <p>The muxer options are:
 </p>
 <dl compact="compact">
-<dt><samp>-mpegts_original_network_id <var>number</var></samp></dt>
+<dt><samp>mpegts_original_network_id <var>number</var></samp></dt>
 <dd><p>Set the original_network_id (default 0x0001). This is unique identifier
 of a network in DVB. Its main use is in the unique identification of a
 service through the path Original_Network_ID, Transport_Stream_ID.
 </p></dd>
-<dt><samp>-mpegts_transport_stream_id <var>number</var></samp></dt>
+<dt><samp>mpegts_transport_stream_id <var>number</var></samp></dt>
 <dd><p>Set the transport_stream_id (default 0x0001). This identifies a
 transponder in DVB.
 </p></dd>
-<dt><samp>-mpegts_service_id <var>number</var></samp></dt>
+<dt><samp>mpegts_service_id <var>number</var></samp></dt>
 <dd><p>Set the service_id (default 0x0001) also known as program in DVB.
 </p></dd>
-<dt><samp>-mpegts_service_type <var>number</var></samp></dt>
+<dt><samp>mpegts_service_type <var>number</var></samp></dt>
 <dd><p>Set the program service_type (default <var>digital_tv</var>), see below
 a list of pre defined values.
 </p></dd>
-<dt><samp>-mpegts_pmt_start_pid <var>number</var></samp></dt>
+<dt><samp>mpegts_pmt_start_pid <var>number</var></samp></dt>
 <dd><p>Set the first PID for PMT (default 0x1000, max 0x1f00).
 </p></dd>
-<dt><samp>-mpegts_start_pid <var>number</var></samp></dt>
+<dt><samp>mpegts_start_pid <var>number</var></samp></dt>
 <dd><p>Set the first PID for data packets (default 0x0100, max 0x0f00).
 </p></dd>
-<dt><samp>-mpegts_m2ts_mode <var>number</var></samp></dt>
+<dt><samp>mpegts_m2ts_mode <var>number</var></samp></dt>
 <dd><p>Enable m2ts mode if set to 1. Default value is -1 which disables m2ts mode.
 </p></dd>
-<dt><samp>-muxrate <var>number</var></samp></dt>
+<dt><samp>muxrate <var>number</var></samp></dt>
 <dd><p>Set a constant muxrate (default VBR).
 </p></dd>
-<dt><samp>-pcr_period <var>numer</var></samp></dt>
+<dt><samp>pcr_period <var>numer</var></samp></dt>
 <dd><p>Override the default PCR retransmission time (default 20ms), ignored
 if variable muxrate is selected.
 </p></dd>
@@ -2117,17 +2137,17 @@ if variable muxrate is selected.
 <dt><samp>sdt_period <var>number</var></samp></dt>
 <dd><p>Maximal time in seconds between SDT tables.
 </p></dd>
-<dt><samp>-pes_payload_size <var>number</var></samp></dt>
+<dt><samp>pes_payload_size <var>number</var></samp></dt>
 <dd><p>Set minimum PES packet payload in bytes.
 </p></dd>
-<dt><samp>-mpegts_flags <var>flags</var></samp></dt>
+<dt><samp>mpegts_flags <var>flags</var></samp></dt>
 <dd><p>Set flags (see below).
 </p></dd>
-<dt><samp>-mpegts_copyts <var>number</var></samp></dt>
+<dt><samp>mpegts_copyts <var>number</var></samp></dt>
 <dd><p>Preserve original timestamps, if value is set to 1. Default value is -1, which
 results in shifting timestamps so that they start from 0.
 </p></dd>
-<dt><samp>-tables_version <var>number</var></samp></dt>
+<dt><samp>tables_version <var>number</var></samp></dt>
 <dd><p>Set PAT, PMT and SDT version (default 0, valid values are from 0 to 31, inclusively).
 This option allows updating stream structure so that standard consumer may
 detect the change. To do so, reopen output AVFormatContext (in case of API
@@ -2144,7 +2164,7 @@ ffmpeg -i source2.ts -codec copy -f mpegts -tables_version 1 udp://1.1.1.1:1111
 </dd>
 </dl>
 
-<p>Option mpegts_service_type accepts the following values:
+<p>Option <samp>mpegts_service_type</samp> accepts the following values:
 </p>
 <dl compact="compact">
 <dt><samp>hex_value</samp></dt>
@@ -2173,7 +2193,7 @@ ffmpeg -i source2.ts -codec copy -f mpegts -tables_version 1 udp://1.1.1.1:1111
 </p></dd>
 </dl>
 
-<p>Option mpegts_flags may take a set of such flags:
+<p>Option <samp>mpegts_flags</samp> may take a set of such flags:
 </p>
 <dl compact="compact">
 <dt><samp>resend_headers</samp></dt>
@@ -2696,6 +2716,13 @@ bitstream filters will be applied to all streams in the output.
 specified by a stream specifier. If not specified, this defaults to
 all the input streams. You may use multiple stream specifiers
 separated by commas (<code>,</code>) e.g.: <code>a:0,v</code>
+</p>
+</dd>
+<dt><samp>onfail</samp></dt>
+<dd><p>Specify behaviour on output failure. This can be set to either <code>abort</code> (which is
+default) or <code>ignore</code>. <code>abort</code> will cause whole process to fail in case of failure
+on this slave output. <code>ignore</code> will ignore failure on this output, so other outputs
+will continue without being affected.
 </p></dd>
 </dl>
 
@@ -2708,6 +2735,13 @@ as MPEG-TS over UDP (the streams need to be explicitly mapped):
 <div class="example">
 <pre class="example">ffmpeg -i ... -c:v libx264 -c:a mp2 -f tee -map 0:v -map 0:a
   &quot;archive-20121107.mkv|[f=mpegts]udp://10.0.1.255:1234/&quot;
+</pre></div>
+
+</li><li> As above, but continue streaming even if output to local file fails
+(for example local drive fills up):
+<div class="example">
+<pre class="example">ffmpeg -i ... -c:v libx264 -c:a mp2 -f tee -map 0:v -map 0:a
+  &quot;[onfail=ignore]archive-20121107.mkv|[f=mpegts]udp://10.0.1.255:1234/&quot;
 </pre></div>
 
 </li><li> Use <code>ffmpeg</code> to encode the input, and send the output

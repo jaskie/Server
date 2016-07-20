@@ -313,9 +313,7 @@ int main(int argc, wchar_t* argv[])
 						else if(wcmd.substr(0, 1) == L"4")
 							wcmd = L"PLAY 1-0 DECKLINK 2";
 						else if(wcmd.substr(0, 1) == L"5")
-						{
-							wcmd = L"PLAY 1-0 SYNCHRO4S SQUEEZE 50 10";
-						}
+							wcmd = L"PLAY 1-0 BARS";
 						else if(upper_cmd.substr(0, 1) == L"X")
 						{
 							int num = 0;

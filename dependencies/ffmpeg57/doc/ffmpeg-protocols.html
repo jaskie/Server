@@ -131,6 +131,15 @@ particular protocol using the option
 <p>The option &quot;-protocols&quot; of the ff* tools will display the list of
 supported protocols.
 </p>
+<p>All protocols accept the following options:
+</p>
+<dl compact="compact">
+<dt><samp>rw_timeout</samp></dt>
+<dd><p>Maximum time to wait for (network) read/write operations to complete,
+in microseconds.
+</p></dd>
+</dl>
+
 <p>A description of the currently available protocols follows.
 </p>
 <a name="async"></a>
@@ -328,6 +337,18 @@ it, unless special care is taken (tests, customized server configuration
 etc.). Different FTP servers behave in different way during seek
 operation. ff* tools may produce incomplete content due to server limitations.
 </p>
+<p>This protocol accepts the following options:
+</p>
+<dl compact="compact">
+<dt><samp>follow</samp></dt>
+<dd><p>If set to 1, the protocol will retry reading at the end of the file, allowing
+reading files that still are being written. In order for this to terminate,
+you either need to use the rw_timeout option, or use the interrupt callback
+(for API users).
+</p>
+</dd>
+</dl>
+
 <a name="gopher"></a>
 <h3 class="section">3.9 gopher<span class="pull-right"><a class="anchor hidden-xs" href="#gopher" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-gopher" aria-hidden="true">TOC</a></span></h3>
 
@@ -855,7 +876,7 @@ firewalls.
 </p>
 <dl compact="compact">
 <dt><samp>timeout</samp></dt>
-<dd><p>Set timeout in miliseconds of socket I/O operations used by the underlying
+<dd><p>Set timeout in milliseconds of socket I/O operations used by the underlying
 low level operation. By default it is set to -1, which means that the timeout
 is not specified.
 </p>
@@ -1500,6 +1521,16 @@ UDP socket buffer overruns. The <var>fifo_size</var> and
 <dd><p>Set the UDP maximum socket buffer size in bytes. This is used to set either
 the receive or send buffer size, depending on what the socket is used for.
 Default is 64KB.  See also <var>fifo_size</var>.
+</p>
+</dd>
+<dt><samp>bitrate=<var>bitrate</var></samp></dt>
+<dd><p>If set to nonzero, the output will have the specified constant bitrate if the
+input has enough packets to sustain it.
+</p>
+</dd>
+<dt><samp>burst_bits=<var>bits</var></samp></dt>
+<dd><p>When using <var>bitrate</var> this specifies the maximum number of bits in
+packet bursts.
 </p>
 </dd>
 <dt><samp>localport=<var>port</var></samp></dt>

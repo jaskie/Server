@@ -112,33 +112,9 @@ public:
 		int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(decoded_frame.get());
 		if (frame_time_stamp < seek_pts_)
 			return nullptr;
-
-		return fix_IMX_frame(decoded_frame);
+		return decoded_frame;
 	}
 
-	// remove VBI lines from IMX frame
-	std::shared_ptr<AVFrame> fix_IMX_frame(std::shared_ptr<AVFrame> frame)
-	{
-		if (codec_context_->codec_id == AV_CODEC_ID_MPEG2VIDEO && frame->width == 720 && frame->height == 608)
-		{
-			auto duplicate = create_frame();
-			duplicate->width = frame->width;
-			duplicate->interlaced_frame = frame->interlaced_frame;
-			duplicate->top_field_first = frame->top_field_first;
-			duplicate->format = frame->format;
-			duplicate->height = 576;
-			duplicate->flags = frame->flags;
-			for (int i = 0; i < 4; i++)
-				duplicate->linesize[i] = frame->linesize[i];
-			if (av_frame_get_buffer(duplicate.get(), 1) < 0) goto error;
-			for (int i = 0; i < 4; i++)
-				memcpy(duplicate->data[i], frame->data[i] + ((32)*duplicate->linesize[i]), duplicate->linesize[i] * duplicate->height);
-			return duplicate;
-		}
-	error:
-		return frame;
-	}
-	
 	void seek(uint64_t time)
 	{
 		avcodec_flush_buffers(codec_context_.get());

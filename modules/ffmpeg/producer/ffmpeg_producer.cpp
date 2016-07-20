@@ -299,7 +299,7 @@ public:
 				// evenly distributed across the file.
 				desired_frame = total_frames * i / (num_snapshots - 1);
 
-			auto frame = render_specific_frame(desired_frame, 0/*DEINTERLACE_HINT*/);
+			auto frame = render_specific_frame(desired_frame, DEINTERLACE_HINT);
 			frame->get_frame_transform().fill_scale[0] = 1.0 / static_cast<double>(grid);
 			frame->get_frame_transform().fill_scale[1] = 1.0 / static_cast<double>(grid);
 			frame->get_frame_transform().fill_translation[0] = 1.0 / static_cast<double>(grid) * x;

@@ -462,6 +462,33 @@ To use this option, ffmpeg needs to be compiled with <code>--enable-libzvbi</cod
 Defaults to &lsquo;<samp>2</samp>&rsquo;.
 </p>
 </dd>
+<dt><samp>duplex_mode</samp></dt>
+<dd><p>Sets the decklink device duplex mode. Must be &lsquo;<samp>unset</samp>&rsquo;, &lsquo;<samp>half</samp>&rsquo; or &lsquo;<samp>full</samp>&rsquo;.
+Defaults to &lsquo;<samp>unset</samp>&rsquo;.
+</p>
+</dd>
+<dt><samp>video_input</samp></dt>
+<dd><p>Sets the video input source. Must be &lsquo;<samp>unset</samp>&rsquo;, &lsquo;<samp>sdi</samp>&rsquo;, &lsquo;<samp>hdmi</samp>&rsquo;,
+&lsquo;<samp>optical_sdi</samp>&rsquo;, &lsquo;<samp>component</samp>&rsquo;, &lsquo;<samp>composite</samp>&rsquo; or &lsquo;<samp>s_video</samp>&rsquo;.
+Defaults to &lsquo;<samp>unset</samp>&rsquo;.
+</p>
+</dd>
+<dt><samp>audio_input</samp></dt>
+<dd><p>Sets the audio input source. Must be &lsquo;<samp>unset</samp>&rsquo;, &lsquo;<samp>embedded</samp>&rsquo;,
+&lsquo;<samp>aes_ebu</samp>&rsquo;, &lsquo;<samp>analog</samp>&rsquo;, &lsquo;<samp>analog_xlr</samp>&rsquo;, &lsquo;<samp>analog_rca</samp>&rsquo; or
+&lsquo;<samp>microphone</samp>&rsquo;. Defaults to &lsquo;<samp>unset</samp>&rsquo;.
+</p>
+</dd>
+<dt><samp>video_pts</samp></dt>
+<dd><p>Sets the video packet timestamp source. Must be &lsquo;<samp>video</samp>&rsquo;, &lsquo;<samp>audio</samp>&rsquo;,
+&lsquo;<samp>reference</samp>&rsquo; or &lsquo;<samp>wallclock</samp>&rsquo;. Defaults to &lsquo;<samp>video</samp>&rsquo;.
+</p>
+</dd>
+<dt><samp>audio_pts</samp></dt>
+<dd><p>Sets the audio packet timestamp source. Must be &lsquo;<samp>video</samp>&rsquo;, &lsquo;<samp>audio</samp>&rsquo;,
+&lsquo;<samp>reference</samp>&rsquo; or &lsquo;<samp>wallclock</samp>&rsquo;. Defaults to &lsquo;<samp>audio</samp>&rsquo;.
+</p>
+</dd>
 </dl>
 
 <a name="Examples-1"></a>

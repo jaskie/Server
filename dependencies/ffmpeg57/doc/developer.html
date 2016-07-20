@@ -41,20 +41,21 @@
       <li><a name="toc-Editor-configuration" href="#Editor-configuration">1.3.6 Editor configuration</a></li>
     </ul></li>
     <li><a name="toc-Development-Policy" href="#Development-Policy">1.4 Development Policy</a></li>
-    <li><a name="toc-Submitting-patches-1" href="#Submitting-patches-1">1.5 Submitting patches</a></li>
-    <li><a name="toc-New-codecs-or-formats-checklist" href="#New-codecs-or-formats-checklist">1.6 New codecs or formats checklist</a></li>
-    <li><a name="toc-patch-submission-checklist" href="#patch-submission-checklist">1.7 patch submission checklist</a></li>
-    <li><a name="toc-Patch-review-process" href="#Patch-review-process">1.8 Patch review process</a></li>
-    <li><a name="toc-Regression-tests-1" href="#Regression-tests-1">1.9 Regression tests</a>
+    <li><a name="toc-Code-of-conduct" href="#Code-of-conduct">1.5 Code of conduct</a></li>
+    <li><a name="toc-Submitting-patches-1" href="#Submitting-patches-1">1.6 Submitting patches</a></li>
+    <li><a name="toc-New-codecs-or-formats-checklist" href="#New-codecs-or-formats-checklist">1.7 New codecs or formats checklist</a></li>
+    <li><a name="toc-patch-submission-checklist" href="#patch-submission-checklist">1.8 patch submission checklist</a></li>
+    <li><a name="toc-Patch-review-process" href="#Patch-review-process">1.9 Patch review process</a></li>
+    <li><a name="toc-Regression-tests-1" href="#Regression-tests-1">1.10 Regression tests</a>
     <ul class="no-bullet">
-      <li><a name="toc-Adding-files-to-the-fate_002dsuite-dataset" href="#Adding-files-to-the-fate_002dsuite-dataset">1.9.1 Adding files to the fate-suite dataset</a></li>
-      <li><a name="toc-Visualizing-Test-Coverage" href="#Visualizing-Test-Coverage">1.9.2 Visualizing Test Coverage</a></li>
-      <li><a name="toc-Using-Valgrind" href="#Using-Valgrind">1.9.3 Using Valgrind</a></li>
+      <li><a name="toc-Adding-files-to-the-fate_002dsuite-dataset" href="#Adding-files-to-the-fate_002dsuite-dataset">1.10.1 Adding files to the fate-suite dataset</a></li>
+      <li><a name="toc-Visualizing-Test-Coverage" href="#Visualizing-Test-Coverage">1.10.2 Visualizing Test Coverage</a></li>
+      <li><a name="toc-Using-Valgrind" href="#Using-Valgrind">1.10.3 Using Valgrind</a></li>
     </ul></li>
-    <li><a name="toc-Release-process-1" href="#Release-process-1">1.10 Release process</a>
+    <li><a name="toc-Release-process-1" href="#Release-process-1">1.11 Release process</a>
     <ul class="no-bullet">
-      <li><a name="toc-Criteria-for-Point-Releases-1" href="#Criteria-for-Point-Releases-1">1.10.1 Criteria for Point Releases</a></li>
-      <li><a name="toc-Release-Checklist" href="#Release-Checklist">1.10.2 Release Checklist</a></li>
+      <li><a name="toc-Criteria-for-Point-Releases-1" href="#Criteria-for-Point-Releases-1">1.11.1 Criteria for Point Releases</a></li>
+      <li><a name="toc-Release-Checklist" href="#Release-Checklist">1.11.2 Release Checklist</a></li>
     </ul></li>
   </ul></li>
 </ul>
@@ -426,8 +427,38 @@ finding a new maintainer and also don&rsquo;t forget to update the <samp>MAINTAI
 
 <p>We think our rules are not too hard. If you have comments, contact us.
 </p>
+<a name="Code-of-conduct"></a>
+<h3 class="section">1.5 Code of conduct<span class="pull-right"><a class="anchor hidden-xs" href="#Code-of-conduct" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Code-of-conduct" aria-hidden="true">TOC</a></span></h3>
+
+<p>Be friendly and respectful towards others and third parties.
+Treat others the way you yourself want to be treated.
+</p>
+<p>Be considerate. Not everyone shares the same viewpoint and priorities as you do.
+Different opinions and interpretations help the project.
+Looking at issues from a different perspective assists development.
+</p>
+<p>Do not assume malice for things that can be attributed to incompetence. Even if
+it is malice, it&rsquo;s rarely good to start with that as initial assumption.
+</p>
+<p>Stay friendly even if someone acts contrarily. Everyone has a bad day
+once in a while.
+If you yourself have a bad day or are angry then try to take a break and reply
+once you are calm and without anger if you have to.
+</p>
+<p>Try to help other team members and cooperate if you can.
+</p>
+<p>The goal of software development is to create technical excellence, not for any
+individual to be better and &quot;win&quot; against the others. Large software projects
+are only possible and successful through teamwork.
+</p>
+<p>If someone struggles do not put them down. Give them a helping hand
+instead and point them in the right direction.
+</p>
+<p>Finally, keep in mind the immortal words of Bill and Ted,
+&quot;Be excellent to each other.&quot;
+</p>
 <a name="Submitting-patches"></a><a name="Submitting-patches-1"></a>
-<h3 class="section">1.5 Submitting patches<span class="pull-right"><a class="anchor hidden-xs" href="#Submitting-patches-1" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Submitting-patches-1" aria-hidden="true">TOC</a></span></h3>
+<h3 class="section">1.6 Submitting patches<span class="pull-right"><a class="anchor hidden-xs" href="#Submitting-patches-1" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Submitting-patches-1" aria-hidden="true">TOC</a></span></h3>
 
 <p>First, read the <a href="#Coding-Rules">Coding Rules</a> above if you did not yet, in particular
 the rules regarding patch submission.
@@ -473,7 +504,7 @@ send a reminder by email. Your patch should eventually be dealt with.
 </p>
 
 <a name="New-codecs-or-formats-checklist"></a>
-<h3 class="section">1.6 New codecs or formats checklist<span class="pull-right"><a class="anchor hidden-xs" href="#New-codecs-or-formats-checklist" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-New-codecs-or-formats-checklist" aria-hidden="true">TOC</a></span></h3>
+<h3 class="section">1.7 New codecs or formats checklist<span class="pull-right"><a class="anchor hidden-xs" href="#New-codecs-or-formats-checklist" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-New-codecs-or-formats-checklist" aria-hidden="true">TOC</a></span></h3>
 
 <ol>
 <li> Did you use av_cold for codec initialization and close functions?
@@ -514,7 +545,7 @@ configure?
 
 
 <a name="patch-submission-checklist"></a>
-<h3 class="section">1.7 patch submission checklist<span class="pull-right"><a class="anchor hidden-xs" href="#patch-submission-checklist" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-patch-submission-checklist" aria-hidden="true">TOC</a></span></h3>
+<h3 class="section">1.8 patch submission checklist<span class="pull-right"><a class="anchor hidden-xs" href="#patch-submission-checklist" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-patch-submission-checklist" aria-hidden="true">TOC</a></span></h3>
 
 <ol>
 <li> Does <code>make fate</code> pass with the patch applied?
@@ -599,7 +630,7 @@ of leaks, out of array accesses, etc.
 </li></ol>
 
 <a name="Patch-review-process"></a>
-<h3 class="section">1.8 Patch review process<span class="pull-right"><a class="anchor hidden-xs" href="#Patch-review-process" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Patch-review-process" aria-hidden="true">TOC</a></span></h3>
+<h3 class="section">1.9 Patch review process<span class="pull-right"><a class="anchor hidden-xs" href="#Patch-review-process" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Patch-review-process" aria-hidden="true">TOC</a></span></h3>
 
 <p>All patches posted to ffmpeg-devel will be reviewed, unless they contain a
 clear note that the patch is not for the git master branch.
@@ -630,7 +661,7 @@ to be reviewed, please consider helping to review other patches, that is a great
 way to get everyone&rsquo;s patches reviewed sooner.
 </p>
 <a name="Regression-tests"></a><a name="Regression-tests-1"></a>
-<h3 class="section">1.9 Regression tests<span class="pull-right"><a class="anchor hidden-xs" href="#Regression-tests-1" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Regression-tests-1" aria-hidden="true">TOC</a></span></h3>
+<h3 class="section">1.10 Regression tests<span class="pull-right"><a class="anchor hidden-xs" href="#Regression-tests-1" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Regression-tests-1" aria-hidden="true">TOC</a></span></h3>
 
 <p>Before submitting a patch (or committing to the repository), you should at least
 test that you did not break anything.
@@ -642,7 +673,7 @@ this case, the reference results of the regression tests shall be modified
 accordingly].
 </p>
 <a name="Adding-files-to-the-fate_002dsuite-dataset"></a>
-<h4 class="subsection">1.9.1 Adding files to the fate-suite dataset<span class="pull-right"><a class="anchor hidden-xs" href="#Adding-files-to-the-fate_002dsuite-dataset" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Adding-files-to-the-fate_002dsuite-dataset" aria-hidden="true">TOC</a></span></h4>
+<h4 class="subsection">1.10.1 Adding files to the fate-suite dataset<span class="pull-right"><a class="anchor hidden-xs" href="#Adding-files-to-the-fate_002dsuite-dataset" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Adding-files-to-the-fate_002dsuite-dataset" aria-hidden="true">TOC</a></span></h4>
 
 <p>When there is no muxer or encoder available to generate test media for a
 specific test then the media has to be included in the fate-suite.
@@ -654,7 +685,7 @@ message or introductory message for the patch series that you post to
 the ffmpeg-devel mailing list, a direct link to download the sample media.
 </p>
 <a name="Visualizing-Test-Coverage"></a>
-<h4 class="subsection">1.9.2 Visualizing Test Coverage<span class="pull-right"><a class="anchor hidden-xs" href="#Visualizing-Test-Coverage" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Visualizing-Test-Coverage" aria-hidden="true">TOC</a></span></h4>
+<h4 class="subsection">1.10.2 Visualizing Test Coverage<span class="pull-right"><a class="anchor hidden-xs" href="#Visualizing-Test-Coverage" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Visualizing-Test-Coverage" aria-hidden="true">TOC</a></span></h4>
 
 <p>The FFmpeg build system allows visualizing the test coverage in an easy
 manner with the coverage tools <code>gcov</code>/<code>lcov</code>.  This involves
@@ -678,7 +709,7 @@ measurements. You will need to rerun <code>make lcov</code> after running a
 new test.
 </p>
 <a name="Using-Valgrind"></a>
-<h4 class="subsection">1.9.3 Using Valgrind<span class="pull-right"><a class="anchor hidden-xs" href="#Using-Valgrind" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Using-Valgrind" aria-hidden="true">TOC</a></span></h4>
+<h4 class="subsection">1.10.3 Using Valgrind<span class="pull-right"><a class="anchor hidden-xs" href="#Using-Valgrind" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Using-Valgrind" aria-hidden="true">TOC</a></span></h4>
 
 <p>The configure script provides a shortcut for using valgrind to spot bugs
 related to memory handling. Just add the option
@@ -692,7 +723,7 @@ FATE under the supervision of either the <strong>memcheck</strong> or the
 your configure line instead.
 </p>
 <a name="Release-process"></a><a name="Release-process-1"></a>
-<h3 class="section">1.10 Release process<span class="pull-right"><a class="anchor hidden-xs" href="#Release-process-1" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Release-process-1" aria-hidden="true">TOC</a></span></h3>
+<h3 class="section">1.11 Release process<span class="pull-right"><a class="anchor hidden-xs" href="#Release-process-1" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Release-process-1" aria-hidden="true">TOC</a></span></h3>
 
 <p>FFmpeg maintains a set of <strong>release branches</strong>, which are the
 recommended deliverable for system integrators and distributors (such as
@@ -722,7 +753,7 @@ adjustments to the symbol versioning file. Please discuss such changes
 on the <strong>ffmpeg-devel</strong> mailing list in time to allow forward planning.
 </p>
 <a name="Criteria-for-Point-Releases"></a><a name="Criteria-for-Point-Releases-1"></a>
-<h4 class="subsection">1.10.1 Criteria for Point Releases<span class="pull-right"><a class="anchor hidden-xs" href="#Criteria-for-Point-Releases-1" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Criteria-for-Point-Releases-1" aria-hidden="true">TOC</a></span></h4>
+<h4 class="subsection">1.11.1 Criteria for Point Releases<span class="pull-right"><a class="anchor hidden-xs" href="#Criteria-for-Point-Releases-1" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Criteria-for-Point-Releases-1" aria-hidden="true">TOC</a></span></h4>
 
 <p>Changes that match the following criteria are valid candidates for
 inclusion into a point release:
@@ -743,7 +774,7 @@ point releases of the same release branch.
 </p>
 
 <a name="Release-Checklist"></a>
-<h4 class="subsection">1.10.2 Release Checklist<span class="pull-right"><a class="anchor hidden-xs" href="#Release-Checklist" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Release-Checklist" aria-hidden="true">TOC</a></span></h4>
+<h4 class="subsection">1.11.2 Release Checklist<span class="pull-right"><a class="anchor hidden-xs" href="#Release-Checklist" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Release-Checklist" aria-hidden="true">TOC</a></span></h4>
 
 <p>The release process involves the following steps:
 </p>

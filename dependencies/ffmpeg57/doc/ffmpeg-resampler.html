@@ -194,8 +194,8 @@ applicable in this case.
 </p></dd>
 <dt>&lsquo;<samp>soxr</samp>&rsquo;</dt>
 <dd><p>select the SoX Resampler (where available); compensation, and filter options
-filter_size, phase_shift, filter_type &amp; kaiser_beta, are not applicable in this
-case.
+filter_size, phase_shift, exact_rational, filter_type &amp; kaiser_beta, are not
+applicable in this case.
 </p></dd>
 </dl>
 
@@ -211,6 +211,12 @@ the interval [0,30].
 </dd>
 <dt><samp>linear_interp</samp></dt>
 <dd><p>Use linear interpolation if set to 1, default value is 0.
+</p>
+</dd>
+<dt><samp>exact_rational</samp></dt>
+<dd><p>For swr only, when enabled, try to use exact phase_count based on input and
+output sample rate. However, if it is larger than <code>1 &lt;&lt; phase_shift</code>,
+the phase_count will be <code>1 &lt;&lt; phase_shift</code> as fallback. Default is disabled.
 </p>
 </dd>
 <dt><samp>cutoff</samp></dt>
