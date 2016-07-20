@@ -202,7 +202,7 @@ public:
 		size_t to_offer = (buffer.first.size() - buffer.second)
 				/ config_.num_out_channels();
 		auto begin = buffer.first.data() + buffer.second;
-		unsigned long samples_written;
+		unsigned int samples_written;
 
 		if (FAILED(output_->WriteAudioSamplesSync(
 				begin,

@@ -229,7 +229,7 @@ public:
 			send_completion_.try_completion();
 			schedule_next_video(make_safe_ptr(frame));	
 			
-			unsigned long buffered;
+			unsigned int buffered;
 			output_->GetBufferedVideoFrameCount(&buffered);
 			graph_->set_value("buffered-video", static_cast<double>(buffered)/format_desc_.fps);
 		}
@@ -277,7 +277,7 @@ public:
 				}
 			}
 
-			unsigned long buffered;
+			unsigned int buffered;
 			output_->GetBufferedAudioSampleFrameCount(&buffered);
 			graph_->set_value("buffered-audio", static_cast<double>(buffered)/(format_desc_.audio_cadence[0] * config_.num_out_channels() * 2));
 		}

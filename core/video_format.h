@@ -60,6 +60,7 @@ struct video_format
 		x2160p2500,
 		x2160p2997,
 		x2160p3000,
+		x2160p5000,
 		invalid,
 		count
 	};
