@@ -194,8 +194,8 @@ struct input::implementation : boost::noncopyable
 	
 	bool full() const
 	{
-		return audio_buffer_.size() > get_min_buffer_count()
-			&& video_buffer_.size() > get_min_buffer_count();
+		return (audio_stream_index_ == -1 || audio_buffer_.size() > get_min_buffer_count())
+			&& (video_stream_index_ == -1 || video_buffer_.size() > get_min_buffer_count());
 	}
 
 	bool is_eof() const
