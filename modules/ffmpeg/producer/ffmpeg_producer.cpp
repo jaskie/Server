@@ -478,12 +478,11 @@ safe_ptr<core::frame_producer> create_producer(
 
 	// Infer the resource type from the resource_name
 	auto tokens = core::parameters::protocol_split(params.at_original(0));
-	auto filename = env::media_folder() + L"\\" + tokens[1];
+	auto filename = tokens[1];
+	if (!is_valid_file(filename, invalid_exts))
+		filename = env::media_folder() + L"\\" + tokens[1];
 	if(!boost::filesystem::exists(filename))
-		filename = probe_stem(filename);
-	if (filename.empty() && boost::filesystem::exists(tokens[1]))
-		filename = tokens[1];		
-	
+		filename = probe_stem(filename, invalid_exts);
 	if(filename.empty())
 		return core::frame_producer::empty();
 	

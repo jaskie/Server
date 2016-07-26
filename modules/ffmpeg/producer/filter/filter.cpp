@@ -282,13 +282,7 @@ struct filter::implementation
 
 	void clear()
 	{
-		if (fast_path())
-		{ 
-			while (!fast_path_.empty())
-			fast_path_.pop();
-		}
-		else
-			configure_filtergraph();
+		do {} while (poll() != nullptr);
 	}
 
 	bool is_frame_format_changed(const std::shared_ptr<AVFrame>& frame)
