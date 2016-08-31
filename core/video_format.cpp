@@ -80,6 +80,7 @@ const video_format_desc format_descs[video_format::count] =
 	DEFINE_VIDEOFORMATDESC(video_format::x2160p2997	,3840, 2160, 3840, 2160, field_mode::progressive,	30000,	1001,	boost::assign::list_of(1602)(1601)(1602)(1601)(1602),	L"2160p2997"),
 	DEFINE_VIDEOFORMATDESC(video_format::x2160p3000	,3840, 2160, 3840, 2160, field_mode::progressive,	30000,		1000,		boost::assign::list_of(1600),							L"2160p3000"),
 	DEFINE_VIDEOFORMATDESC(video_format::x2160p5000	,3840, 2160, 3840, 2160, field_mode::progressive,	50000,		1000,		boost::assign::list_of(960),							L"2160p5000"),
+	DEFINE_VIDEOFORMATDESC(video_format::x2160p6000	,3840, 2160, 3840, 2160, field_mode::progressive,	60000,		1000,		boost::assign::list_of(800),							L"2160p6000"),
 	DEFINE_VIDEOFORMATDESC(video_format::invalid	,0,		0,   0,		0,   field_mode::progressive,	1000,		1000,		boost::assign::list_of(1),								L"invalid")
 };
 
