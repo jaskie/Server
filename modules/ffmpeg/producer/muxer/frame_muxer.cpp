@@ -345,12 +345,6 @@ struct frame_muxer::implementation : boost::noncopyable
 			display_mode_ = display_mode::simple;
 		}
 
-		if(frame->height == 480) // NTSC DV
-		{
-			auto pad_str = "PAD=" + boost::lexical_cast<std::string>(frame->width) + ":486:0:2:black";
-			filter_str = append_filter(filter_str, pad_str);
-		}
-
 		filter_.reset (new filter(
 			frame->width,
 			frame->height,

@@ -169,17 +169,23 @@ struct filter::implementation
 			AV_OPT_SEARCH_CHILDREN));
 
 #pragma warning (pop)
-			
-		configure_filtergraph(
-			*video_graph_, 
-			filtergraph_,
-			*filt_vsrc,
-			*filt_vsink);
+		try
+		{
+			configure_filtergraph(
+				*video_graph_,
+				filtergraph_,
+				*filt_vsrc,
+				*filt_vsink);
+			video_graph_in_ = filt_vsrc;
+			video_graph_out_ = filt_vsink;
 
-		video_graph_in_  = filt_vsrc;
-		video_graph_out_ = filt_vsink;
-	
-		CASPAR_LOG(trace) << L"Filter configured:\n" << avfilter_graph_dump(video_graph_.get(), nullptr);
+			CASPAR_LOG(trace) << L"Filter configured:\n" << avfilter_graph_dump(video_graph_.get(), nullptr);
+		}
+		catch (...)
+		{
+			CASPAR_LOG(error) << L"Cannot configure filtergraph: " << filtergraph_.c_str();
+			filtergraph_.clear(); // disable filtering on configure_filtergraph  failure
+		}
 	}
 	
 	void configure_filtergraph(
