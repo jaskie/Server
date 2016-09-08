@@ -28,8 +28,8 @@
  */
 
 /**
- * @defgroup libavf I/O and Muxing/Demuxing Library
- * @{
+ * @defgroup libavf libavformat
+ * I/O and Muxing/Demuxing Library
  *
  * Libavformat (lavf) is a library for dealing with various media container
  * formats. Its main two purposes are demuxing - i.e. splitting a media file
@@ -89,6 +89,8 @@
  * Note that some schemes/protocols are quite powerful, allowing access to
  * both local and remote files, parts of them, concatenations of them, local
  * audio and video devices and so on.
+ *
+ * @{
  *
  * @defgroup lavf_decoding Demuxing
  * @{
@@ -2051,8 +2053,13 @@ uint8_t *av_stream_new_side_data(AVStream *stream,
  * @param size pointer for side information size to store (optional)
  * @return pointer to data if present or NULL otherwise
  */
+#if FF_API_NOCONST_GET_SIDE_DATA
 uint8_t *av_stream_get_side_data(AVStream *stream,
                                  enum AVPacketSideDataType type, int *size);
+#else
+uint8_t *av_stream_get_side_data(const AVStream *stream,
+                                 enum AVPacketSideDataType type, int *size);
+#endif
 
 AVProgram *av_new_program(AVFormatContext *s, int id);
 
@@ -2718,6 +2725,9 @@ void av_dump_format(AVFormatContext *ic,
                     const char *url,
                     int is_output);
 
+
+#define AV_FRAME_FILENAME_FLAGS_MULTIPLE 1 ///< Allow multiple %d
+
 /**
  * Return in 'buf' the path with '%d' replaced by a number.
  *
@@ -2728,8 +2738,12 @@ void av_dump_format(AVFormatContext *ic,
  * @param buf_size destination buffer size
  * @param path numbered sequence string
  * @param number frame number
+ * @param flags AV_FRAME_FILENAME_FLAGS_*
  * @return 0 if OK, -1 on format error
  */
+int av_get_frame_filename2(char *buf, int buf_size,
+                          const char *path, int number, int flags);
+
 int av_get_frame_filename(char *buf, int buf_size,
                           const char *path, int number);
 

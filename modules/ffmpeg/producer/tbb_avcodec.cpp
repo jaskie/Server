@@ -48,6 +48,8 @@ extern "C"
 
 namespace caspar {
 		
+static const size_t MAX_THREADS = 16; // See mpegvideo.h
+
 int thread_execute(AVCodecContext* s, int (*func)(AVCodecContext *c2, void *arg2), void* arg, int* ret, int count, int size)
 {
 	tbb::parallel_for(0, count, 1, [&](int i)
@@ -65,7 +67,7 @@ int thread_execute2(AVCodecContext* s, int (*func)(AVCodecContext* c2, void* arg
 	tbb::atomic<int> counter;   
     counter = 0;   
 
-	CASPAR_VERIFY(tbb::tbb_thread::hardware_concurrency() < 16);
+	//CASPAR_VERIFY(tbb::tbb_thread::hardware_concurrency() < MAX_THREADS);
 	// Note: this will probably only work when tbb::task_scheduler_init::num_threads() < 16.
     tbb::parallel_for(tbb::blocked_range<int>(0, count, 2), [&](const tbb::blocked_range<int> &r)    
     {   
@@ -82,14 +84,14 @@ int thread_execute2(AVCodecContext* s, int (*func)(AVCodecContext* c2, void* arg
     return 0;  
 }
 
-void thread_init(AVCodecContext* s)
+void thread_init(AVCodecContext* s, bool execute2enable)
 {
-	static const size_t MAX_THREADS = 16; // See mpegvideo.h
 	static int dummy_opaque;
 
     s->thread_type = FF_THREAD_SLICE || FF_THREAD_FRAME;
     s->execute			  = thread_execute;
-    s->execute2			  = thread_execute2;
+	if (execute2enable)
+		s->execute2			  = thread_execute2;
 	s->slice_count		  = MAX_THREADS;
     s->thread_count		  = MAX_THREADS; // We are using a task-scheduler, so use as many "threads/tasks" as possible. 
 
@@ -106,7 +108,7 @@ int tbb_avcodec_open(AVCodecContext* avctx, AVCodec* codec)
 	  ((codec->capabilities & CODEC_CAP_SLICE_THREADS) && (avctx->thread_type & FF_THREAD_SLICE)
 	  ||  (codec->capabilities & CODEC_CAP_FRAME_THREADS)) && (avctx->thread_type & FF_THREAD_FRAME)) 
 	{
-		thread_init(avctx);
+		thread_init(avctx, codec->id != AV_CODEC_ID_PRORES); // do not enable execute2 for prores codec as it cause crash
 	}	
 	AVDictionary * options = NULL;
 	av_dict_set(&options, "refcounted_frames", "0", 0);

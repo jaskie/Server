@@ -305,7 +305,7 @@ int main(int argc, wchar_t* argv[])
 					{
 						// This is just dummy code for testing.
 						if(wcmd.substr(0, 1) == L"1")
-							wcmd = L"PLAY 1-0 FH11827 SEEK 160500";
+							wcmd = L"PLAY 1-0 \"TRZCINICA_ZWIASTUN\"";
 						else if(wcmd.substr(0, 1) == L"2")
 							wcmd = L"PLAY 1-0 FH11827 SEEK 150000";
 						else if(wcmd.substr(0, 1) == L"3")

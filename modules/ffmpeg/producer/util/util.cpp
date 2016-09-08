@@ -445,20 +445,20 @@ std::wstring print_mode(size_t width, size_t height, double fps, bool interlaced
 
 bool is_valid_file(const std::wstring filename, const std::vector<std::wstring>& invalid_exts)
 {
-	static std::vector<std::wstring> valid_exts = boost::assign::list_of(L".m2t")(L".mov")(L".mp4")(L".dv")(L".flv")(L".mpg")(L".wav")(L".mp3")(L".dnxhd")(L".h264")(L".prores");
+	//static std::vector<std::wstring> valid_exts = boost::assign::list_of(L".m2t")(L".mov")(L".mp4")(L".dv")(L".flv")(L".mpg")(L".wav")(L".mp3")(L".dnxhd")(L".h264")(L".prores");
 
 	auto ext = boost::to_lower_copy(boost::filesystem::wpath(filename).extension());
 		
 	if(std::find(invalid_exts.begin(), invalid_exts.end(), ext) != invalid_exts.end())
 		return false;	
 
-	if(std::find(valid_exts.begin(), valid_exts.end(), ext) != valid_exts.end())
-		return true;	
+	//if(std::find(valid_exts.begin(), valid_exts.end(), ext) != valid_exts.end())
+	//	return true;	
 
 	auto filename2 = narrow(filename);
 
-	if(boost::filesystem::path(filename2).extension() == ".m2t")
-		return true;
+	//if(boost::filesystem::path(filename2).extension() == ".m2t")
+	//	return true;
 
 	std::ifstream file(filename);
 
@@ -467,7 +467,7 @@ bool is_valid_file(const std::wstring filename, const std::vector<std::wstring>&
 		buf.push_back(*file_it);
 
 	if(buf.empty())
-		return nullptr;
+		return false;
 
 	AVProbeData pb;
 	pb.filename = filename2.c_str();
@@ -520,11 +520,12 @@ std::wstring probe_stem(const std::wstring stem, const std::vector<std::wstring>
 {
 	auto stem2 = boost::filesystem2::wpath(stem);
 	auto dir = stem2.parent_path();
-	for(auto it = boost::filesystem2::wdirectory_iterator(dir); it != boost::filesystem2::wdirectory_iterator(); ++it)
-	{
-		if(boost::iequals(it->path().stem(), stem2.filename()) && is_valid_file(it->path().file_string(), invalid_exts))
-			return it->path().file_string();
-	}
+	if (boost::filesystem::exists(dir))
+		for(auto it = boost::filesystem2::wdirectory_iterator(dir); it != boost::filesystem2::wdirectory_iterator(); ++it)
+		{
+			if(boost::iequals(it->path().stem(), stem2.filename()) && is_valid_file(it->path().file_string(), invalid_exts))
+				return it->path().file_string();
+		}
 	return L"";
 }
 
