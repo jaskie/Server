@@ -121,6 +121,7 @@ struct ffmpeg_producer : public core::frame_producer
 	
 	std::queue<std::pair<safe_ptr<core::basic_frame>, size_t>>	frame_buffer_;
 	uint32_t													file_frame_number_;
+	uint32_t													decoded_frame_number_;
 	
 		
 public:
@@ -226,6 +227,7 @@ public:
 		
 		auto frame = frame_buffer_.front(); 
 		last_frame_ = frame.first;
+		file_frame_number_ = frame.second;
 		frame_buffer_.pop();
 
 		graph_->set_text(print());
@@ -413,6 +415,7 @@ public:
 		if (audio_decoder_)
 			audio_decoder_->seek(time_to_seek);
 		file_frame_number_ = frame;
+		decoded_frame_number_ = frame;
 	}
 
 
@@ -434,10 +437,10 @@ public:
 	void try_decode_frame(int hints)
 	{
 		if (loop_ && 
-			((length_ != std::numeric_limits<uint32_t>().max() && file_frame_number_ >= start_ + length_) 
+			((length_ != std::numeric_limits<uint32_t>().max() && decoded_frame_number_ >= start_ + length_) 
 				|| input_.eof()))
 			seek(start_);
-		if (!loop_ && length_ != std::numeric_limits<uint32_t>().max() && file_frame_number_ >= start_ + length_)
+		if (!loop_ && length_ != std::numeric_limits<uint32_t>().max() && decoded_frame_number_ >= start_ + length_)
 			return;
 
 		std::shared_ptr<AVFrame>			video;
@@ -460,7 +463,7 @@ public:
 		
 		for (auto frame = muxer_->poll(); frame; frame = muxer_->poll())
 		{
-			frame_buffer_.push(std::make_pair(make_safe_ptr(frame), file_frame_number_++));
+			frame_buffer_.push(std::make_pair(make_safe_ptr(frame), decoded_frame_number_++));
 		}
 	}
 
