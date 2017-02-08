@@ -174,7 +174,6 @@ struct server::implementation : boost::noncopyable
 		async_servers_.clear();
 		destroy_producers_synchronously();
 		channels_.clear();
-
 		ffmpeg::uninit();
 	}
 

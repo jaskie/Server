@@ -588,7 +588,7 @@
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">../../StdAfx.h</PrecompiledHeaderFile>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">../../StdAfx.h</PrecompiledHeaderFile>
     </ClCompile>
-    <ClCompile Include="producer\tbb_avcodec.cpp">
+    <ClCompile Include="tbb_avcodec.cpp">
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Profile|Win32'">../StdAfx.h</PrecompiledHeaderFile>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">../StdAfx.h</PrecompiledHeaderFile>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">../StdAfx.h</PrecompiledHeaderFile>
@@ -649,7 +649,7 @@
     <ClInclude Include="producer\input\input.h" />
     <ClInclude Include="producer\muxer\display_mode.h" />
     <ClInclude Include="producer\muxer\frame_muxer.h" />
-    <ClInclude Include="producer\tbb_avcodec.h" />
+    <ClInclude Include="tbb_avcodec.h" />
     <ClInclude Include="producer\util\flv.h" />
     <ClInclude Include="producer\util\util.h" />
     <ClInclude Include="producer\video\video_decoder.h" />

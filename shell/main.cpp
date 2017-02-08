@@ -305,13 +305,13 @@ int main(int argc, wchar_t* argv[])
 					{
 						// This is just dummy code for testing.
 						if(wcmd.substr(0, 1) == L"1")
-							wcmd = L"PLAY 1-0 \"TRZCINICA_ZWIASTUN\"";
+							wcmd = L"PLAY 1-0 \"KREW\" LOOP";
 						else if(wcmd.substr(0, 1) == L"2")
-							wcmd = L"PLAY 1-0 FH11827 SEEK 150000";
+							wcmd = L"ADD 1 FILE \"RECORDING.MXF\"";
 						else if(wcmd.substr(0, 1) == L"3")
-							wcmd = L"PLAY 1-0 FH11827 SEEK 100000";
+							wcmd = L"REMOVE 1 FILE";
 						else if(wcmd.substr(0, 1) == L"4")
-							wcmd = L"PLAY 1-0 DECKLINK 2";
+							wcmd = L"PLAY 1-0 RECORDING.MXF";
 						else if(wcmd.substr(0, 1) == L"5")
 							wcmd = L"PLAY 1-0 BARS";
 						else if(upper_cmd.substr(0, 1) == L"X")
@@ -355,8 +355,8 @@ int main(int argc, wchar_t* argv[])
 			});
 			stdin_thread.detach();
 			restart = shutdown_server.get();
+			
 		}
-		Sleep(500);
 		CASPAR_LOG(info) << "Successfully shutdown CasparCG Server.";
 
 		if (wait_for_keypress)

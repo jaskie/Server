@@ -43,6 +43,7 @@
 #include <tbb/concurrent_queue.h>
 #include <tbb/cache_aligned_allocator.h>
 
+
 #include <boost/circular_buffer.hpp>
 #include <boost/timer.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -80,6 +81,7 @@ struct decklink_consumer : public IDeckLinkVideoOutputCallback, public IDeckLink
 	tbb::concurrent_bounded_queue<std::shared_ptr<core::read_frame>> video_frame_buffer_;
 	tbb::concurrent_bounded_queue<std::shared_ptr<core::read_frame>> audio_frame_buffer_;
 	
+	
 	safe_ptr<diagnostics::graph> graph_;
 	boost::timer tick_timer_;
 	retry_task<bool> send_completion_;
@@ -110,13 +112,10 @@ public:
 				
 		video_frame_buffer_.set_capacity(1);
 
-		if (format_desc.fps > 50.0)
-			// Blackmagic calls RenderAudioSamples() 50 times per second
-			// regardless of video mode so we sometimes need to give them
-			// samples from 2 frames in order to keep up
-			audio_frame_buffer_.set_capacity(2); 
-		else
-			audio_frame_buffer_.set_capacity(1);
+		// Blackmagic calls RenderAudioSamples() 50 times per second
+		// regardless of video mode so we sometimes need to give them
+		// samples from 2 frames in order to keep up
+		audio_frame_buffer_.set_capacity((format_desc.fps > 50.0) ? 2 : 1);
 
 		graph_->set_color("tick-time", diagnostics::color(0.0f, 0.6f, 0.9f));	
 		graph_->set_color("late-frame", diagnostics::color(0.6f, 0.3f, 0.3f));
@@ -135,12 +134,12 @@ public:
 		set_latency(configuration_, config.latency, print());
 		set_keyer(attributes_, keyer_, config.keyer, print());
 				
-		if(config.embedded_audio)		
-			output_->BeginAudioPreroll();		
-		
 		for(size_t n = 0; n < buffer_size_; ++n)
 			schedule_next_video(make_safe<core::read_frame>());
 
+		if(config.embedded_audio)		
+			output_->BeginAudioPreroll();		
+		
 		if(!config.embedded_audio)
 			start_playback();
 	}
@@ -231,7 +230,7 @@ public:
 			
 			unsigned int buffered;
 			output_->GetBufferedVideoFrameCount(&buffered);
-			graph_->set_value("buffered-video", static_cast<double>(buffered)/format_desc_.fps);
+			graph_->set_value("buffered-video", static_cast<double>(buffered)/buffer_size_);
 		}
 		catch(...)
 		{
@@ -352,13 +351,12 @@ public:
 
 	boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame)
 	{
-		{
-			tbb::spin_mutex::scoped_lock lock(exception_mutex_);
-			if(exception_ != nullptr)
-				std::rethrow_exception(exception_);
-		}
+		tbb::spin_mutex::scoped_lock lock(exception_mutex_);
+		if (exception_ != nullptr)
+			std::rethrow_exception(exception_);
 
-		if(!is_running_)
+
+		if (!is_running_)
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Is not running."));
 
 		bool audio_ready = !config_.embedded_audio;
@@ -377,7 +375,7 @@ public:
 			else
 				return boost::optional<bool>();
 		};
-		
+
 		if (enqueue_task())
 			return wrap_as_future(true);
 

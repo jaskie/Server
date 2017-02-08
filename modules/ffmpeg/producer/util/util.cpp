@@ -25,7 +25,7 @@
 
 #include "flv.h"
 
-#include "../tbb_avcodec.h"
+#include "../../tbb_avcodec.h"
 #include "../../ffmpeg_error.h"
 
 #include <tbb/concurrent_unordered_map.h>
@@ -109,7 +109,7 @@ safe_ptr<AVPacket> create_packet()
 
 safe_ptr<AVFrame> create_frame()
 {	
-	safe_ptr<AVFrame> frame(av_frame_alloc(), [](AVFrame* f) { av_frame_free(&f);});
+	safe_ptr<AVFrame> frame(av_frame_alloc(), [=](AVFrame* f) { av_frame_free(&f);});
 	return frame;
 }
 
@@ -251,8 +251,7 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 						
 		if(!pool.try_pop(sws_context))
 		{
-			double param;
-			sws_context.reset(sws_getContext(width, height, static_cast<AVPixelFormat>(pix_fmt), width, height, target_pix_fmt, SWS_BILINEAR, nullptr, nullptr, &param), sws_freeContext);
+			sws_context.reset(sws_getContext(width, height, static_cast<AVPixelFormat>(pix_fmt), width, height, target_pix_fmt, SWS_BILINEAR, nullptr, nullptr, NULL), sws_freeContext);
 		}
 			
 		if(!sws_context)

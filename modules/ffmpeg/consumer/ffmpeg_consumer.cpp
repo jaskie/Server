@@ -22,6 +22,7 @@
 #include "../StdAfx.h"
 
 #include "../ffmpeg_error.h"
+#include "../tbb_avcodec.h"
 
 #include "ffmpeg_consumer.h"
 
@@ -65,7 +66,9 @@ extern "C"
 	#include <libavutil/opt.h>
 	#include <libavutil/pixdesc.h>
 	#include <libavutil/parseutils.h>
+	#include <libavutil/imgutils.h>
 	#include <libswresample/swresample.h>
+	#include <libavutil/audio_fifo.h>
 }
 #if defined(_MSC_VER)
 #pragma warning (pop)
@@ -106,36 +109,67 @@ int av_opt_set(void *obj, const char *name, const char *val, int search_flags)
 	return ::av_opt_set(obj, name, val, search_flags);
 }
 
+AVFormatContext * alloc_output_format_context(const std::string& filename, AVOutputFormat * output_format)
+{
+	AVFormatContext * ctx = NULL;
+	if (avformat_alloc_output_context2(&ctx, output_format, NULL, filename.c_str()) >= 0)
+		return ctx;
+	else
+		return nullptr;
+}
+
+static const std::string			MXF = ".MXF";
+
 struct output_format
 {
-	AVOutputFormat* format;
-	int				width;
-	int				height;
-	AVCodecID		vcodec;
-	AVCodecID		acodec;
+	int									width;
+	int									height;
+	AVCodecID							vcodec;
+	AVCodecID							acodec;
+	caspar::core::video_format::type    video_format;
+	AVRational							sample_aspect_ratio;
+	AVOutputFormat*						format;
+	bool								is_mxf;
 
 	output_format(const core::video_format_desc& format_desc, const std::string& filename)
-		: format(av_guess_format(nullptr, filename.c_str(), nullptr))
+		: format(av_guess_format(NULL, filename.c_str(), NULL))
 		, width(format_desc.width)
 		, height(format_desc.height)
 		, vcodec(AV_CODEC_ID_NONE)
 		, acodec(AV_CODEC_ID_NONE)
+		, video_format(format_desc.format)
+		, is_mxf(std::equal(MXF.rbegin(), MXF.rend(), filename.rbegin()))
 	{
-		if (format == nullptr)
+		if (format == NULL)
 			BOOST_THROW_EXCEPTION(caspar_exception()
 				<< msg_info(filename + " not a supported file for recording"));
-		
-		if(vcodec == AV_CODEC_ID_NONE)
+		if (is_mxf)
+			format = av_guess_format("mxf_d10", filename.c_str(), NULL);
+
+		if (vcodec == AV_CODEC_ID_NONE)
 			vcodec = format->video_codec;
 
-		if(acodec == AV_CODEC_ID_NONE)
+		if (acodec == AV_CODEC_ID_NONE)
 			acodec = format->audio_codec;
-		
-		if(vcodec == AV_CODEC_ID_NONE)
+
+		if (vcodec == AV_CODEC_ID_NONE)
 			vcodec = AV_CODEC_ID_H264;
-		
-		if(acodec == AV_CODEC_ID_NONE)
+
+		if (acodec == AV_CODEC_ID_NONE)
 			acodec = AV_CODEC_ID_PCM_S16LE;
+
+		switch (video_format) {
+		case caspar::core::video_format::pal:
+			sample_aspect_ratio = av_make_q(64, 45);
+			break;
+		case caspar::core::video_format::ntsc:
+			sample_aspect_ratio = av_make_q(32, 27);
+			break;
+		default:
+			sample_aspect_ratio = av_make_q(1, 1);
+			break;
+		}
+
 	}
 	
 	bool set_opt(const std::string& name, const std::string& value)
@@ -205,54 +239,48 @@ struct output_format
 typedef std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>	byte_vector;
 
 struct ffmpeg_consumer : boost::noncopyable
-{		
+{
 	const std::string						filename_;
-		
-	const std::shared_ptr<AVFormatContext>	oc_;
+
+	output_format							output_format_;
+	const std::shared_ptr<AVFormatContext>	format_context_;
 	const core::video_format_desc			format_desc_;
-	const core::channel_layout				channel_layout_;
-	
+
 	const safe_ptr<diagnostics::graph>		graph_;
 
 	executor								encode_executor_;
-	
+
 	std::shared_ptr<AVStream>				audio_st_;
 	std::shared_ptr<AVStream>				video_st_;
-	
-	byte_vector								audio_outbuf_;
-	byte_vector								audio_buf_;
-	byte_vector								video_outbuf_;
+	std::shared_ptr<AVAudioFifo>			audio_fifo_;
+
+	byte_vector								audio_bufers_[AV_NUM_DATA_POINTERS];
 	byte_vector								key_picture_buf_;
 	byte_vector								picture_buf_;
-	std::shared_ptr<SwrContext>				swr_;				
+	std::shared_ptr<SwrContext>				swr_;
 	std::shared_ptr<SwsContext>				sws_;
 
 	int64_t									in_frame_number_;
 	int64_t									out_frame_number_;
+	int64_t									out_audio_sample_number_;
 
-	output_format							output_format_;
 	bool									key_only_;
+	bool									audio_is_planar;
 	tbb::atomic<int64_t>					current_encoding_delay_;
-	
+
 public:
-	ffmpeg_consumer(const std::string& filename, const core::video_format_desc& format_desc, bool key_only, const core::channel_layout& audio_channel_layout)
+	ffmpeg_consumer(const std::string& filename, const core::video_format_desc& format_desc, bool key_only)
 		: filename_(filename)
-		, video_outbuf_(1920*1080*8)
-		, audio_outbuf_(10000)
-		, oc_(avformat_alloc_context(), [](AVFormatContext* p)
-			{
-				avformat_close_input(&p);
-			})
+		, format_context_(alloc_output_format_context(filename, output_format_.format), avformat_free_context)
 		, format_desc_(format_desc)
-		, channel_layout_(audio_channel_layout)
 		, encode_executor_(print())
 		, in_frame_number_(0)
 		, out_frame_number_(0)
+		, out_audio_sample_number_(0)
 		, output_format_(format_desc, filename)
 		, key_only_(key_only)
 	{
 		current_encoding_delay_ = 0;
-
 		// TODO: Ask stakeholders about case where file already exists.
 		boost::filesystem2::remove(boost::filesystem2::wpath(env::media_folder() + widen(filename))); // Delete the file if it exists
 
@@ -263,193 +291,217 @@ public:
 
 		encode_executor_.set_capacity(8);
 
-		oc_->oformat = output_format_.format;
-				
-		strcpy_s(oc_->filename, filename_.c_str());
-		
-		//  Add the audio and video streams using the default format codecs	and initialize the codecs.
-		video_st_ = add_video_stream();
+		encode_executor_.begin_invoke([this] {
+			//strcpy_s(format_context_->filename, filename_.c_str());
 
-		if (!key_only)
-			audio_st_ = add_audio_stream();
-				
-		av_dump_format(oc_.get(), 0, filename_.c_str(), 1);
-		 
-		// Open the output ffmpeg, if needed.
-		if (!(oc_->oformat->flags & AVFMT_NOFILE)) 
-			THROW_ON_ERROR2(avio_open(&oc_->pb, filename_.c_str(), AVIO_FLAG_WRITE), "[ffmpeg_consumer]");
-				
-		THROW_ON_ERROR2(avformat_write_header(oc_.get(), nullptr), "[ffmpeg_consumer]");
+			//  Add the audio and video streams using the default format codecs	and initialize the codecs.
+			video_st_ = add_video_stream();
+			if (!key_only_)
+				audio_st_ = add_audio_stream();
 
-
-		CASPAR_LOG(info) << print() << L" Successfully Initialized.";	
+			av_dump_format(format_context_.get(), 0, filename_.c_str(), 1);
+			
+			// Open the output ffmpeg
+			THROW_ON_ERROR2(avio_open(&format_context_->pb, filename_.c_str(), AVIO_FLAG_WRITE | AVIO_FLAG_NONBLOCK), "[ffmpeg_consumer]");
+			THROW_ON_ERROR2(avformat_write_header(format_context_.get(), nullptr), "[ffmpeg_consumer]");
+			CASPAR_LOG(info) << print() << L" Successfully Initialized.";
+		});
 	}
 
 	~ffmpeg_consumer()
-	{    
+	{
 		encode_executor_.stop();
 		encode_executor_.join();
-
-		LOG_ON_ERROR2(av_write_trailer(oc_.get()), "[ffmpeg_consumer]");
-		
+		LOG_ON_ERROR2(av_write_trailer(format_context_.get()), "[ffmpeg_consumer]");
 		if (!key_only_)
 			audio_st_.reset();
 		video_st_.reset();
-			  
-		if (!(oc_->oformat->flags & AVFMT_NOFILE)) 
-			LOG_ON_ERROR2(avio_close(oc_->pb), "[ffmpeg_consumer]"); // Close the output ffmpeg.
+		LOG_ON_ERROR2(avio_close(format_context_->pb), "[ffmpeg_consumer]"); // Close the output ffmpeg.
 
-		CASPAR_LOG(info) << print() << L" Successfully Uninitialized.";	
+		CASPAR_LOG(info) << print() << L" Successfully Uninitialized.";
 	}
-			
+
 	std::wstring print() const
 	{
 		return L"ffmpeg[" + widen(filename_) + L"]";
 	}
 
 	std::shared_ptr<AVStream> add_video_stream()
-	{ 
-		if(output_format_.vcodec == AV_CODEC_ID_NONE)
+	{
+		if (output_format_.vcodec == AV_CODEC_ID_NONE)
 			return nullptr;
 
-		auto st = avformat_new_stream(oc_.get(), NULL);
-		st->id = 0;
-		if (!st) 		
-			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not allocate video-stream.") << boost::errinfo_api_function("av_new_stream"));		
-
-		auto encoder = avcodec_find_encoder(output_format_.vcodec);
+		AVCodec * encoder = avcodec_find_encoder(output_format_.vcodec);
 		if (!encoder)
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Codec not found."));
 
-		auto c = st->codec;
+		AVStream * st = avformat_new_stream(format_context_.get(), encoder);
+		if (!st)
+			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not allocate video-stream.") << boost::errinfo_api_function("av_new_stream"));
+		st->id = 0;
+		st->time_base = av_make_q(format_desc_.duration, format_desc_.time_scale);
 
-		avcodec_get_context_defaults3(c, encoder);
-				
-		c->codec_id			= output_format_.vcodec;
-		c->codec_type		= AVMEDIA_TYPE_VIDEO;
-		c->width			= output_format_.width;
-		c->height			= output_format_.height;
-		c->time_base.den	= format_desc_.time_scale;
-		c->time_base.num	= format_desc_.duration;
-		c->gop_size			= 25;
-		c->flags		   |= format_desc_.field_mode == core::field_mode::progressive ? 0 : (CODEC_FLAG_INTERLACED_ME | CODEC_FLAG_INTERLACED_DCT);
-		if(c->pix_fmt == AV_PIX_FMT_NONE)
+		AVCodecContext * c = st->codec;
+
+		c->codec_id = output_format_.vcodec;
+		c->codec_type = AVMEDIA_TYPE_VIDEO;
+		c->width = output_format_.width;
+		c->height = output_format_.height;
+		c->gop_size = 25;
+		c->time_base = st->time_base;
+		c->flags |= format_desc_.field_mode == core::field_mode::progressive ? 0 : (CODEC_FLAG_INTERLACED_ME | CODEC_FLAG_INTERLACED_DCT);
+		if (c->pix_fmt == AV_PIX_FMT_NONE)
 			c->pix_fmt = AV_PIX_FMT_YUV420P;
 
-		if(c->codec_id == AV_CODEC_ID_PRORES)
-		{			
-			c->bit_rate	= c->width < 1280 ? 63*1000000 : 220*1000000;
-			c->pix_fmt	= AV_PIX_FMT_YUV422P10;
-		}
-		else if(c->codec_id == AV_CODEC_ID_DNXHD)
+		if (c->codec_id == AV_CODEC_ID_PRORES)
 		{
-			if(c->width < 1280 || c->height < 720)
+			c->bit_rate = c->width < 1280 ? 63 * 1000000 : 220 * 1000000;
+			c->pix_fmt = AV_PIX_FMT_YUV422P10;
+		}
+		else if (c->codec_id == AV_CODEC_ID_DNXHD)
+		{
+			if (c->width < 1280 || c->height < 720)
 				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Unsupported video dimensions."));
 
-			c->bit_rate	= 220*1000000;
-			c->pix_fmt	= AV_PIX_FMT_YUV422P;
+			c->bit_rate = 220 * 1000000;
+			c->pix_fmt = AV_PIX_FMT_YUV422P;
 		}
-		else if(c->codec_id == AV_CODEC_ID_DVVIDEO)
+		else if (c->codec_id == AV_CODEC_ID_DVVIDEO)
 		{
-			c->width = c->height == 1280 ? 960  : c->width;
-			
-			if(format_desc_.format == core::video_format::ntsc)
+			c->width = c->height == 1280 ? 960 : c->width;
+
+			if (format_desc_.format == core::video_format::ntsc)
 				c->pix_fmt = AV_PIX_FMT_YUV411P;
-			else if(format_desc_.format == core::video_format::pal)
+			else if (format_desc_.format == core::video_format::pal)
 				c->pix_fmt = AV_PIX_FMT_YUV420P;
 			else // dv50
 				c->pix_fmt = AV_PIX_FMT_YUV422P;
-			
-			if(format_desc_.duration == 1001)			
-				c->width = c->height == 1080 ? 1280 : c->width;			
+
+			if (format_desc_.duration == 1001)
+				c->width = c->height == 1080 ? 1280 : c->width;
 			else
-				c->width = c->height == 1080 ? 1440 : c->width;			
+				c->width = c->height == 1080 ? 1440 : c->width;
 		}
-		else if(c->codec_id == AV_CODEC_ID_H264)
-		{			   
-			c->pix_fmt = AV_PIX_FMT_YUV420P;    
+		else if (c->codec_id == AV_CODEC_ID_H264)
+		{
+			c->pix_fmt = AV_PIX_FMT_YUV420P;
+			c->bit_rate = output_format_.height * 14 * 1000; // about 8Mbps for SD, 14 for HD
+			::av_opt_set(c, "preset", "veryfast", NULL);
 		}
-		else if(c->codec_id == AV_CODEC_ID_QTRLE)
+		else if (c->codec_id == AV_CODEC_ID_QTRLE)
 		{
 			c->pix_fmt = AV_PIX_FMT_ARGB;
 		}
-				
-		c->max_b_frames = 0; // b-frames not supported.
-				
-		if(output_format_.format->flags & AVFMT_GLOBALHEADER)
-			c->flags |= CODEC_FLAG_GLOBAL_HEADER;
-		
-		c->thread_count = boost::thread::hardware_concurrency();
-		if(avcodec_open2(c, encoder, nullptr) < 0)
+		else if (c->codec_id == AV_CODEC_ID_MPEG2VIDEO)
 		{
+			if (output_format_.is_mxf && format_desc_.format == core::video_format::pal)
+			{
+				// IMX50 encoding parameters
+				c->pix_fmt = AV_PIX_FMT_YUV422P;
+				c->bit_rate = 50 * 1000000;
+				c->rc_max_rate = c->bit_rate;
+				c->rc_min_rate = c->bit_rate;
+				c->rc_buffer_size = 2000000;
+				c->rc_initial_buffer_occupancy = 2000000;
+				c->rc_buffer_aggressivity = 0.25;
+				c->gop_size = 1;
+			}
+			else
+			{
+				c->pix_fmt = AV_PIX_FMT_YUV422P;
+				c->bit_rate = 15 * 1000000;
+			}
+		}
+
+		c->max_b_frames = 0; // b-frames not supported.
+
+		if (output_format_.format->flags & AVFMT_GLOBALHEADER)
+			c->flags |= CODEC_FLAG_GLOBAL_HEADER;
+		c->sample_aspect_ratio = output_format_.sample_aspect_ratio;
+
+		c->thread_count = boost::thread::hardware_concurrency();
+		if (avcodec_open2(c, encoder, NULL) < 0)
+		{
+			CASPAR_LOG(debug) << print() << L" Multithreaded avcodec_open2 failed";
 			c->thread_count = 1;
-			THROW_ON_ERROR2(avcodec_open2(c, encoder, nullptr), "[ffmpeg_consumer]");
+			THROW_ON_ERROR2(avcodec_open2(c, encoder, NULL), "[ffmpeg_consumer]");
 		}
 
 		return std::shared_ptr<AVStream>(st, [](AVStream* st)
 		{
 			LOG_ON_ERROR2(avcodec_close(st->codec), "[ffmpeg_consumer]");
-			av_freep(&st->codec);
-			av_freep(&st);
 		});
 	}
-		
+
 	std::shared_ptr<AVStream> add_audio_stream()
 	{
-		if(output_format_.acodec == AV_CODEC_ID_NONE)
+		if (output_format_.acodec == AV_CODEC_ID_NONE)
 			return nullptr;
 
-		auto st = avformat_new_stream(oc_.get(), NULL);
-		st->id = 1;
-		if(!st)
-			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not allocate audio-stream") << boost::errinfo_api_function("av_new_stream"));		
-		
-		auto encoder = avcodec_find_encoder(output_format_.acodec);
+		AVCodec * encoder = avcodec_find_encoder(output_format_.acodec);
 		if (!encoder)
-			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("codec not found"));
-		
-		auto c = st->codec;
+			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("codec not found") << boost::errinfo_api_function("avcodec_find_encoder"));
 
-		avcodec_get_context_defaults3(c, encoder);
+		auto st = avformat_new_stream(format_context_.get(), encoder);
+		if (!st)
+			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not allocate audio-stream") << boost::errinfo_api_function("av_new_stream"));
+		st->id = 1;
 
-		c->codec_id			= output_format_.acodec;
-		c->codec_type		= AVMEDIA_TYPE_AUDIO;
-		c->sample_rate		= 48000;
-		c->channels			= channel_layout_.num_channels;
-		c->sample_fmt		= AV_SAMPLE_FMT_S16;
 
-		if(output_format_.vcodec == AV_CODEC_ID_FLV1)		
-			c->sample_rate	= 44100;		
+		AVCodecContext * c = st->codec;
+		c->codec_id = output_format_.acodec;
+		c->codec_type = AVMEDIA_TYPE_AUDIO;
+		c->sample_rate = format_desc_.audio_sample_rate; 
+		c->channels = 2;
+		c->channel_layout = av_get_default_channel_layout(c->channels);
+		c->profile = FF_PROFILE_UNKNOWN;
+		c->sample_fmt = encoder->sample_fmts[0];
+		if (output_format_.vcodec == AV_CODEC_ID_FLV1)
+			c->sample_rate = 44100;
 
-		if(output_format_.format->flags & AVFMT_GLOBALHEADER)
+		if (output_format_.acodec == AV_CODEC_ID_AAC)
+		{
+			c->sample_fmt = AV_SAMPLE_FMT_FLTP;
+			c->profile = FF_PROFILE_AAC_MAIN;
+			c->bit_rate = 160 * 1024;
+		}
+		if (output_format_.is_mxf)
+		{
+			c->channels = 4;
+			c->channel_layout = AV_CH_LAYOUT_4POINT0;
+			c->sample_fmt = AV_SAMPLE_FMT_S16;
+			c->bit_rate_tolerance = 0;
+		}
+
+		if (output_format_.format->flags & AVFMT_GLOBALHEADER)
 			c->flags |= CODEC_FLAG_GLOBAL_HEADER;
-				
+		
+		audio_is_planar = av_sample_fmt_is_planar(c->sample_fmt) != 0;
+		audio_fifo_.reset(av_audio_fifo_alloc(c->sample_fmt, c->channels, 1), av_audio_fifo_free);
+
 		THROW_ON_ERROR2(avcodec_open2(c, encoder, nullptr), "[ffmpeg_consumer]");
 
 		return std::shared_ptr<AVStream>(st, [](AVStream* st)
 		{
 			LOG_ON_ERROR2(avcodec_close(st->codec), "[ffmpeg_consumer]");;
-			av_freep(&st->codec);
-			av_freep(&st);
 		});
 	}
 
 	std::shared_ptr<AVFrame> convert_video(core::read_frame& frame, AVCodecContext* c)
 	{
-		if(!sws_) 
+		if (!sws_)
 		{
-			sws_.reset(sws_getContext(format_desc_.width, format_desc_.height, AV_PIX_FMT_BGRA, c->width, c->height, c->pix_fmt, SWS_BICUBIC, nullptr, nullptr, nullptr), sws_freeContext);
-			if (sws_ == nullptr) 
+			sws_.reset(sws_getContext(format_desc_.width, format_desc_.height, AV_PIX_FMT_BGRA, c->width, c->height, c->pix_fmt, SWS_BICUBIC, nullptr, nullptr, NULL), sws_freeContext);
+			if (sws_ == nullptr)
 				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Cannot initialize the conversion context"));
 		}
-
-		std::shared_ptr<AVFrame> in_frame(av_frame_alloc(), [](AVFrame* frame) {av_frame_free(&frame);});
+		std::shared_ptr<AVFrame> in_frame(av_frame_alloc(), [](AVFrame* frame) {av_frame_free(&frame); });
 		auto in_picture = reinterpret_cast<AVPicture*>(in_frame.get());
 
 		if (key_only_)
 		{
 			key_picture_buf_.resize(frame.image_data().size());
-			in_picture->linesize[0] = format_desc_.width * 4;
+			in_picture->linesize[0] = format_desc_.width * 4; //AV_PIX_FMT_BGRA
 			in_picture->data[0] = key_picture_buf_.data();
 
 			fast_memshfl(in_picture->data[0], frame.image_data().begin(), frame.image_data().size(), 0x0F0F0F0F, 0x0B0B0B0B, 0x07070707, 0x03030303);
@@ -459,139 +511,152 @@ public:
 			avpicture_fill(in_picture, const_cast<uint8_t*>(frame.image_data().begin()), AV_PIX_FMT_BGRA, format_desc_.width, format_desc_.height);
 		}
 
-		std::shared_ptr<AVFrame> out_frame(av_frame_alloc(), [](AVFrame* frame) {av_frame_free(&frame);});
-		picture_buf_.resize(avpicture_get_size(c->pix_fmt, c->width, c->height));
-		avpicture_fill(reinterpret_cast<AVPicture*>(out_frame.get()), picture_buf_.data(), c->pix_fmt, c->width, c->height);
+		std::shared_ptr<AVFrame> out_frame(av_frame_alloc(), [](AVFrame* frame) {av_frame_free(&frame); });
+		picture_buf_.resize(av_image_get_buffer_size(c->pix_fmt, c->width, c->height, 16));
+		av_image_fill_arrays(out_frame->data, out_frame->linesize, picture_buf_.data(), c->pix_fmt, c->width, c->height, 16);
 
 		sws_scale(sws_.get(), in_frame->data, in_frame->linesize, 0, format_desc_.height, out_frame->data, out_frame->linesize);
+		out_frame->width = format_desc_.width;
+		out_frame->height = format_desc_.height;
+		out_frame->format = c->pix_fmt;
 
 		return out_frame;
 	}
-  
+
 	void encode_video_frame(core::read_frame& frame)
-	{ 
-		auto c = video_st_->codec;
-		
-		auto in_time  = static_cast<double>(in_frame_number_) / format_desc_.fps;
-		auto out_time = static_cast<double>(out_frame_number_) / (static_cast<double>(c->time_base.den) / static_cast<double>(c->time_base.num));
-		
+	{
+		AVCodecContext * codec_context = video_st_->codec;
+
+		auto in_time = static_cast<double>(in_frame_number_) / format_desc_.fps;
+		auto out_time = static_cast<double>(out_frame_number_) / (static_cast<double>(codec_context->time_base.den) / static_cast<double>(codec_context->time_base.num));
+
 		in_frame_number_++;
 
-		if(out_time - in_time > 0.01)
+		if (out_time - in_time > 0.01)
 			return;
- 
-		auto av_frame = convert_video(frame, c);
-		av_frame->interlaced_frame	= format_desc_.field_mode != core::field_mode::progressive;
-		av_frame->top_field_first	= format_desc_.field_mode == core::field_mode::upper;
-		av_frame->pts				= out_frame_number_++;
 
-		//int out_size = THROW_ON_ERROR2(avcodec_encode_video(c, video_outbuf_.data(), video_outbuf_.size(), av_frame.get()), "[ffmpeg_consumer]");
-		//if(out_size == 0)
-		//	return;
-				
-		safe_ptr<AVPacket> pkt(av_packet_alloc(), [](AVPacket* p)
-		{
-			av_free_packet(p);
-			delete p;
-		});
+		auto av_frame = convert_video(frame, codec_context);
+		av_frame->interlaced_frame = format_desc_.field_mode != core::field_mode::progressive;
+		av_frame->top_field_first = format_desc_.field_mode == core::field_mode::upper;
+		av_frame->pts = out_frame_number_++;
+
+		std::shared_ptr<AVPacket> pkt(av_packet_alloc(), [](AVPacket *p) { av_packet_free(&p); });
+
 		av_init_packet(pkt.get());
+		int got_packet;
 
-		//TODO: Fix video encode
-//		if (!avcodec_encode_video2(c, pkt.get(), av_frame.get(), pkt->buf);
+		THROW_ON_ERROR2(avcodec_encode_video2(codec_context, pkt.get(), av_frame.get(), &got_packet), "[audio_encoder]");
 
-		if (c->coded_frame->pts != AV_NOPTS_VALUE)
-			pkt->pts = av_rescale_q(c->coded_frame->pts, c->time_base, video_st_->time_base);
+		if (got_packet == 0)
+			return;
 
-		if(c->coded_frame->key_frame)
+		if (pkt->pts != AV_NOPTS_VALUE)
+			pkt->pts = av_rescale_q(pkt->pts, codec_context->time_base, video_st_->time_base);
+		if (pkt->dts != AV_NOPTS_VALUE)
+			pkt->dts = av_rescale_q(pkt->dts, codec_context->time_base, video_st_->time_base);
+
+		if (codec_context->coded_frame->key_frame)
 			pkt->flags |= AV_PKT_FLAG_KEY;
 
-		pkt->stream_index	= video_st_->index;
-		pkt->data			= video_outbuf_.data();
-//		pkt->size			= out_size;
- 			
-		av_interleaved_write_frame(oc_.get(), pkt.get());		
-	}
-		
-	byte_vector convert_audio(core::read_frame& frame, AVCodecContext* c)
-	{
-		if(!swr_) 		
-		{
-			swr_ = std::shared_ptr<SwrContext>(swr_alloc_set_opts(nullptr,
-										get_channel_layout(c), c->sample_fmt, c->sample_rate,
-										av_get_default_channel_layout(channel_layout_.num_channels), AV_SAMPLE_FMT_S32, format_desc_.audio_sample_rate,
-										0, nullptr), [](SwrContext* p){swr_free(&p);});
+		pkt->stream_index = video_st_->index;
 
-			if(!swr_)
+		av_interleaved_write_frame(format_context_.get(), pkt.get());
+	}
+	
+	void resample_audio(core::read_frame& frame, AVCodecContext* ctx)
+	{
+		if (!swr_)
+		{
+			uint64_t out_channel_layout = av_get_default_channel_layout(ctx->channels);
+			uint64_t in_channel_layout = create_channel_layout_bitmask(frame.num_channels());
+			swr_.reset(swr_alloc_set_opts(nullptr,
+				out_channel_layout,
+				ctx->sample_fmt,
+				ctx->sample_rate,
+				in_channel_layout,
+				AV_SAMPLE_FMT_S32,
+				format_desc_.audio_sample_rate,
+				0, nullptr), [](SwrContext* ctx) { swr_free(&ctx); });
+
+			if (!swr_)
 				BOOST_THROW_EXCEPTION(caspar_exception()
 					<< msg_info("Cannot alloc audio resampler"));
 
-			THROW_ON_ERROR2(swr_init(swr_.get()), "[audio_decoder]");
+			THROW_ON_ERROR2(swr_init(swr_.get()), "[audio_encoder]");
 		}
-		
-		byte_vector buffer(48000);
-		//TODO: audio buffer
-		//const uint8_t* in[]  = {reinterpret_cast<const uint8_t*>(frame.audio_data().data())};
-		//uint8_t*       out[] = {buffer.data()};
+		byte_vector out_buffers[AV_NUM_DATA_POINTERS];
+		const int in_samples_count = frame.audio_data().size() / frame.num_channels();
+		const int out_samples_count = static_cast<int>(av_rescale_rnd(in_samples_count, ctx->sample_rate, format_desc_.audio_sample_rate, AV_ROUND_UP));
+		if (audio_is_planar)
+			for (char i = 0; i < ctx->channels; i++)
+				out_buffers[i].resize(out_samples_count * av_get_bytes_per_sample(AV_SAMPLE_FMT_S32));
+		else
+			out_buffers[0].resize(out_samples_count * av_get_bytes_per_sample(AV_SAMPLE_FMT_S32) *ctx->channels);
 
-		//auto channel_samples = swr_convert(swr_.get(), 
-		//								   out, static_cast<int>(buffer.size()) / c->channels / av_get_bytes_per_sample(c->sample_fmt), 
-		//								   in, static_cast<int>(frame.audio_data().size()/channel_layout_.num_channels));
+		const uint8_t* in[] = { reinterpret_cast<const uint8_t*>(frame.audio_data().begin()) };
+		uint8_t*       out[AV_NUM_DATA_POINTERS];
+		for (char i = 0; i < AV_NUM_DATA_POINTERS; i++)
+			out[i] = out_buffers[i].data();
 
-		//buffer.resize(channel_samples * c->channels * av_get_bytes_per_sample(c->sample_fmt));	
-
-		return buffer;
+		int converted_sample_count = swr_convert(swr_.get(),
+			out, out_samples_count,
+			in, in_samples_count);
+		if (audio_is_planar)
+			for (char i = 0; i < ctx->channels; i++)
+			{
+				out_buffers[i].resize(converted_sample_count * av_get_bytes_per_sample(ctx->sample_fmt));
+				boost::range::push_back(audio_bufers_[i], out_buffers[i]);
+			}
+		else
+		{
+			out_buffers[0].resize(converted_sample_count * av_get_bytes_per_sample(ctx->sample_fmt) * ctx->channels);
+			boost::range::push_back(audio_bufers_[0], out_buffers[0]);
+		}
 	}
 
-	uint64_t get_channel_layout(AVCodecContext* dec)
+	std::int64_t create_channel_layout_bitmask(int num_channels)
 	{
-		auto layout = (dec->channel_layout && dec->channels == av_get_channel_layout_nb_channels(dec->channel_layout)) ? dec->channel_layout : av_get_default_channel_layout(dec->channels);
-		return layout;
+		if (num_channels > 63)
+			BOOST_THROW_EXCEPTION(caspar_exception("FFMpeg cannot handle more than 63 audio channels"));
+		const auto ALL_63_CHANNELS = 0x7FFFFFFFFFFFFFFFULL;
+		auto to_shift = 63 - num_channels;
+		auto result = ALL_63_CHANNELS >> to_shift;
+		return static_cast<std::int64_t>(result);
 	}
-
+	
 	void encode_audio_frame(core::read_frame& frame)
 	{			
-		auto c = audio_st_->codec;
-
-		boost::range::push_back(audio_buf_, convert_audio(frame, c));
-		
-		std::size_t frame_size = c->frame_size;
-		auto input_audio_size = frame_size * av_get_bytes_per_sample(c->sample_fmt) * c->channels;
-		
-		while(audio_buf_.size() >= input_audio_size)
+		AVCodecContext * enc = audio_st_->codec;
+		resample_audio(frame, enc);
+		size_t input_audio_size = enc->frame_size == 0 ? 
+			audio_bufers_[0].size() :
+			enc->frame_size * av_get_bytes_per_sample(enc->sample_fmt) * enc->channels;
+		int frame_size = input_audio_size / (av_get_bytes_per_sample(enc->sample_fmt) * enc->channels);
+		while (audio_bufers_[0].size() >= input_audio_size)
 		{
-			safe_ptr<AVPacket> pkt(new AVPacket, [](AVPacket* p)
-			{
-				av_free_packet(p);
-				delete p;
-			});
-			av_init_packet(pkt.get());
-
-			if(frame_size > 1)
-			{	
-				//TODO: fix audio encode
-//				avcodec_encode_audio(c, pkt.get(),  audio_outbuf_.data(), audio_outbuf_.size(), reinterpret_cast<short*>(audio_buf_.data()));
-//				pkt->size = avcodec_encode_audio(c, audio_outbuf_.data(), audio_outbuf_.size(), reinterpret_cast<short*>(audio_buf_.data()));
-				audio_buf_.erase(audio_buf_.begin(), audio_buf_.begin() + input_audio_size);
-			}
+			std::shared_ptr<AVPacket> pkt(av_packet_alloc(), [](AVPacket *p) { av_packet_free(&p); });
+			std::shared_ptr<AVFrame> in_frame(av_frame_alloc(), [](AVFrame* frame) {av_frame_free(&frame); });
+			in_frame->nb_samples = frame_size;
+			in_frame->pts = out_audio_sample_number_;
+			out_audio_sample_number_ += frame_size;
+			uint8_t* out_buffers[AV_NUM_DATA_POINTERS];
+			for (char i = 0; i < AV_NUM_DATA_POINTERS; i++)
+				out_buffers[i] = audio_bufers_[i].data();
+			THROW_ON_ERROR2(avcodec_fill_audio_frame(in_frame.get(), enc->channels, enc->sample_fmt, (const uint8_t *)out_buffers[0], input_audio_size, 0), "[audio_encoder]");
+			if (audio_is_planar)
+				for (char i = 0; i < enc->channels; i++)
+					in_frame->data[i] = audio_bufers_[i].data();
+			int got_packet;
+			THROW_ON_ERROR2(avcodec_encode_audio2(enc, pkt.get(), in_frame.get(), &got_packet), "[audio_encoder]");
+			if (audio_is_planar)
+				for (char i = 0; i < enc->channels; i++)
+					audio_bufers_[i].erase(audio_bufers_[i].begin(), audio_bufers_[i].begin() + (enc->frame_size * av_get_bytes_per_sample(enc->sample_fmt)));
 			else
-			{
-				audio_outbuf_ = std::move(audio_buf_);		
-				audio_buf_.clear();
-				pkt->size = audio_outbuf_.size();
-				pkt->data = audio_outbuf_.data();
-			}
-		
-			if(pkt->size == 0)
+				audio_bufers_[0].erase(audio_bufers_[0].begin(), audio_bufers_[0].begin() + input_audio_size);
+			if (!got_packet)
 				return;
-
-			if (c->coded_frame && c->coded_frame->pts != AV_NOPTS_VALUE)
-				pkt->pts = av_rescale_q(c->coded_frame->pts, c->time_base, audio_st_->time_base);
-
-			pkt->flags		 |= AV_PKT_FLAG_KEY;
 			pkt->stream_index = audio_st_->index;
-			pkt->data		  = reinterpret_cast<uint8_t*>(audio_outbuf_.data());
-		
-			av_interleaved_write_frame(oc_.get(), pkt.get());
+			THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), pkt.get()), "[audio_encoder]");
 		}
 	}
 		 
@@ -644,7 +709,26 @@ public:
 	
 	virtual void initialize(const core::video_format_desc& format_desc, int)
 	{
+	
 		format_desc_ = format_desc;
+		consumer_.reset();
+		key_only_consumer_.reset();
+		consumer_.reset(new ffmpeg_consumer(
+			narrow(filename_),
+			format_desc_,
+			false));
+
+		if (separate_key_)
+		{
+			boost::filesystem::wpath fill_file(filename_);
+			auto without_extension = fill_file.stem();
+			auto key_file = env::media_folder() + without_extension + L"_A" + fill_file.extension();
+
+			key_only_consumer_.reset(new ffmpeg_consumer(
+				narrow(key_file),
+				format_desc_,
+				true));
+		}
 	}
 
 	virtual int64_t presentation_frame_age_millis() const override
@@ -654,9 +738,6 @@ public:
 	
 	virtual boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame) override
 	{
-		if (!consumer_)
-			do_initialize(frame->multichannel_view().channel_layout());
-
 		bool ready_for_frame = consumer_->ready_for_frame();
 
 		if (ready_for_frame && separate_key_)
@@ -676,7 +757,6 @@ public:
 			if (separate_key_)
 				key_only_consumer_->mark_dropped();
 		}
-
 		return caspar::wrap_as_future(true);
 	}
 	
@@ -708,30 +788,7 @@ public:
 	{
 		return 200;
 	}
-private:
-	void do_initialize(const core::channel_layout& channel_layout)
-	{
-		consumer_.reset();
-		key_only_consumer_.reset();
-		consumer_.reset(new ffmpeg_consumer(
-				narrow(filename_),
-				format_desc_,
-				false,
-				channel_layout));
 
-		if (separate_key_)
-		{
-			boost::filesystem::wpath fill_file(filename_);
-			auto without_extension = fill_file.stem();
-			auto key_file = env::media_folder() + without_extension + L"_A" + fill_file.extension();
-			
-			key_only_consumer_.reset(new ffmpeg_consumer(
-					narrow(key_file),
-					format_desc_,
-					true,
-					channel_layout));
-		}
-	}
 };	
 
 safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params)

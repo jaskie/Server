@@ -247,10 +247,10 @@ void init(const safe_ptr<core::media_info_repository>& media_info_repo)
 	av_lockmgr_register(ffmpeg_lock_callback);
 	av_log_set_callback(log_for_thread);
 
-	avdevice_register_all();
+	//avdevice_register_all();
     avfilter_register_all();
 	//fix_yadif_filter_format_query();
-	avformat_network_init();
+	//avformat_network_init();
 	av_register_all();
 	
 	core::register_consumer_factory([](const core::parameters& params){return ffmpeg::create_consumer(params);});
@@ -269,7 +269,7 @@ void init(const safe_ptr<core::media_info_repository>& media_info_repo)
 void uninit()
 {
 	avfilter_uninit();
-    avformat_network_deinit();
+    //avformat_network_deinit();
 	av_lockmgr_register(nullptr);
 }
 
