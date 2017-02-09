@@ -430,7 +430,7 @@ safe_ptr<AVCodecContext> open_codec(safe_ptr<AVFormatContext> context, enum AVMe
 {	
 	AVCodec* decoder;
 	index = THROW_ON_ERROR2(av_find_best_stream(context.get(), type, -1, -1, &decoder, 0), "[open_codec}");
-	THROW_ON_ERROR2(tbb_avcodec_open(context->streams[index]->codec, decoder), "[open_codec]");
+	THROW_ON_ERROR2(tbb_avcodec_open(context->streams[index]->codec, decoder, false), "[open_codec]");
 	return safe_ptr<AVCodecContext>(context->streams[index]->codec, avcodec_close);
 }
 

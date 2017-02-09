@@ -19,7 +19,7 @@
 * Author: Robert Nagy, ronag89@gmail.com
 */
 
-#include "../stdafx.h"
+#include "StdAfx.h"
 
 #include "tbb_avcodec.h"
 
@@ -84,32 +84,30 @@ int thread_execute2(AVCodecContext* s, int (*func)(AVCodecContext* c2, void* arg
     return 0;  
 }
 
-void thread_init(AVCodecContext* s, bool execute2enable)
+void thread_init(AVCodecContext* s, bool execute2enable, bool encoding)
 {
-	static int dummy_opaque;
-
     s->thread_type = FF_THREAD_SLICE || FF_THREAD_FRAME;
     s->execute			  = thread_execute;
 	if (execute2enable)
 		s->execute2			  = thread_execute2;
-	s->slice_count		  = MAX_THREADS;
-    s->thread_count		  = MAX_THREADS; // We are using a task-scheduler, so use as many "threads/tasks" as possible. 
+	if (!encoding)
+		s->slice_count		  = MAX_THREADS;
+	s->thread_count		  = MAX_THREADS; // We are using a task-scheduler, so use as many "threads/tasks" as possible. 
 
 	CASPAR_LOG(info) << "Initialized ffmpeg tbb context.";
 }
 
-int tbb_avcodec_open(AVCodecContext* avctx, AVCodec* codec)
+int tbb_avcodec_open(AVCodecContext* avctx, AVCodec* codec, bool encoding)
 {
-	//AVCodecID supported_codecs[] = {AV_CODEC_ID_MPEG2VIDEO, AV_CODEC_ID_PRORES, AV_CODEC_ID_FFV1, AV_CODEC_ID_H264, AV_CODEC_ID_HEVC };
+	AVCodecID supported_codecs[] = {AV_CODEC_ID_MPEG2VIDEO, AV_CODEC_ID_PRORES, AV_CODEC_ID_FFV1, AV_CODEC_ID_H264, AV_CODEC_ID_HEVC };
 
-	//avctx->thread_count = 1;
-	//// Some codecs don't like to have multiple multithreaded decoding instances. Only enable for those we know work.
-	//if(std::find(std::begin(supported_codecs), std::end(supported_codecs), codec->id) != std::end(supported_codecs) && 
-	//  ((codec->capabilities & CODEC_CAP_SLICE_THREADS) && (avctx->thread_type & FF_THREAD_SLICE)
-	//  ||  (codec->capabilities & CODEC_CAP_FRAME_THREADS)) && (avctx->thread_type & FF_THREAD_FRAME)) 
-	//{
-	//	thread_init(avctx, codec->id != AV_CODEC_ID_PRORES); // do not enable execute2 for prores codec as it cause crash
-	//}	
+	// Some codecs don't like to have multiple multithreaded decoding instances. Only enable for those we know work.
+	if(std::find(std::begin(supported_codecs), std::end(supported_codecs), codec->id) != std::end(supported_codecs) && 
+	  ((codec->capabilities & CODEC_CAP_SLICE_THREADS) && (avctx->thread_type & FF_THREAD_SLICE)
+	  ||  (codec->capabilities & CODEC_CAP_FRAME_THREADS)) && (avctx->thread_type & FF_THREAD_FRAME)) 
+	{
+		thread_init(avctx, codec->id != AV_CODEC_ID_PRORES, encoding); // do not enable execute2 for prores codec as it cause crash
+	}	
 	AVDictionary * options = NULL;
 	av_dict_set(&options, "refcounted_frames", "0", 0);
 	return avcodec_open2(avctx, codec, &options); 

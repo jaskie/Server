@@ -448,4 +448,18 @@ safe_ptr<core::frame_producer> create_producer(
 			make_safe<decklink_producer_proxy>(frame_factory, format_desc, audio_layout, device_index, filter_str, length, buffer_depth)));
 }
 
+safe_ptr<core::frame_producer> create_producer(const safe_ptr<core::frame_factory>& frame_factory, const boost::property_tree::wptree& ptree)
+{
+	const auto device_index = ptree.get(L"device", 1);
+	auto format_desc = core::video_format_desc::get(L"PAL");
+	return make_safe<decklink_producer_proxy>(
+		frame_factory,
+		format_desc,
+		core::default_channel_layout_repository().get_by_name(L"STEREO"),
+		device_index, 
+		L"", 
+		std::numeric_limits<uint32_t>::max(),
+		2);
+}
+
 }}

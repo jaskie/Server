@@ -58,6 +58,8 @@
 #include <modules/ogl/consumer/ogl_consumer.h>
 #include <modules/ffmpeg/consumer/ffmpeg_consumer.h>
 
+#include <modules/decklink/producer/decklink_producer.h>
+
 #include <protocol/amcp/AMCPProtocolStrategy.h>
 #include <protocol/cii/CIIProtocolStrategy.h>
 #include <protocol/CLK/CLKProtocolStrategy.h>
@@ -200,25 +202,28 @@ struct server::implementation : boost::noncopyable
 	{   
 		using boost::property_tree::wptree;
 		BOOST_FOREACH(auto& xml_channel, pt.get_child(L"configuration.channels"))
-		{		
-			auto format_desc = video_format_desc::get(widen(xml_channel.second.get(L"video-mode", L"PAL")));		
-			if(format_desc.format == video_format::invalid)
+		{
+			auto format_desc = video_format_desc::get(widen(xml_channel.second.get(L"video-mode", L"PAL")));
+			if (format_desc.format == video_format::invalid)
 				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Invalid video-mode."));
 			auto audio_channel_layout = default_channel_layout_repository().get_by_name(
-					boost::to_upper_copy(xml_channel.second.get(L"channel-layout", L"STEREO")));
-			
-			channels_.push_back(make_safe<video_channel>(channels_.size()+1, format_desc, ogl_, audio_channel_layout));
-			
+				boost::to_upper_copy(xml_channel.second.get(L"channel-layout", L"STEREO")));
+
+			channels_.push_back(make_safe<video_channel>(channels_.size() + 1, format_desc, ogl_, audio_channel_layout));
+
 			channels_.back()->monitor_output().attach_parent(monitor_subject_);
 			channels_.back()->mixer()->set_straight_alpha_output(
-					xml_channel.second.get(L"straight-alpha-output", false));
+				xml_channel.second.get(L"straight-alpha-output", false));
 
 			create_consumers(
 				xml_channel.second.get_child(L"consumers"),
-				[&] (const safe_ptr<core::frame_consumer>& consumer)
-				{
-					channels_.back()->output()->add(consumer);
-				});
+				[&](const safe_ptr<core::frame_consumer>& consumer)
+			{
+				channels_.back()->output()->add(consumer);
+			});
+			auto input = xml_channel.second.get_child_optional(L"input");
+			if (input.is_initialized())
+				create_input(input.get(), channels_.back());
 		}
 
 		// Dummy diagnostics channel
@@ -271,6 +276,27 @@ struct server::implementation : boost::noncopyable
 			{
 				CASPAR_LOG_CURRENT_EXCEPTION();
 			}
+		}
+	}
+
+	void create_input(const boost::property_tree::wptree& pt, const safe_ptr<video_channel> channel)
+	{
+		try
+		{
+			auto layer = pt.get<int>(L"layer", 0);
+			safe_ptr<frame_producer> producer = frame_producer::empty();
+			auto xml_producer = pt.get_child_optional(L"decklink");
+			if (xml_producer.is_initialized())
+			{
+				producer = decklink::create_producer(channel->mixer(), xml_producer.get());
+				channel->stage()->load(layer, producer);
+				channel->stage()->play(layer);
+				return;
+			}
+		}
+		catch (...)
+		{
+			CASPAR_LOG_CURRENT_EXCEPTION();
 		}
 	}
 		

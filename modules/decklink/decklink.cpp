@@ -31,6 +31,7 @@
 #include <core/parameters/parameters.h>
 #include <core/consumer/frame_consumer.h>
 #include <core/producer/frame_producer.h>
+#include <core/producer/frame/frame_factory.h>
 
 #include "interop/DeckLinkAPI_h.h"
 
@@ -60,7 +61,7 @@ void init()
 		
 	core::register_consumer_factory([](const core::parameters& params){return decklink::create_consumer(params);});
 	core::register_consumer_factory([](const core::parameters& params){return decklink::create_blocking_consumer(params);});
-	core::register_producer_factory(create_producer);
+	core::register_producer_factory([](const safe_ptr<core::frame_factory>& factory, const core::parameters& params) { return decklink::create_producer(factory, params); });
 }
 
 std::wstring get_version() 

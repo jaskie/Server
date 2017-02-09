@@ -35,5 +35,8 @@ namespace decklink {
 safe_ptr<core::frame_producer> create_producer(
 		const safe_ptr<core::frame_factory>& frame_factory,
 		const core::parameters& params);
+safe_ptr<core::frame_producer> create_producer(
+		const safe_ptr<core::frame_factory>& frame_factory, 
+		const boost::property_tree::wptree& ptree);
 
 }}
