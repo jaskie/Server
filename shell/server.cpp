@@ -40,7 +40,6 @@
 #include <core/producer/media_info/media_info.h>
 #include <core/producer/media_info/media_info_repository.h>
 #include <core/producer/media_info/in_memory_media_info_repository.h>
-#include <core/producer/output/output_producer.h>
 
 #include <modules/bluefish/bluefish.h>
 #include <modules/decklink/decklink.h>
@@ -132,8 +131,6 @@ struct server::implementation : boost::noncopyable
 		running_ = true;
 		setup_audio(env::properties());
 		
-		initialize_output_producer(channels_);
-
 		ffmpeg::init(media_info_repo_);
 		CASPAR_LOG(info) << L"Initialized ffmpeg module.";
 							  
