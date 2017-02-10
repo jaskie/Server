@@ -45,6 +45,7 @@ struct video_channel::implementation : boost::noncopyable
 	video_channel&							self_;
 	const int								index_;
 	video_format_desc						format_desc_;
+	channel_layout							audio_channel_layout_;
 	const safe_ptr<ogl_device>				ogl_;
 	const safe_ptr<diagnostics::graph>		graph_;
 
@@ -60,6 +61,7 @@ public:
 		, index_(index)
 		, format_desc_(format_desc)
 		, ogl_(ogl)
+		, audio_channel_layout_(audio_channel_layout)
 		, output_(new caspar::core::output(graph_, format_desc, index))
 		, mixer_(new caspar::core::mixer(graph_, output_, format_desc, ogl, audio_channel_layout))
 		, stage_(new caspar::core::stage(graph_, mixer_, format_desc))	
@@ -155,6 +157,7 @@ safe_ptr<mixer> video_channel::mixer() { return impl_->mixer_;}
 safe_ptr<output> video_channel::output() { return impl_->output_;} 
 video_format_desc video_channel::get_video_format_desc() const{return impl_->format_desc_;}
 void video_channel::set_video_format_desc(const video_format_desc& format_desc){impl_->set_video_format_desc(format_desc);}
+channel_layout video_channel::get_channel_layot() const { return impl_->audio_channel_layout_; }
 boost::property_tree::wptree video_channel::info() const{return impl_->info();}
 int video_channel::index() const {return impl_->index_;}
 monitor::subject& video_channel::monitor_output(){return *impl_->monitor_subject_;}

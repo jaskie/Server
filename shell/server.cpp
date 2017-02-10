@@ -40,6 +40,7 @@
 #include <core/producer/media_info/media_info.h>
 #include <core/producer/media_info/media_info_repository.h>
 #include <core/producer/media_info/in_memory_media_info_repository.h>
+#include <core/producer/output/output_producer.h>
 
 #include <modules/bluefish/bluefish.h>
 #include <modules/decklink/decklink.h>
@@ -130,6 +131,8 @@ struct server::implementation : boost::noncopyable
 	{
 		running_ = true;
 		setup_audio(env::properties());
+		
+		initialize_output_producer(channels_);
 
 		ffmpeg::init(media_info_repo_);
 		CASPAR_LOG(info) << L"Initialized ffmpeg module.";
@@ -215,12 +218,16 @@ struct server::implementation : boost::noncopyable
 			channels_.back()->mixer()->set_straight_alpha_output(
 				xml_channel.second.get(L"straight-alpha-output", false));
 
-			create_consumers(
-				xml_channel.second.get_child(L"consumers"),
-				[&](const safe_ptr<core::frame_consumer>& consumer)
+			auto consumers = xml_channel.second.get_child_optional(L"consumers");
+			if (consumers.is_initialized())
 			{
-				channels_.back()->output()->add(consumer);
-			});
+				create_consumers(
+					consumers.get(),
+					[&](const safe_ptr<core::frame_consumer>& consumer)
+				{
+					channels_.back()->output()->add(consumer);
+				});
+			}
 			auto input = xml_channel.second.get_child_optional(L"input");
 			if (input.is_initialized())
 				create_input(input.get(), channels_.back());
@@ -283,12 +290,13 @@ struct server::implementation : boost::noncopyable
 	{
 		try
 		{
-			auto layer = pt.get<int>(L"layer", 0);
+			int layer = pt.get(L"layer", 0);
 			safe_ptr<frame_producer> producer = frame_producer::empty();
 			auto xml_producer = pt.get_child_optional(L"decklink");
 			if (xml_producer.is_initialized())
 			{
-				producer = decklink::create_producer(channel->mixer(), xml_producer.get());
+				auto device_index = xml_producer.get().get(L"device", 1);
+				producer = decklink::create_producer(channel->mixer(), channel->get_video_format_desc(), channel->get_channel_layot(), device_index);
 				channel->stage()->load(layer, producer);
 				channel->stage()->play(layer);
 				return;

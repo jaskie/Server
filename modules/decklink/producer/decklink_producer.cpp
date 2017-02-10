@@ -42,7 +42,6 @@
 #include <core/parameters/parameters.h>
 #include <core/monitor/monitor.h>
 #include <core/mixer/write_frame.h>
-#include <core/mixer/audio/audio_util.h>
 #include <core/producer/frame/frame_transform.h>
 #include <core/producer/frame/frame_factory.h>
 
@@ -50,7 +49,6 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/foreach.hpp>
-#include <boost/property_tree/ptree.hpp>
 #include <boost/timer.hpp>
 #include <boost/locale.hpp>
 
@@ -448,14 +446,12 @@ safe_ptr<core::frame_producer> create_producer(
 			make_safe<decklink_producer_proxy>(frame_factory, format_desc, audio_layout, device_index, filter_str, length, buffer_depth)));
 }
 
-safe_ptr<core::frame_producer> create_producer(const safe_ptr<core::frame_factory>& frame_factory, const boost::property_tree::wptree& ptree)
+safe_ptr<core::frame_producer> create_producer(const safe_ptr<core::frame_factory>& frame_factory, const core::video_format_desc format_desc, const core::channel_layout channel_layout, int device_index)
 {
-	const auto device_index = ptree.get(L"device", 1);
-	auto format_desc = core::video_format_desc::get(L"PAL");
 	return make_safe<decklink_producer_proxy>(
 		frame_factory,
 		format_desc,
-		core::default_channel_layout_repository().get_by_name(L"STEREO"),
+		channel_layout,
 		device_index, 
 		L"", 
 		std::numeric_limits<uint32_t>::max(),

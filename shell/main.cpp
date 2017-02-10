@@ -305,11 +305,11 @@ int main(int argc, wchar_t* argv[])
 					{
 						// This is just dummy code for testing.
 						if(wcmd.substr(0, 1) == L"1")
-							wcmd = L"PLAY 1-0 \"KREW\" LOOP";
+							wcmd = L"PLAY 1-0 CHANNEL 2";
 						else if(wcmd.substr(0, 1) == L"2")
-							wcmd = L"ADD 1 FILE \"RECORDING.MXF\"";
+							wcmd = L"ADD 2 FILE \"RECORDING.MXF\"";
 						else if(wcmd.substr(0, 1) == L"3")
-							wcmd = L"REMOVE 1 FILE";
+							wcmd = L"REMOVE 2 FILE";
 						else if(wcmd.substr(0, 1) == L"4")
 							wcmd = L"PLAY 1-0 RECORDING.MXF";
 						else if(wcmd.substr(0, 1) == L"5")

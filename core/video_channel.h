@@ -59,6 +59,8 @@ public:
 	
 	video_format_desc get_video_format_desc() const;
 	void set_video_format_desc(const video_format_desc& format_desc);
+
+	channel_layout get_channel_layot() const;
 	
 	boost::property_tree::wptree info() const;
 	boost::property_tree::wptree delay_info() const;

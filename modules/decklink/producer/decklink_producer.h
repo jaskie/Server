@@ -22,6 +22,8 @@
 #pragma once
 
 #include <core/producer/frame_producer.h>
+#include <core/video_format.h>
+#include <core/mixer/audio/audio_util.h>
 
 #include <string>
 #include <vector>
@@ -36,7 +38,8 @@ safe_ptr<core::frame_producer> create_producer(
 		const safe_ptr<core::frame_factory>& frame_factory,
 		const core::parameters& params);
 safe_ptr<core::frame_producer> create_producer(
-		const safe_ptr<core::frame_factory>& frame_factory, 
-		const boost::property_tree::wptree& ptree);
-
+	const safe_ptr<core::frame_factory>& frame_factory, 
+	const core::video_format_desc format_desc, 
+	const core::channel_layout channel_layout, 
+	int device_index);
 }}
