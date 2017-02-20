@@ -325,13 +325,16 @@ public:
 
 		uint32_t nb_frames = file_nb_frames();
 
-		nb_frames = std::min(length_, nb_frames);
+		if (length_ > 0)
+			nb_frames = std::min(length_, nb_frames);
 		return nb_frames;
 	}
 
 	uint32_t file_nb_frames() const
 	{
-		return video_decoder_ ? video_decoder_->nb_frames() : std::numeric_limits<uint32_t>::max();
+		if (video_decoder_)
+			return  std::max(video_decoder_->nb_frames(), file_frame_number_);
+		return std::numeric_limits<uint32_t>::max();
 	}
 	
 	virtual boost::unique_future<std::wstring> call(const std::wstring& param) override

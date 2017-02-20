@@ -74,13 +74,19 @@ public:
 		, height_(codec_context_->height)
 		, stream_(input_.format_context()->streams[stream_index_])
 		, stream_start_pts_(stream_->start_time)
-		, nb_frames_(static_cast<uint32_t>(stream_->nb_frames))
-		
+		, nb_frames_(static_cast<uint32_t>(calc_nb_frames(stream_)))		
 	{
-		codec_context_->refcounted_frames = 0;
 		invert_field_order_ = invert_field_order;
 		seek_pts_ = 0;
 		CASPAR_LOG(trace) << "Codec: " << codec_->long_name;
+	}
+
+	int64_t calc_nb_frames(const AVStream* stream)
+	{
+		if (stream->nb_frames > 0)
+			return stream->nb_frames;
+		else
+			return (stream->duration * stream->time_base.num * stream->r_frame_rate.num) / (stream->time_base.den * stream->r_frame_rate.den);
 	}
 
 	std::shared_ptr<AVFrame> poll()

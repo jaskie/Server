@@ -108,9 +108,8 @@ int tbb_avcodec_open(AVCodecContext* avctx, AVCodec* codec, bool encoding)
 	{
 		thread_init(avctx, codec->id != AV_CODEC_ID_PRORES, encoding); // do not enable execute2 for prores codec as it cause crash
 	}	
-	AVDictionary * options = NULL;
-	av_dict_set(&options, "refcounted_frames", "0", 0);
-	return avcodec_open2(avctx, codec, &options); 
+	avctx->refcounted_frames = 0;
+	return avcodec_open2(avctx, codec, NULL); 
 }
 
 }
