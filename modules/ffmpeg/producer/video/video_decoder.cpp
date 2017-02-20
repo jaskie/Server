@@ -100,7 +100,6 @@ public:
 
 	std::shared_ptr<AVFrame> decode(std::shared_ptr<AVPacket> pkt)
 	{
-
 		std::shared_ptr<AVFrame> decoded_frame = create_frame();
 
 		int got_picture_ptr = 0;

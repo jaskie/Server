@@ -45,7 +45,7 @@ class channel_consumer : public frame_consumer
 {	
 	tbb::concurrent_bounded_queue<std::shared_ptr<read_frame>>	frame_buffer_;
 	core::video_format_desc										format_desc_;
-	int															channel_index_;
+	tbb::atomic<int>											channel_index_;
 	tbb::atomic<bool>											is_running_;
 	tbb::atomic<int64_t>										current_age_;
 
@@ -107,6 +107,11 @@ public:
 	virtual int index() const override
 	{
 		return 78500 + channel_index_;
+	}
+	
+	int channel_index() const
+	{
+		return channel_index_;
 	}
 
 	// channel_consumer
@@ -192,6 +197,13 @@ public:
 		desc.pix_fmt = core::pixel_format::bgra;
 		desc.planes.push_back(core::pixel_format_desc::plane(format_desc.width, format_desc.height, 4));
 		auto frame = frame_factory_->create_frame(this, desc);
+		bool copy_audio = !double_speed && !half_speed;
+
+		if (copy_audio)
+		{
+			frame->audio_data().reserve(read_frame->audio_data().size());
+			boost::copy(read_frame->audio_data(), std::back_inserter(frame->audio_data()));
+		}
 
 		fast_memcpy(frame->image_data().begin(), read_frame->image_data().begin(), read_frame->image_data().size());
 		frame->commit();
@@ -211,7 +223,7 @@ public:
 
 	virtual std::wstring print() const override
 	{
-		return L"channel[]";
+		return L"channel[" + boost::lexical_cast<std::wstring>(consumer_->channel_index()) + L"]";
 	}
 
 	virtual boost::property_tree::wptree info() const override
