@@ -414,7 +414,7 @@ public:
 		int64_t time_to_seek = ffmpeg_time_from_frame_number(frame, fps_);
 		input_.seek(time_to_seek);
 		if (video_decoder_)
-			video_decoder_->seek(time_to_seek);
+			video_decoder_->seek(time_to_seek, frame);
 		if (audio_decoder_)
 			audio_decoder_->seek(time_to_seek);
 		file_frame_number_ = frame;

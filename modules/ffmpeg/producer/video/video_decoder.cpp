@@ -65,6 +65,7 @@ struct video_decoder::implementation : boost::noncopyable
 	const int64_t							stream_start_pts_;
 	tbb::atomic<int64_t>					seek_pts_;
 	tbb::atomic<bool>						invert_field_order_;
+	tbb::atomic<uint32_t>					frame_decoded_;
 public:
 	explicit implementation(input input, bool invert_field_order)
 		: input_(input)
@@ -78,6 +79,7 @@ public:
 	{
 		invert_field_order_ = invert_field_order;
 		seek_pts_ = 0;
+		frame_decoded_ = 0;
 		CASPAR_LOG(trace) << "Codec: " << codec_->long_name;
 	}
 
@@ -86,7 +88,13 @@ public:
 		if (stream->nb_frames > 0)
 			return stream->nb_frames;
 		else
-			return (stream->duration * stream->time_base.num * stream->r_frame_rate.num) / (stream->time_base.den * stream->r_frame_rate.den);
+			if (stream->duration == AV_NOPTS_VALUE)
+				return 0;
+			else
+			{
+				AVRational r_frame_rate = av_stream_get_r_frame_rate(stream);
+				return (stream->duration * stream->time_base.num * r_frame_rate.num) / (stream->time_base.den * r_frame_rate.den);
+			}				
 	}
 
 	std::shared_ptr<AVFrame> poll()
@@ -117,19 +125,26 @@ public:
 		int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(decoded_frame.get());
 		if (frame_time_stamp < seek_pts_)
 			return nullptr;
+		frame_decoded_++;
 		return decoded_frame;
 	}
 
-	void seek(uint64_t time)
+	void seek(uint64_t time, uint32_t frame)
 	{
 		avcodec_flush_buffers(codec_context_.get());
 		seek_pts_ = stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_
 			+ (time * stream_->time_base.den / (AV_TIME_BASE * stream_->time_base.num));
+		frame_decoded_ = frame;
 	}
 
 	void invert_field_order (bool invert)
 	{
 		invert_field_order_ = invert;
+	}
+
+	uint32_t nb_frames()
+	{
+		return nb_frames_ == 0 ? frame_decoded_ : nb_frames_;
 	}
 
 	std::wstring print() const
@@ -142,9 +157,9 @@ video_decoder::video_decoder(input input, bool invert_field_order) : impl_(new i
 std::shared_ptr<AVFrame> video_decoder::poll(){return impl_->poll();}
 size_t video_decoder::width() const{return impl_->width_;}
 size_t video_decoder::height() const{return impl_->height_;}
-uint32_t video_decoder::nb_frames() const{return impl_->nb_frames_;}
+uint32_t video_decoder::nb_frames() const{return impl_->nb_frames();}
 bool	video_decoder::is_progressive() const{return impl_->is_progressive_;}
 std::wstring video_decoder::print() const{return impl_->print();}
-void video_decoder::seek(uint64_t time) { impl_->seek(time);}
+void video_decoder::seek(uint64_t time, uint32_t frame) { impl_->seek(time, frame);}
 void video_decoder::invert_field_order(bool invert) {impl_-> invert_field_order(invert);}
 }}

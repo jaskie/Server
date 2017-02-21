@@ -591,12 +591,12 @@ std::int64_t create_channel_layout_bitmask(int num_channels)
 
 int64_t ffmpeg_time_from_frame_number(int32_t frame_number, double fps)
 {
-	return (int64_t)(frame_number * (int64_t)AV_TIME_BASE / fps);
+	return static_cast<std::int64_t>(frame_number * static_cast<std::int64_t>(AV_TIME_BASE / fps));
 }
 
 int32_t frame_number_from_ffmpeg_time(int64_t time, double fps)
 {
-	return (int32_t)(time * fps / AV_TIME_BASE);
+	return static_cast<std::int32_t>(time * fps / AV_TIME_BASE);
 }
 
 }}

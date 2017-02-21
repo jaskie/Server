@@ -49,7 +49,7 @@ public:
 	uint32_t nb_frames()	const;
 	bool	 is_progressive() const;
 	std::wstring print()	const;
-	void seek(uint64_t time);
+	void seek(uint64_t time, uint32_t frame);
 	void invert_field_order(bool invert);
 
 private:
