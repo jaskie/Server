@@ -269,7 +269,7 @@ struct ffmpeg_consumer : boost::noncopyable
 	tbb::atomic<int64_t>					current_encoding_delay_;
 
 public:
-	ffmpeg_consumer(const std::string& filename, const core::video_format_desc& format_desc, bool key_only)
+	ffmpeg_consumer(const std::string& filename, const core::video_format_desc& format_desc, bool key_only, bool frag_mov)
 		: filename_(filename)
 		, format_context_(alloc_output_format_context(filename, output_format_.format), avformat_free_context)
 		, format_desc_(format_desc)
@@ -291,7 +291,7 @@ public:
 
 		encode_executor_.set_capacity(8);
 
-		encode_executor_.begin_invoke([this] {
+		encode_executor_.begin_invoke([this, frag_mov] {
 			//strcpy_s(format_context_->filename, filename_.c_str());
 
 			//  Add the audio and video streams using the default format codecs	and initialize the codecs.
@@ -303,7 +303,10 @@ public:
 			
 			// Open the output ffmpeg
 			THROW_ON_ERROR2(avio_open(&format_context_->pb, filename_.c_str(), AVIO_FLAG_WRITE | AVIO_FLAG_NONBLOCK), "[ffmpeg_consumer]");
-			THROW_ON_ERROR2(avformat_write_header(format_context_.get(), nullptr), "[ffmpeg_consumer]");
+			AVDictionary * dict;
+			if (frag_mov && !std::strcmp(output_format_.format->name, "mov"))
+				av_dict_set(&dict, "movflags", "frag_keyframe", 1);
+			THROW_ON_ERROR2(avformat_write_header(format_context_.get(), &dict), "[ffmpeg_consumer]");
 			CASPAR_LOG(info) << print() << L" Successfully Initialized.";
 		});
 	}
@@ -694,6 +697,7 @@ struct ffmpeg_consumer_proxy : public core::frame_consumer
 {
 	const std::wstring				filename_;
 	const bool						separate_key_;
+	const bool						frag_mov_;
 	core::video_format_desc			format_desc_;
 
 	std::unique_ptr<ffmpeg_consumer> consumer_;
@@ -701,9 +705,10 @@ struct ffmpeg_consumer_proxy : public core::frame_consumer
 
 public:
 
-	ffmpeg_consumer_proxy(const std::wstring& filename, bool separate_key_)
+	ffmpeg_consumer_proxy(const std::wstring& filename, bool separate_key_, bool frag_mov)
 		: filename_(filename)
 		, separate_key_(separate_key_)
+		, frag_mov_(frag_mov)
 	{
 	}
 	
@@ -716,7 +721,8 @@ public:
 		consumer_.reset(new ffmpeg_consumer(
 			narrow(filename_),
 			format_desc_,
-			false));
+			false,
+			frag_mov_));
 
 		if (separate_key_)
 		{
@@ -727,7 +733,8 @@ public:
 			key_only_consumer_.reset(new ffmpeg_consumer(
 				narrow(key_file),
 				format_desc_,
-				true));
+				true, 
+				frag_mov_));
 		}
 	}
 
@@ -793,13 +800,14 @@ public:
 
 safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params)
 {
-	if(params.size() < 1 || params[0] != L"FILE")
+	if(params.size() < 1 || (params[0] != L"FILE" && params[0] != L"STREAM"))
 		return core::frame_consumer::empty();
 
 	auto params2 = params;
 	
 	auto filename	= (params2.size() > 1 ? params2[1] : L"");
 	bool separate_key = params2.remove_if_exists(L"SEPARATE_KEY");
+	bool frag_mov = params2.remove_if_exists(L"FRAGMENT_MOOV_ATOM");
 
 	
 	if (params2.size() >= 3)
@@ -820,7 +828,7 @@ safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params)
 		}
 	}
 		
-	return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, separate_key);
+	return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, separate_key, frag_mov);
 }
 
 safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptree& ptree)
@@ -828,9 +836,10 @@ safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptre
 	auto filename		= ptree.get<std::wstring>(L"path");
 	auto codec			= ptree.get(L"vcodec", L"libx264");
 	auto separate_key	= ptree.get(L"separate-key", false);
+	bool frag_mov		= ptree.get(L"fragment-mov-atom", false);
 
 	
-	return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, separate_key);
+	return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, separate_key, frag_mov);
 }
 
 }}
