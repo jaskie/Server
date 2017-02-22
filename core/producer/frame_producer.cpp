@@ -323,6 +323,7 @@ safe_ptr<core::frame_producer> create_producer(const safe_ptr<frame_factory>& my
 		{
 			auto resource_name = params_copy.at_original(0);
 			params_copy.set(0, resource_name + L"_A");
+			params_copy.push_back(L"IS_ALPHA");
 			key_producer = do_create_producer(my_frame_factory, params_copy, g_factories);			
 			if(key_producer == frame_producer::empty())
 			{

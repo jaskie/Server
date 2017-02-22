@@ -114,6 +114,7 @@ struct ffmpeg_producer : public core::frame_producer
 	uint32_t													start_;
 	const uint32_t												length_;
 	const bool													thumbnail_mode_;
+	const bool													alpha_mode_;
 	const std::string											filter_str_;
 	bool														loop_;
 
@@ -125,16 +126,17 @@ struct ffmpeg_producer : public core::frame_producer
 	
 		
 public:
-	explicit ffmpeg_producer(const safe_ptr<core::frame_factory>& frame_factory, const std::wstring& filename, const std::wstring& filter, bool loop, uint32_t start, uint32_t length, bool thumbnail_mode, const std::wstring& custom_channel_order, bool field_order_inverted)
+	explicit ffmpeg_producer(const safe_ptr<core::frame_factory>& frame_factory, const std::wstring& filename, const std::wstring& filter, bool loop, uint32_t start, uint32_t length, bool thumbnail_mode, bool alpha_mode, const std::wstring& custom_channel_order, bool field_order_inverted)
 		: filename_(filename)
 		, path_relative_to_media_(get_relative_or_original(filename, env::media_folder()))
-		, frame_factory_(frame_factory)		
+		, frame_factory_(frame_factory)
 		, format_desc_(frame_factory->get_video_format_desc())
 		, initial_logger_disabler_(temporary_disable_logging_for_thread(thumbnail_mode))
 		, input_(graph_, filename_, thumbnail_mode)
 		, fps_(read_fps(*input_.format_context().get(), format_desc_.fps))
 		, length_(length)
 		, thumbnail_mode_(thumbnail_mode)
+		, alpha_mode_(alpha_mode)
 		, last_frame_(core::basic_frame::empty())
 		, filter_str_(narrow(filter))
 		, custom_channel_order_(custom_channel_order)
@@ -186,6 +188,8 @@ public:
 
 		muxer_.reset(new frame_muxer(format_desc_.fps, frame_factory, thumbnail_mode_, audio_channel_layout_, filter_str_));
 		seek(start);
+		for (int n = 0; n < 16 && frame_buffer_.size() < 4; ++n)
+			try_decode_frame(thumbnail_mode ? core::frame_producer::DEINTERLACE_HINT : alpha_mode ? core::frame_producer::ALPHA_HINT : core::frame_producer::NO_HINT);
 	}
 
 	// frame_producer
@@ -422,7 +426,7 @@ public:
 	}
 
 
-	void decode_frame(std::shared_ptr<AVFrame>& video, std::shared_ptr<core::audio_buffer>& audio)
+	void decode_frame(std::shared_ptr<AVFrame>& video, std::shared_ptr<core::audio_buffer>& audio, const int hints)
 	{
 		tbb::parallel_invoke(
 			[&]
@@ -435,6 +439,9 @@ public:
 			if (!muxer_->audio_ready() && audio_decoder_)
 				audio = audio_decoder_->poll();
 		});
+
+		muxer_->push(video, hints);
+		muxer_->push(audio);
 	}
 	
 	void try_decode_frame(int hints)
@@ -449,10 +456,7 @@ public:
 		std::shared_ptr<AVFrame>			video;
 		std::shared_ptr<core::audio_buffer> audio;
 
-		decode_frame(video, audio);
-
-		muxer_->push(video, hints);
-		muxer_->push(audio);
+		decode_frame(video, audio, hints);
 
 		if((!audio_decoder_ || (audio == nullptr && input_.eof()))
 			&& !muxer_->audio_ready())
@@ -498,11 +502,12 @@ safe_ptr<core::frame_producer> create_producer(
 	auto filter_str = params.get(L"FILTER", L""); 	
 	auto custom_channel_order	= params.get(L"CHANNEL_LAYOUT", L"");
 	auto field_order_inverted = params.has(L"FIELD_ORDER_INVERTED");
+	bool is_alpha = params.has(L"IS_ALPHA");
 
 	boost::replace_all(filter_str, L"DEINTERLACE", L"YADIF=0:-1");
 	boost::replace_all(filter_str, L"DEINTERLACE_BOB", L"YADIF=1:-1");
 	
-	return create_producer_destroy_proxy(make_safe<ffmpeg_producer>(frame_factory, filename, filter_str, loop, start, length, false, custom_channel_order, field_order_inverted));
+	return create_producer_destroy_proxy(make_safe<ffmpeg_producer>(frame_factory, filename, filter_str, loop, start, length, false, is_alpha, custom_channel_order, field_order_inverted));
 }
 
 safe_ptr<core::frame_producer> create_thumbnail_producer(
@@ -517,7 +522,7 @@ safe_ptr<core::frame_producer> create_thumbnail_producer(
 	if(filename.empty())
 		return core::frame_producer::empty();
 	
-	return make_safe<ffmpeg_producer>(frame_factory, filename, L"", false, 0, std::numeric_limits<uint32_t>::max(), true, L"", false);
+	return make_safe<ffmpeg_producer>(frame_factory, filename, L"", false, 0, std::numeric_limits<uint32_t>::max(), true, false, L"", false);
 }
 
 }}
