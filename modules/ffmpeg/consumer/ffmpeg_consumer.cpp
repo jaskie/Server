@@ -236,6 +236,8 @@ struct output_format
 	}
 };
 
+static core::read_frame flush_frame;
+
 typedef std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>	byte_vector;
 
 struct ffmpeg_consumer : boost::noncopyable
@@ -313,6 +315,9 @@ public:
 
 	~ffmpeg_consumer()
 	{
+		if ((video_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY)
+			|| (!key_only_ && (audio_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY)))
+			encode_executor_.begin_invoke([this] { flush_encoders(); });
 		encode_executor_.stop();
 		encode_executor_.join();
 		LOG_ON_ERROR2(av_write_trailer(format_context_.get()), "[ffmpeg_consumer]");
@@ -548,7 +553,7 @@ public:
 		av_init_packet(pkt.get());
 		int got_packet;
 
-		THROW_ON_ERROR2(avcodec_encode_video2(codec_context, pkt.get(), av_frame.get(), &got_packet), "[audio_encoder]");
+		THROW_ON_ERROR2(avcodec_encode_video2(codec_context, pkt.get(), av_frame.get(), &got_packet), "[video_encoder]");
 
 		if (got_packet == 0)
 			return;
@@ -562,8 +567,7 @@ public:
 			pkt->flags |= AV_PKT_FLAG_KEY;
 
 		pkt->stream_index = video_st_->index;
-
-		av_interleaved_write_frame(format_context_.get(), pkt.get());
+		THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), pkt.get()), "[video_encoder]");
 	}
 	
 	void resample_audio(core::read_frame& frame, AVCodecContext* ctx)
@@ -691,6 +695,49 @@ public:
 		// TODO: adjust PTS accordingly to make dropped frames contribute
 		//       to the total playing time
 	}
+
+	void flush_encoders()
+	{
+		bool audio_full = false;
+		bool video_full = false;
+		bool need_flush_audio = !key_only_ && (audio_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY) != 0;
+		bool need_flush_video = (video_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY) != 0;
+		do
+		{
+			audio_full |= !need_flush_audio || flush_stream(false);
+			video_full |= !need_flush_video || flush_stream(true);
+		} while (!audio_full || !video_full);
+	}
+
+	
+	bool flush_stream(bool video)
+	{
+		std::shared_ptr<AVPacket> pkt(av_packet_alloc(), [](AVPacket *p) { av_packet_free(&p); });
+
+		av_init_packet(pkt.get());
+		std::shared_ptr<AVStream> stream = video ? video_st_ : audio_st_;
+		int got_packet;
+		if (video)
+			THROW_ON_ERROR2(avcodec_encode_video2(stream->codec, pkt.get(), NULL, &got_packet), "[flush_video]");
+		else
+			THROW_ON_ERROR2(avcodec_encode_audio2(stream->codec, pkt.get(), NULL, &got_packet), "[flush_audio]");
+
+		if (got_packet == 0)
+			return true;
+
+		if (pkt->pts != AV_NOPTS_VALUE)
+			pkt->pts = av_rescale_q(pkt->pts, stream->codec->time_base, stream->time_base);
+		if (pkt->dts != AV_NOPTS_VALUE)
+			pkt->dts = av_rescale_q(pkt->dts, stream->codec->time_base, stream->time_base);
+
+		if (stream->codec->coded_frame->key_frame)
+			pkt->flags |= AV_PKT_FLAG_KEY;
+
+		pkt->stream_index = stream->index;
+		THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), pkt.get()), "[flush_stream]");
+		return false;
+	}
+
 };
 
 struct ffmpeg_consumer_proxy : public core::frame_consumer
