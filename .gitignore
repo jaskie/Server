@@ -45,6 +45,11 @@
 /modules/image/tmp
 /modules/image/image.vcxproj.user
 
+# /modules/ndi/
+/modules/ndi/bin
+/modules/ndi/tmp
+/modules/ndi/ndi.vcxproj.user
+
 # /modules/oal/
 /modules/oal/bin
 /modules/oal/tmp

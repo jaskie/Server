@@ -71,6 +71,9 @@
     <ProjectReference Include="..\modules\image\image.vcxproj">
       <Project>{3e11ff65-a9da-4f80-87f2-a7c6379ed5e2}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\modules\ndi\ndi.vcxproj">
+      <Project>{F5771E03-EB2F-5AD6-01BC-E9DF79145329}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\modules\oal\oal.vcxproj">
       <Project>{82ed7ed6-8a15-40ec-a8af-f5e712e0da68}</Project>
     </ProjectReference>

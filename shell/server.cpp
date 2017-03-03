@@ -57,8 +57,9 @@
 #include <modules/decklink/consumer/blocking_decklink_consumer.h>
 #include <modules/ogl/consumer/ogl_consumer.h>
 #include <modules/ffmpeg/consumer/ffmpeg_consumer.h>
-
 #include <modules/decklink/producer/decklink_producer.h>
+
+#include <modules/ndi/ndi.h>
 
 #include <protocol/amcp/AMCPProtocolStrategy.h>
 #include <protocol/cii/CIIProtocolStrategy.h>
@@ -151,6 +152,9 @@ struct server::implementation : boost::noncopyable
 
 		image::init();		  
 		CASPAR_LOG(info) << L"Initialized image module.";
+
+		ndi::init();
+		CASPAR_LOG(info) << L"Initialized ndi module.";
 
 		setup_channels(env::properties());
 		CASPAR_LOG(info) << L"Initialized channels.";
