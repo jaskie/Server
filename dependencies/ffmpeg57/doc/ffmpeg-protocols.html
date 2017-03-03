@@ -11,7 +11,7 @@
     <link rel="stylesheet" type="text/css" href="style.min.css">
   </head>
   <body>
-    <div style="width: 95%; margin: auto">
+    <div class="container">
       <h1>
       FFmpeg Protocols Documentation
       </h1>
@@ -72,13 +72,14 @@
     <li><a name="toc-sctp" href="#sctp">3.29 sctp</a></li>
     <li><a name="toc-srtp" href="#srtp">3.30 srtp</a></li>
     <li><a name="toc-subfile" href="#subfile">3.31 subfile</a></li>
-    <li><a name="toc-tcp" href="#tcp">3.32 tcp</a></li>
-    <li><a name="toc-tls" href="#tls">3.33 tls</a></li>
-    <li><a name="toc-udp" href="#udp">3.34 udp</a>
+    <li><a name="toc-tee" href="#tee">3.32 tee</a></li>
+    <li><a name="toc-tcp" href="#tcp">3.33 tcp</a></li>
+    <li><a name="toc-tls" href="#tls">3.34 tls</a></li>
+    <li><a name="toc-udp" href="#udp">3.35 udp</a>
     <ul class="no-bullet">
-      <li><a name="toc-Examples-1" href="#Examples-1">3.34.1 Examples</a></li>
+      <li><a name="toc-Examples-1" href="#Examples-1">3.35.1 Examples</a></li>
     </ul></li>
-    <li><a name="toc-unix" href="#unix">3.35 unix</a></li>
+    <li><a name="toc-unix" href="#unix">3.36 unix</a></li>
   </ul></li>
   <li><a name="toc-See-Also" href="#See-Also">4 See Also</a></li>
   <li><a name="toc-Authors" href="#Authors">5 Authors</a></li>
@@ -395,7 +396,7 @@ value is -1.
 </p>
 </dd>
 <dt><samp>content_type</samp></dt>
-<dd><p>Set a specific content type for the POST messages.
+<dd><p>Set a specific content type for the POST messages or for listen mode.
 </p>
 </dd>
 <dt><samp>http_proxy</samp></dt>
@@ -415,10 +416,13 @@ value must be a string encoding the headers.
 <dd><p>Set custom HTTP post data.
 </p>
 </dd>
-<dt><samp>user-agent</samp></dt>
 <dt><samp>user_agent</samp></dt>
 <dd><p>Override the User-Agent header. If not specified the protocol will use a
 string describing the libavformat build. (&quot;Lavf/&lt;version&gt;&quot;)
+</p>
+</dd>
+<dt><samp>user-agent</samp></dt>
+<dd><p>This is a deprecated option, you can use user_agent instead it.
 </p>
 </dd>
 <dt><samp>timeout</samp></dt>
@@ -492,7 +496,7 @@ autodetection in the future.
 <dd><p>If set to 1 enables experimental HTTP server. This can be used to send data when
 used as an output option, or read data from a client with HTTP POST when used as
 an input option.
-If set to 2 enables experimental mutli-client HTTP server. This is not yet implemented
+If set to 2 enables experimental multi-client HTTP server. This is not yet implemented
 in ffmpeg.c or ffserver.c and thus must not be used as a command line option.
 </p><div class="example">
 <pre class="example"># Server side (sending):
@@ -1384,8 +1388,18 @@ externally and multiplied by 2048):
 <pre class="example">subfile,,start,183241728,end,366490624,,:archive.tar
 </pre></div>
 
+<a name="tee"></a>
+<h3 class="section">3.32 tee<span class="pull-right"><a class="anchor hidden-xs" href="#tee" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-tee" aria-hidden="true">TOC</a></span></h3>
+
+<p>Writes the output to multiple protocols. The individual outputs are separated
+by |
+</p>
+<div class="example">
+<pre class="example">tee:file://path/to/local/this.avi|file://path/to/local/that.avi
+</pre></div>
+
 <a name="tcp"></a>
-<h3 class="section">3.32 tcp<span class="pull-right"><a class="anchor hidden-xs" href="#tcp" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-tcp" aria-hidden="true">TOC</a></span></h3>
+<h3 class="section">3.33 tcp<span class="pull-right"><a class="anchor hidden-xs" href="#tcp" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-tcp" aria-hidden="true">TOC</a></span></h3>
 
 <p>Transmission Control Protocol.
 </p>
@@ -1432,7 +1446,7 @@ ffplay tcp://<var>hostname</var>:<var>port</var>
 </pre></div>
 
 <a name="tls"></a>
-<h3 class="section">3.33 tls<span class="pull-right"><a class="anchor hidden-xs" href="#tls" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-tls" aria-hidden="true">TOC</a></span></h3>
+<h3 class="section">3.34 tls<span class="pull-right"><a class="anchor hidden-xs" href="#tls" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-tls" aria-hidden="true">TOC</a></span></h3>
 
 <p>Transport Layer Security (TLS) / Secure Sockets Layer (SSL)
 </p>
@@ -1498,7 +1512,7 @@ the server role in the handshake instead of the client role.
 </pre></div>
 
 <a name="udp"></a>
-<h3 class="section">3.34 udp<span class="pull-right"><a class="anchor hidden-xs" href="#udp" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-udp" aria-hidden="true">TOC</a></span></h3>
+<h3 class="section">3.35 udp<span class="pull-right"><a class="anchor hidden-xs" href="#udp" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-udp" aria-hidden="true">TOC</a></span></h3>
 
 <p>User Datagram Protocol.
 </p>
@@ -1603,7 +1617,7 @@ a broadcast storm protection.
 </dl>
 
 <a name="Examples-1"></a>
-<h4 class="subsection">3.34.1 Examples<span class="pull-right"><a class="anchor hidden-xs" href="#Examples-1" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Examples-1" aria-hidden="true">TOC</a></span></h4>
+<h4 class="subsection">3.35.1 Examples<span class="pull-right"><a class="anchor hidden-xs" href="#Examples-1" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Examples-1" aria-hidden="true">TOC</a></span></h4>
 
 <ul>
 <li> Use <code>ffmpeg</code> to stream over UDP to a remote endpoint:
@@ -1624,7 +1638,7 @@ sized UDP packets, using a large input buffer:
 </li></ul>
 
 <a name="unix"></a>
-<h3 class="section">3.35 unix<span class="pull-right"><a class="anchor hidden-xs" href="#unix" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-unix" aria-hidden="true">TOC</a></span></h3>
+<h3 class="section">3.36 unix<span class="pull-right"><a class="anchor hidden-xs" href="#unix" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-unix" aria-hidden="true">TOC</a></span></h3>
 
 <p>Unix local socket
 </p>

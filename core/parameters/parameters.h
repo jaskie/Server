@@ -66,8 +66,10 @@ public:
 	}
 
 	std::wstring get(std::wstring const& key, std::wstring const& default_value = L"") const;
-
+	
 	std::wstring get_original_string() const;
+
+	std::wstring get_original(std::wstring const& key, std::wstring const& default_value = L"") const;
 
 	const std::wstring& at_original(size_t i) const;
 

@@ -66,6 +66,7 @@ EXPORTS
     av_register_output_format
     av_sdp_create
     av_seek_frame
+    av_stream_get_codec_timebase
     av_stream_get_end_pts
     av_stream_get_parser
     av_stream_get_r_frame_rate
@@ -91,6 +92,7 @@ EXPORTS
     avformat_get_mov_video_tags
     avformat_get_riff_audio_tags
     avformat_get_riff_video_tags
+    avformat_init_output
     avformat_license
     avformat_match_stream_specifier
     avformat_network_deinit
@@ -100,6 +102,7 @@ EXPORTS
     avformat_query_codec
     avformat_queue_attached_pictures
     avformat_seek_file
+    avformat_transfer_internal_stream_timing_info
     avformat_version
     avformat_write_header
     avio_accept

@@ -97,7 +97,7 @@ void thread_init(AVCodecContext* s, bool execute2enable, bool encoding)
 	CASPAR_LOG(info) << "Initialized ffmpeg tbb context.";
 }
 
-int tbb_avcodec_open(AVCodecContext* avctx, AVCodec* codec, bool encoding)
+int tbb_avcodec_open(AVCodecContext* avctx, AVCodec* codec, AVDictionary** options, bool encoding)
 {
 	AVCodecID supported_codecs[] = {AV_CODEC_ID_MPEG2VIDEO, AV_CODEC_ID_PRORES, AV_CODEC_ID_FFV1, AV_CODEC_ID_H264, AV_CODEC_ID_HEVC };
 
@@ -109,7 +109,7 @@ int tbb_avcodec_open(AVCodecContext* avctx, AVCodec* codec, bool encoding)
 		thread_init(avctx, codec->id != AV_CODEC_ID_PRORES, encoding); // do not enable execute2 for prores codec as it cause crash
 	}	
 	avctx->refcounted_frames = 0;
-	return avcodec_open2(avctx, codec, NULL); 
+	return avcodec_open2(avctx, codec, options); 
 }
 
 }

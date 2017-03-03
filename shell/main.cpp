@@ -305,15 +305,17 @@ int main(int argc, wchar_t* argv[])
 					{
 						// This is just dummy code for testing.
 						if(wcmd.substr(0, 1) == L"1")
-							wcmd = L"PLAY 1-0 CHANNEL 2";
+							wcmd = L"PLAY 1-0 route://2";
 						else if(wcmd.substr(0, 1) == L"2")
-							wcmd = L"ADD 2 FILE \"RECORDING.MXF\"";
+							wcmd = L"ADD 2 FILE RECORDING.MOV OPTIONS \"c:v=2M\"";
 						else if(wcmd.substr(0, 1) == L"3")
 							wcmd = L"REMOVE 2 FILE";
 						else if(wcmd.substr(0, 1) == L"4")
-							wcmd = L"PLAY 1-0 RECORDING.MXF";
+							wcmd = L"PLAY 1-0 RECORDING";
 						else if(wcmd.substr(0, 1) == L"5")
 							wcmd = L"PLAY 1-0 BARS";
+						else if (wcmd.substr(0, 1) == L"6")
+							wcmd = L"ADD 2 STREAM udp://127.0.0.1:5554 acodec AAC vcodec libx264 options=\"c:v=2M\"";
 						else if(upper_cmd.substr(0, 1) == L"X")
 						{
 							int num = 0;

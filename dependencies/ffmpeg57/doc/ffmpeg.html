@@ -11,7 +11,7 @@
     <link rel="stylesheet" type="text/css" href="style.min.css">
   </head>
   <body>
-    <div style="width: 95%; margin: auto">
+    <div class="container">
       <h1>
       ffmpeg Documentation
       </h1>
@@ -73,7 +73,7 @@
 <a name="Synopsis"></a>
 <h2 class="chapter">1 Synopsis<span class="pull-right"><a class="anchor hidden-xs" href="#Synopsis" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Synopsis" aria-hidden="true">TOC</a></span></h2>
 
-<p>ffmpeg [<var>global_options</var>] {[<var>input_file_options</var>] -i <samp>input_file</samp>} ... {[<var>output_file_options</var>] <samp>output_file</samp>} ...
+<p>ffmpeg [<var>global_options</var>] {[<var>input_file_options</var>] -i <samp>input_url</samp>} ... {[<var>output_file_options</var>] <samp>output_url</samp>} ...
 </p>
 <a name="Description"></a>
 <h2 class="chapter">2 Description<span class="pull-right"><a class="anchor hidden-xs" href="#Description" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Description" aria-hidden="true">TOC</a></span></h2>
@@ -85,10 +85,10 @@ rates and resize video on the fly with a high quality polyphase filter.
 <p><code>ffmpeg</code> reads from an arbitrary number of input &quot;files&quot; (which can be regular
 files, pipes, network streams, grabbing devices, etc.), specified by the
 <code>-i</code> option, and writes to an arbitrary number of output &quot;files&quot;, which are
-specified by a plain output filename. Anything found on the command line which
-cannot be interpreted as an option is considered to be an output filename.
+specified by a plain output url. Anything found on the command line which
+cannot be interpreted as an option is considered to be an output url.
 </p>
-<p>Each input or output file can, in principle, contain any number of streams of
+<p>Each input or output url can, in principle, contain any number of streams of
 different types (video/audio/subtitle/attachment/data). The allowed number and/or
 types of streams may be limited by the container format. Selecting which
 streams from which inputs will go into which output is either done automatically
@@ -273,7 +273,7 @@ with the highest resolution, for audio, it is the stream with the most channels,
 subtitles, it is the first subtitle stream. In the case where several streams of
 the same type rate equally, the stream with the lowest index is chosen.
 </p>
-<p>You can disable some of those defaults by using the <code>-vn/-an/-sn</code> options. For
+<p>You can disable some of those defaults by using the <code>-vn/-an/-sn/-dn</code> options. For
 full manual control, use the <code>-map</code> option, which disables the defaults just
 described.
 </p>
@@ -490,11 +490,11 @@ loglevel will be used. If multiple loglevel parameters are given, using
 </p></dd>
 <dt>&lsquo;<samp>panic, 0</samp>&rsquo;</dt>
 <dd><p>Only show fatal errors which could lead the process to crash, such as
-and assert failure. This is not currently used for anything.
+an assertion failure. This is not currently used for anything.
 </p></dd>
 <dt>&lsquo;<samp>fatal, 8</samp>&rsquo;</dt>
 <dd><p>Only show fatal errors. These are errors after which the process absolutely
-cannot continue after.
+cannot continue.
 </p></dd>
 <dt>&lsquo;<samp>error, 16</samp>&rsquo;</dt>
 <dd><p>Show all errors, including ones which can be recovered from.
@@ -516,13 +516,13 @@ warnings and errors. This is the default value.
 <dt>&lsquo;<samp>trace, 56</samp>&rsquo;</dt>
 </dl>
 
-<p>By default the program logs to stderr, if coloring is supported by the
+<p>By default the program logs to stderr. If coloring is supported by the
 terminal, colors are used to mark errors and warnings. Log coloring
 can be disabled setting the environment variable
 <code>AV_LOG_FORCE_NOCOLOR</code> or <code>NO_COLOR</code>, or can be forced setting
 the environment variable <code>AV_LOG_FORCE_COLOR</code>.
 The use of the environment variable <code>NO_COLOR</code> is deprecated and
-will be dropped in a following FFmpeg version.
+will be dropped in a future FFmpeg version.
 </p>
 </dd>
 <dt><samp>-report</samp></dt>
@@ -735,8 +735,8 @@ files and guessed from the file extension for output files, so this option is no
 needed in most cases.
 </p>
 </dd>
-<dt><samp>-i <var>filename</var> (<em>input</em>)</samp></dt>
-<dd><p>input file name
+<dt><samp>-i <var>url</var> (<em>input</em>)</samp></dt>
+<dd><p>input file url
 </p>
 </dd>
 <dt><samp>-y (<em>global</em>)</samp></dt>
@@ -778,7 +778,7 @@ libx264, and the 138th audio, which will be encoded with libvorbis.
 <dd><p>When used as an input option (before <code>-i</code>), limit the <var>duration</var> of
 data read from the input file.
 </p>
-<p>When used as an output option (before an output filename), stop writing the
+<p>When used as an output option (before an output url), stop writing the
 output after its duration reaches <var>duration</var>.
 </p>
 <p><var>duration</var> must be a time duration specification,
@@ -810,7 +810,7 @@ extra segment between the seek point and <var>position</var> will be decoded and
 discarded. When doing stream copy or when <samp>-noaccurate_seek</samp> is used, it
 will be preserved.
 </p>
-<p>When used as an output option (before an output filename), decodes but discards
+<p>When used as an output option (before an output url), decodes but discards
 input until the timestamps reach <var>position</var>.
 </p>
 <p><var>position</var> must be a time duration specification,
@@ -1605,7 +1605,7 @@ Shows CPU time used in various steps (audio/video encode/decode).
 <dd><p>When dumping packets, also dump the payload.
 </p></dd>
 <dt><samp>-re (<em>input</em>)</samp></dt>
-<dd><p>Read input at native frame rate. Mainly used to simulate a grab device.
+<dd><p>Read input at native frame rate. Mainly used to simulate a grab device,
 or live input stream (e.g. when reading from a file). Should not be used
 with actual grab devices or live input streams (where it can cause packet
 loss).
@@ -1747,7 +1747,7 @@ may be reassigned to a different value.
 <p>For example, to set the stream 0 PID to 33 and the stream 1 PID to 36 for
 an output mpegts file:
 </p><div class="example">
-<pre class="example">ffmpeg -i infile -streamid 0:33 -streamid 1:36 out.ts
+<pre class="example">ffmpeg -i inurl -streamid 0:33 -streamid 1:36 out.ts
 </pre></div>
 
 </dd>
@@ -1916,6 +1916,16 @@ Not all demuxers support this.
 </dd>
 <dt><samp>-xerror (<em>global</em>)</samp></dt>
 <dd><p>Stop and exit on error
+</p>
+</dd>
+<dt><samp>-max_muxing_queue_size <var>packets</var> (<em>output,per-stream</em>)</samp></dt>
+<dd><p>When transcoding audio and/or video streams, ffmpeg will not begin writing into
+the output until it has one packet for each such stream. While waiting for that
+to happen, packets for other streams are buffered. This option sets the size of
+this buffer, in packets, for the matching output stream.
+</p>
+<p>The default value of this option should be high enough for most uses, so only
+touch this option if you are sure that you need it.
 </p>
 </dd>
 </dl>

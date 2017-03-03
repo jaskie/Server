@@ -11,7 +11,7 @@
     <link rel="stylesheet" type="text/css" href="style.min.css">
   </head>
   <body>
-    <div style="width: 95%; margin: auto">
+    <div class="container">
       <h1>
       Developer Documentation
       </h1>
@@ -40,7 +40,12 @@
       <li><a name="toc-Miscellaneous-conventions" href="#Miscellaneous-conventions">1.3.5 Miscellaneous conventions</a></li>
       <li><a name="toc-Editor-configuration" href="#Editor-configuration">1.3.6 Editor configuration</a></li>
     </ul></li>
-    <li><a name="toc-Development-Policy" href="#Development-Policy">1.4 Development Policy</a></li>
+    <li><a name="toc-Development-Policy" href="#Development-Policy">1.4 Development Policy</a>
+    <ul class="no-bullet">
+      <li><a name="toc-Patches_002fCommitting" href="#Patches_002fCommitting">1.4.1 Patches/Committing</a></li>
+      <li><a name="toc-Code" href="#Code">1.4.2 Code</a></li>
+      <li><a name="toc-Documentation_002fOther" href="#Documentation_002fOther">1.4.3 Documentation/Other</a></li>
+    </ul></li>
     <li><a name="toc-Code-of-conduct" href="#Code-of-conduct">1.5 Code of conduct</a></li>
     <li><a name="toc-Submitting-patches-1" href="#Submitting-patches-1">1.6 Submitting patches</a></li>
     <li><a name="toc-New-codecs-or-formats-checklist" href="#New-codecs-or-formats-checklist">1.7 New codecs or formats checklist</a></li>
@@ -289,8 +294,11 @@ autocmd InsertEnter * match ForbiddenWhitespace /\t\|\s\+\%#\@&lt;!$/
 <a name="Development-Policy"></a>
 <h3 class="section">1.4 Development Policy<span class="pull-right"><a class="anchor hidden-xs" href="#Development-Policy" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Development-Policy" aria-hidden="true">TOC</a></span></h3>
 
-<ol>
-<li> Contributions should be licensed under the
+<a name="Patches_002fCommitting"></a>
+<h4 class="subsection">1.4.1 Patches/Committing<span class="pull-right"><a class="anchor hidden-xs" href="#Patches_002fCommitting" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Patches_002fCommitting" aria-hidden="true">TOC</a></span></h4>
+<a name="Licenses-for-patches-must-be-compatible-with-FFmpeg_002e"></a>
+<h4 class="subheading">Licenses for patches must be compatible with FFmpeg.</h4>
+<p>Contributions should be licensed under the
 <a href="http://www.gnu.org/licenses/lgpl-2.1.html">LGPL 2.1</a>,
 including an &quot;or any later version&quot; clause, or, if you prefer
 a gift-style license, the
@@ -301,50 +309,57 @@ an &quot;or any later version&quot; clause is also acceptable, but LGPL is
 preferred.
 If you add a new file, give it a proper license header. Do not copy and
 paste it from a random place, use an existing file as template.
-
-</li><li> You must not commit code which breaks FFmpeg! (Meaning unfinished but
-enabled code which breaks compilation or compiles but does not work or
-breaks the regression tests)
-You can commit unfinished stuff (for testing etc), but it must be disabled
-(#ifdef etc) by default so it does not interfere with other developers&rsquo;
-work.
-
-</li><li> The commit message should have a short first line in the form of
+</p>
+<a name="You-must-not-commit-code-which-breaks-FFmpeg_0021"></a>
+<h4 class="subheading">You must not commit code which breaks FFmpeg!</h4>
+<p>This means unfinished code which is enabled and breaks compilation,
+or compiles but does not work/breaks the regression tests. Code which
+is unfinished but disabled may be permitted under-circumstances, like
+missing samples or an implementation with a small subset of features.
+Always check the mailing list for any reviewers with issues and test
+FATE before you push.
+</p>
+<a name="Keep-the-main-commit-message-short-with-an-extended-description-below_002e"></a>
+<h4 class="subheading">Keep the main commit message short with an extended description below.</h4>
+<p>The commit message should have a short first line in the form of
 a &lsquo;<samp>topic: short description</samp>&rsquo; as a header, separated by a newline
 from the body consisting of an explanation of why the change is necessary.
 If the commit fixes a known bug on the bug tracker, the commit message
 should include its bug ID. Referring to the issue on the bug tracker does
 not exempt you from writing an excerpt of the bug in the commit message.
-
-</li><li> You do not have to over-test things. If it works for you, and you think it
-should work for others, then commit. If your code has problems
-(portability, triggers compiler bugs, unusual environment etc) they will be
-reported and eventually fixed.
-
-</li><li> Do not commit unrelated changes together, split them into self-contained
-pieces. Also do not forget that if part B depends on part A, but A does not
-depend on B, then A can and should be committed first and separate from B.
-Keeping changes well split into self-contained parts makes reviewing and
-understanding them on the commit log mailing list easier. This also helps
-in case of debugging later on.
+</p>
+<a name="Testing-must-be-adequate-but-not-excessive_002e"></a>
+<h4 class="subheading">Testing must be adequate but not excessive.</h4>
+<p>If it works for you, others, and passes FATE then it should be OK to commit
+it, provided it fits the other committing criteria. You should not worry about
+over-testing things. If your code has problems (portability, triggers
+compiler bugs, unusual environment etc) they will be reported and eventually
+fixed.
+</p>
+<a name="Do-not-commit-unrelated-changes-together_002e"></a>
+<h4 class="subheading">Do not commit unrelated changes together.</h4>
+<p>They should be split them into self-contained pieces. Also do not forget
+that if part B depends on part A, but A does not depend on B, then A can
+and should be committed first and separate from B. Keeping changes well
+split into self-contained parts makes reviewing and understanding them on
+the commit log mailing list easier. This also helps in case of debugging
+later on.
 Also if you have doubts about splitting or not splitting, do not hesitate to
 ask/discuss it on the developer mailing list.
-
-</li><li> Do not change behavior of the programs (renaming options etc) or public
-API or ABI without first discussing it on the ffmpeg-devel mailing list.
-Do not remove functionality from the code. Just improve!
-
-<p>Note: Redundant code can be removed.
 </p>
-</li><li> Do not commit changes to the build system (Makefiles, configure script)
+<a name="Ask-before-you-change-the-build-system-_0028configure_002c-etc_0029_002e"></a>
+<h4 class="subheading">Ask before you change the build system (configure, etc).</h4>
+<p>Do not commit changes to the build system (Makefiles, configure script)
 which change behavior, defaults etc, without asking first. The same
 applies to compiler warning fixes, trivial looking fixes and to code
 maintained by other developers. We usually have a reason for doing things
 the way we do. Send your changes as patches to the ffmpeg-devel mailing
 list, and if the code maintainers say OK, you may commit. This does not
 apply to files you wrote and/or maintain.
-
-</li><li> We refuse source indentation and other cosmetic changes if they are mixed
+</p>
+<a name="Cosmetic-changes-should-be-kept-in-separate-patches_002e"></a>
+<h4 class="subheading">Cosmetic changes should be kept in separate patches.</h4>
+<p>We refuse source indentation and other cosmetic changes if they are mixed
 with functional changes, such commits will be rejected and removed. Every
 developer has his own indentation style, you should not change it. Of course
 if you (re)write something, you can use your own style, even though we would
@@ -352,55 +367,55 @@ prefer if the indentation throughout FFmpeg was consistent (Many projects
 force a given indentation style - we do not.). If you really need to make
 indentation changes (try to avoid this), separate them strictly from real
 changes.
-
+</p>
 <p>NOTE: If you had to put if(){ .. } over a large (&gt; 5 lines) chunk of code,
 then either do NOT change the indentation of the inner part within (do not
 move it to the right)! or do so in a separate commit
 </p>
-</li><li> Always fill out the commit log message. Describe in a few lines what you
+<a name="Commit-messages-should-always-be-filled-out-properly_002e"></a>
+<h4 class="subheading">Commit messages should always be filled out properly.</h4>
+<p>Always fill out the commit log message. Describe in a few lines what you
 changed and why. You can refer to mailing list postings if you fix a
 particular bug. Comments such as &quot;fixed!&quot; or &quot;Changed it.&quot; are unacceptable.
 Recommended format:
-
+</p>
 <div class="example">
 <pre class="example">area changed: Short 1 line description
 
 details describing what and why and giving references.
 </pre></div>
 
-</li><li> Make sure the author of the commit is set correctly. (see git commit &ndash;author)
+<a name="Credit-the-author-of-the-patch_002e"></a>
+<h4 class="subheading">Credit the author of the patch.</h4>
+<p>Make sure the author of the commit is set correctly. (see git commit &ndash;author)
 If you apply a patch, send an
 answer to ffmpeg-devel (or wherever you got the patch from) saying that
 you applied the patch.
-
-</li><li> When applying patches that have been discussed (at length) on the mailing
+</p>
+<a name="Complex-patches-should-refer-to-discussion-surrounding-them_002e"></a>
+<h4 class="subheading">Complex patches should refer to discussion surrounding them.</h4>
+<p>When applying patches that have been discussed (at length) on the mailing
 list, reference the thread in the log message.
-
-</li><li> Do NOT commit to code actively maintained by others without permission.
-Send a patch to ffmpeg-devel instead. If no one answers within a reasonable
-timeframe (12h for build failures and security fixes, 3 days small changes,
+</p>
+<a name="Always-wait-long-enough-before-pushing-changes"></a>
+<h4 class="subheading">Always wait long enough before pushing changes</h4>
+<p>Do NOT commit to code actively maintained by others without permission.
+Send a patch to ffmpeg-devel. If no one answers within a reasonable
+time-frame (12h for build failures and security fixes, 3 days small changes,
 1 week for big patches) then commit your patch if you think it is OK.
 Also note, the maintainer can simply ask for more time to review!
-
-</li><li> Subscribe to the ffmpeg-cvslog mailing list. The diffs of all commits
-are sent there and reviewed by all the other developers. Bugs and possible
-improvements or general questions regarding commits are discussed there. We
-expect you to react if problems with your code are uncovered.
-
-</li><li> Update the documentation if you change behavior or add features. If you are
-unsure how best to do this, send a patch to ffmpeg-devel, the documentation
-maintainer(s) will review and commit your stuff.
-
-</li><li> Try to keep important discussions and requests (also) on the public
-developer mailing list, so that all developers can benefit from them.
-
-</li><li> Never write to unallocated memory, never write over the end of arrays,
-always check values read from some untrusted source before using them
-as array index or other risky things.
-
-</li><li> Remember to check if you need to bump versions for the specific libav*
-parts (libavutil, libavcodec, libavformat) you are changing. You need
-to change the version integer.
+</p>
+<a name="Code"></a>
+<h4 class="subsection">1.4.2 Code<span class="pull-right"><a class="anchor hidden-xs" href="#Code" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Code" aria-hidden="true">TOC</a></span></h4>
+<a name="API_002fABI-changes-should-be-discussed-before-they-are-made_002e"></a>
+<h4 class="subheading">API/ABI changes should be discussed before they are made.</h4>
+<p>Do not change behavior of the programs (renaming options etc) or public
+API or ABI without first discussing it on the ffmpeg-devel mailing list.
+Do not remove widely used functionality or features (redundant code can be removed).
+</p>
+<a name="Remember-to-check-if-you-need-to-bump-versions-for-libav_002a_002e"></a>
+<h4 class="subheading">Remember to check if you need to bump versions for libav*.</h4>
+<p>Depending on the change, you may need to change the version integer.
 Incrementing the first component means no backward compatibility to
 previous versions (e.g. removal of a function from the public API).
 Incrementing the second component means backward compatible change
@@ -409,22 +424,51 @@ existing data structure).
 Incrementing the third component means a noteworthy binary compatible
 change (e.g. encoder bug fix that matters for the decoder). The third
 component always starts at 100 to distinguish FFmpeg from Libav.
-
-</li><li> Compiler warnings indicate potential bugs or code with bad style. If a type of
+</p>
+<a name="Warnings-for-correct-code-may-be-disabled-if-there-is-no-other-option_002e"></a>
+<h4 class="subheading">Warnings for correct code may be disabled if there is no other option.</h4>
+<p>Compiler warnings indicate potential bugs or code with bad style. If a type of
 warning always points to correct and clean code, that warning should
 be disabled, not the code changed.
 Thus the remaining warnings can either be bugs or correct code.
 If it is a bug, the bug has to be fixed. If it is not, the code should
 be changed to not generate a warning unless that causes a slowdown
 or obfuscates the code.
-
-</li><li> Make sure that no parts of the codebase that you maintain are missing from the
+</p>
+<a name="Check-untrusted-input-properly_002e"></a>
+<h4 class="subheading">Check untrusted input properly.</h4>
+<p>Never write to unallocated memory, never write over the end of arrays,
+always check values read from some untrusted source before using them
+as array index or other risky things.
+</p>
+<a name="Documentation_002fOther"></a>
+<h4 class="subsection">1.4.3 Documentation/Other<span class="pull-right"><a class="anchor hidden-xs" href="#Documentation_002fOther" aria-hidden="true">#</a> <a class="anchor hidden-xs"href="#toc-Documentation_002fOther" aria-hidden="true">TOC</a></span></h4>
+<a name="Subscribe-to-the-ffmpeg_002dcvslog-mailing-list_002e"></a>
+<h4 class="subheading">Subscribe to the ffmpeg-cvslog mailing list.</h4>
+<p>It is important to do this as the diffs of all commits are sent there and
+reviewed by all the other developers. Bugs and possible improvements or
+general questions regarding commits are discussed there. We expect you to
+react if problems with your code are uncovered.
+</p>
+<a name="Keep-the-documentation-up-to-date_002e"></a>
+<h4 class="subheading">Keep the documentation up to date.</h4>
+<p>Update the documentation if you change behavior or add features. If you are
+unsure how best to do this, send a patch to ffmpeg-devel, the documentation
+maintainer(s) will review and commit your stuff.
+</p>
+<a name="Important-discussions-should-be-accessible-to-all_002e"></a>
+<h4 class="subheading">Important discussions should be accessible to all.</h4>
+<p>Try to keep important discussions and requests (also) on the public
+developer mailing list, so that all developers can benefit from them.
+</p>
+<a name="Check-your-entries-in-MAINTAINERS_002e"></a>
+<h4 class="subheading">Check your entries in MAINTAINERS.</h4>
+<p>Make sure that no parts of the codebase that you maintain are missing from the
 <samp>MAINTAINERS</samp> file. If something that you want to maintain is missing add it with
 your name after it.
 If at some point you no longer want to maintain some code, then please help in
 finding a new maintainer and also don&rsquo;t forget to update the <samp>MAINTAINERS</samp> file.
-</li></ol>
-
+</p>
 <p>We think our rules are not too hard. If you have comments, contact us.
 </p>
 <a name="Code-of-conduct"></a>
@@ -491,7 +535,11 @@ do not attach several unrelated patches to the same mail.
 mailing list. Use <code>git send-email</code> when possible since it will properly
 send patches without requiring extra care. If you cannot, then send patches
 as base64-encoded attachments, so your patch is not trashed during
-transmission.
+transmission. Also ensure the correct mime type is used
+(text/x-diff or text/x-patch or at least text/plain) and that only one
+patch is inline or attached per mail.
+You can check <a href="https://patchwork.ffmpeg.org">https://patchwork.ffmpeg.org</a>, if your patch does not show up, its mime type
+likely was wrong.
 </p>
 <p>Your patch will be reviewed on the mailing list. You will likely be asked
 to make some changes and are expected to send in an improved version that

@@ -23,9 +23,10 @@
 
 struct AVCodecContext;
 struct AVCodec;
+struct AVDictionary;
 
 namespace caspar {
 	
-int tbb_avcodec_open(AVCodecContext *avctx, AVCodec *codec, bool encoding);
+int tbb_avcodec_open(AVCodecContext *avctx, AVCodec *codec, AVDictionary ** options, bool encoding);
 
 }

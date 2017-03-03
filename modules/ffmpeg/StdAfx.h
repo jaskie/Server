@@ -68,6 +68,12 @@ extern "C"
 	#include <libavcodec/avcodec.h>
 	#include <libavfilter/avfilter.h>
 	#include <libswscale/swscale.h>
+	#include <libavutil/opt.h>
+	#include <libavutil/pixdesc.h>
+	#include <libavutil/parseutils.h>
+	#include <libavutil/imgutils.h>
+	#include <libswresample/swresample.h>
+	#include <libavutil/audio_fifo.h>
 }
 
 #pragma warning(pop)

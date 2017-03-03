@@ -11,7 +11,7 @@
     <link rel="stylesheet" type="text/css" href="style.min.css">
   </head>
   <body>
-    <div style="width: 95%; margin: auto">
+    <div class="container">
       <h1>
       Platform Specific Information
       </h1>
@@ -227,7 +227,7 @@ earlier, place <code>c99wrap.exe</code> and <code>c99conv.exe</code> somewhere i
 <p>Next, make sure any other headers and libs you want to use, such as zlib, are
 located in a spot that the compiler can see. Do so by modifying the <code>LIB</code>
 and <code>INCLUDE</code> environment variables to include the <strong>Windows-style</strong>
-paths to these directories. Alternatively, you can try and use the
+paths to these directories. Alternatively, you can try to use the
 <code>--extra-cflags</code>/<code>--extra-ldflags</code> configure options. If using MSVC
 2012 or earlier, place <code>inttypes.h</code> somewhere the compiler can see too.
 </p>
@@ -368,7 +368,7 @@ following &quot;Devel&quot; ones:
 <a href="http://sourceware.org/cygwinports/">Cygwin Ports</a>:
 </p>
 <div class="example">
-<pre class="example">yasm, libSDL-devel, libfaac-devel, libgsm-devel, libmp3lame-devel,
+<pre class="example">yasm, libSDL-devel, libgsm-devel, libmp3lame-devel,
 libschroedinger1.0-devel, speex-devel, libtheora-devel, libxvidcore-devel
 </pre></div>
 

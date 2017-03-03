@@ -94,6 +94,15 @@ std::wstring parameters::get(std::wstring const& key, std::wstring const& defaul
 	return *it;
 }
 
+std::wstring parameters::get_original(std::wstring const& key, std::wstring const& default_value) const
+{
+	auto it = std::find(std::begin(params_original_), std::end(params_original_), key);
+	if (it == params_original_.end() || ++it == params_original_.end())
+		return default_value;
+	return *it;
+}
+
+
 std::wstring parameters::get_original_string() const
 {
 	std::wstring str;

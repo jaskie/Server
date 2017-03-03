@@ -96,3 +96,4 @@
 /modules/newtek/tmp
 /.vs
 /*.opendb
+/dependencies/ffmpeg57/x86/bin/*.exe

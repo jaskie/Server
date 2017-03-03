@@ -11,7 +11,7 @@
     <link rel="stylesheet" type="text/css" href="style.min.css">
   </head>
   <body>
-    <div style="width: 95%; margin: auto">
+    <div class="container">
       <h1>
       FFmpeg Devices Documentation
       </h1>
@@ -489,6 +489,11 @@ Defaults to &lsquo;<samp>unset</samp>&rsquo;.
 &lsquo;<samp>reference</samp>&rsquo; or &lsquo;<samp>wallclock</samp>&rsquo;. Defaults to &lsquo;<samp>audio</samp>&rsquo;.
 </p>
 </dd>
+<dt><samp>draw_bars</samp></dt>
+<dd><p>If set to &lsquo;<samp>true</samp>&rsquo;, color bars are drawn in the event of a signal loss.
+Defaults to &lsquo;<samp>true</samp>&rsquo;.
+</p>
+</dd>
 </dl>
 
 <a name="Examples-1"></a>
@@ -922,7 +927,7 @@ not have a fixed frame size.
 </p>
 </dd>
 <dt><samp>dvguid</samp></dt>
-<dd><p>Select the capture device by specifying it&rsquo;s GUID. Capturing will only
+<dd><p>Select the capture device by specifying its GUID. Capturing will only
 be performed from the specified device and fails if no device with the
 given GUID is found. This is useful to select the input if multiple
 devices are connected at the same time.
@@ -1641,7 +1646,7 @@ the properties of your X11 display (e.g. grep for &quot;name&quot; or
 
 <dl compact="compact">
 <dt><samp>draw_mouse</samp></dt>
-<dd><p>Specify whether to draw the mouse pointer. A value of <code>0</code> specify
+<dd><p>Specify whether to draw the mouse pointer. A value of <code>0</code> specifies
 not to draw the pointer. Default value is <code>1</code>.
 </p>
 </dd>
