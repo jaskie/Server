@@ -248,8 +248,8 @@ int swr_is_initialized(struct SwrContext *s);
  * @param log_offset      logging level offset
  * @param log_ctx         parent logging context, can be NULL
  *
- * @see swr_init(), swr_free()
  * @return NULL on error, allocated context otherwise
+ * @see swr_init(), swr_free()
  */
 struct SwrContext *swr_alloc_set_opts(struct SwrContext *s,
                                       int64_t out_ch_layout, enum AVSampleFormat out_sample_fmt, int out_sample_rate,

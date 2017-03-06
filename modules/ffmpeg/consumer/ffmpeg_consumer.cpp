@@ -23,6 +23,7 @@
 
 #include "../ffmpeg_error.h"
 #include "../tbb_avcodec.h"
+#include "../ffmpeg.h"
 
 #include "ffmpeg_consumer.h"
 
@@ -164,7 +165,6 @@ public:
 		, output_format_(format)
 		, key_only_(key_only)
 		, options_(read_parameters(options))
-		, format_context_(NULL)
 		, initialized_(false)
 	{
 		current_encoding_delay_ = 0;
@@ -182,7 +182,8 @@ public:
 		format_context_.reset(alloc_output_format_context(filename_, output_format_.format), [this](AVFormatContext * f) {
 			if (!(f->oformat->flags & AVFMT_NOFILE))
 			{
-				LOG_ON_ERROR2(avio_closep(&f->pb), "[ffmpeg_consumer]"); // Close the output ffmpeg.
+				LOG_ON_ERROR2(avio_close(f->pb), "[ffmpeg_consumer]"); // Close the output ffmpeg.
+				f->pb = NULL;
 				if (!initialized_)
 					boost::filesystem2::remove(filename_); // Delete the file if exists and consumer not fully initialized
 			}
@@ -191,10 +192,10 @@ public:
 
 		//  Add the audio and video streams using the default format codecs	and initialize the codecs.
 
-		video_st_.reset(add_video_stream());
+		video_st_.reset(add_video_stream(), [](AVStream * s) {avcodec_close(s->codec); });
 
 		if (!key_only_)
-			audio_st_.reset(add_audio_stream());
+			audio_st_.reset(add_audio_stream(), [](AVStream * s) {avcodec_close(s->codec); });
 
 		av_dump_format(format_context_.get(), 0, filename_.c_str(), 1);
 
@@ -212,12 +213,19 @@ public:
 		ready_ = false;
 		encode_executor_.stop();
 		encode_executor_.join();
+		
 		if ((video_st_ && (video_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY))
 			|| (!key_only_ && (audio_st_ && (audio_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY))))
 			flush_encoders();
 		LOG_ON_ERROR2(av_write_trailer(format_context_.get()), "[ffmpeg_consumer]");
 		if (*options_)
 			av_dict_free(options_);
+		audio_st_.reset();
+		video_st_.reset();
+		sws_.reset();
+		swr_.reset();
+		format_context_.reset();
+
 		CASPAR_LOG(info) << print() << L" Successfully Uninitialized.";
 	}
 
@@ -335,8 +343,7 @@ public:
 			c->flags |= CODEC_FLAG_GLOBAL_HEADER;
 		c->sample_aspect_ratio = sample_aspect_ratio;
 
-		c->thread_count = boost::thread::hardware_concurrency();
-		if (avcodec_open2(c, encoder, options_) < 0)
+		if (tbb_avcodec_open(c, encoder, options_, true) < 0)
 		{
 			CASPAR_LOG(debug) << print() << L" Multithreaded avcodec_open2 failed";
 			c->thread_count = 1;
@@ -391,7 +398,7 @@ public:
 		
 		audio_is_planar = av_sample_fmt_is_planar(c->sample_fmt) != 0;
 
-		THROW_ON_ERROR2(avcodec_open2(c, encoder, options_), "[ffmpeg_consumer]");
+		THROW_ON_ERROR2(tbb_avcodec_open(c, encoder, options_, true), "[ffmpeg_consumer]");
 
 		return st;
 	}
@@ -404,7 +411,7 @@ public:
 			if (sws_ == nullptr)
 				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Cannot initialize the conversion context"));
 		}
-		std::shared_ptr<AVFrame> in_frame(av_frame_alloc(), [](AVFrame* frame) {av_frame_free(&frame); });
+		std::shared_ptr<AVFrame> in_frame(av_frame_alloc(), [](AVFrame* frame) { av_frame_free(&frame); });
 		auto in_picture = reinterpret_cast<AVPicture*>(in_frame.get());
 
 		if (key_only_)
@@ -420,7 +427,7 @@ public:
 			avpicture_fill(in_picture, const_cast<uint8_t*>(frame.image_data().begin()), AV_PIX_FMT_BGRA, format_desc_.width, format_desc_.height);
 		}
 
-		std::shared_ptr<AVFrame> out_frame(av_frame_alloc(), [](AVFrame* frame) {av_frame_free(&frame); });
+		std::shared_ptr<AVFrame> out_frame(av_frame_alloc(), [](AVFrame* frame) { av_frame_free(&frame); });
 		picture_buf_.resize(av_image_get_buffer_size(c->pix_fmt, c->width, c->height, 16));
 		av_image_fill_arrays(out_frame->data, out_frame->linesize, picture_buf_.data(), c->pix_fmt, c->width, c->height, 16);
 

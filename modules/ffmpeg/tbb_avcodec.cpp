@@ -31,6 +31,7 @@
 #include <tbb/atomic.h>
 #include <tbb/parallel_for.h>
 #include <tbb/tbb_thread.h>
+#include <boost/thread.hpp>
 
 #if defined(_MSC_VER)
 #pragma warning (push)
@@ -91,8 +92,8 @@ void thread_init(AVCodecContext* s, bool execute2enable, bool encoding)
 	if (execute2enable)
 		s->execute2			  = thread_execute2;
 	if (!encoding)
-		s->slice_count		  = MAX_THREADS;
-	s->thread_count		  = MAX_THREADS; // We are using a task-scheduler, so use as many "threads/tasks" as possible. 
+		s->slice_count		  = boost::thread::hardware_concurrency();
+	s->thread_count		  = boost::thread::hardware_concurrency(); // We are using a task-scheduler, so use as many "threads/tasks" as possible. 
 
 	CASPAR_LOG(info) << "Initialized ffmpeg tbb context.";
 }

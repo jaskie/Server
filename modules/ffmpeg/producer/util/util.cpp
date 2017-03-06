@@ -109,7 +109,7 @@ safe_ptr<AVPacket> create_packet()
 
 safe_ptr<AVFrame> create_frame()
 {	
-	safe_ptr<AVFrame> frame(av_frame_alloc(), [=](AVFrame* f) { av_frame_free(&f);});
+	safe_ptr<AVFrame> frame(av_frame_alloc(), [](AVFrame* f) { av_frame_free(&f);});
 	return frame;
 }
 
@@ -261,7 +261,6 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 		}	
 		
 		safe_ptr<AVFrame> av_frame = create_frame();	
-		av_frame_unref(av_frame.get());			
 		if(target_pix_fmt == AV_PIX_FMT_BGRA)
 		{
 			auto size = avpicture_fill(reinterpret_cast<AVPicture*>(av_frame.get()), write->image_data().begin(), AV_PIX_FMT_BGRA, width, height);
