@@ -42,6 +42,11 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/timer.hpp>
 #include <boost/property_tree/ptree.hpp>
+#pragma warning(push)
+#pragma warning(disable: 4244)
+#pragma warning(disable: 4245)
+#include <boost/crc.hpp>
+#pragma warning(pop)
 
 #include <tbb/cache_aligned_allocator.h>
 #include <tbb/parallel_invoke.h>
@@ -55,13 +60,20 @@
 
 namespace caspar { namespace ffmpeg {
 	
-AVFormatContext * alloc_output_format_context(const std::string& filename, AVOutputFormat * output_format)
+AVFormatContext * alloc_output_format_context(const std::string filename, AVOutputFormat * output_format)
 {
 	AVFormatContext * ctx = NULL;
 	if (avformat_alloc_output_context2(&ctx, output_format, NULL, filename.c_str()) >= 0)
 		return ctx;
 	else
 		return nullptr;
+}
+
+int crc16(const std::wstring& str)
+{
+	boost::crc_16_type result;
+	result.process_bytes(str.data(), str.length());
+	return result.checksum();
 }
 
 static const std::string			MXF = ".MXF";
@@ -112,25 +124,28 @@ struct ffmpeg_consumer : boost::noncopyable
 {
 	static core::read_frame					flush_frame;
 
+	bool									initialized_;
 	tbb::atomic<bool>						ready_;
 	const std::string						filename_;
 	AVDictionary **							options_;
 	output_format							output_format_;
-	AVFormatContext*						format_context_;
 	const core::video_format_desc			format_desc_;
 
 	const safe_ptr<diagnostics::graph>		graph_;
 
 	executor								encode_executor_;
 
-	AVStream *								audio_st_;
-	AVStream *								video_st_;
+	std::shared_ptr<AVStream>				audio_st_;
+	std::shared_ptr<AVStream>				video_st_;
+
+	std::shared_ptr<SwrContext>				swr_;
+	std::shared_ptr<SwsContext>				sws_;
+
+	std::shared_ptr<AVFormatContext>		format_context_;
 
 	byte_vector								audio_bufers_[AV_NUM_DATA_POINTERS];
 	byte_vector								key_picture_buf_;
 	byte_vector								picture_buf_;
-	std::shared_ptr<SwrContext>				swr_;
-	std::shared_ptr<SwsContext>				sws_;
 
 	int64_t									out_frame_number_;
 	int64_t									out_audio_sample_number_;
@@ -149,9 +164,8 @@ public:
 		, output_format_(format)
 		, key_only_(key_only)
 		, options_(read_parameters(options))
-		, video_st_(NULL)
-		, audio_st_(NULL)
 		, format_context_(NULL)
+		, initialized_(false)
 	{
 		current_encoding_delay_ = 0;
 		ready_ = false;
@@ -163,44 +177,34 @@ public:
 		graph_->set_text(print());
 		diagnostics::register_graph(graph_);
 
-		encode_executor_.set_capacity(8);
+		encode_executor_.set_capacity(1);
 
-		encode_executor_.begin_invoke([=] {
-
-			format_context_ = alloc_output_format_context(filename_, output_format_.format);
-
-			//  Add the audio and video streams using the default format codecs	and initialize the codecs.
-			
-			video_st_ = add_video_stream();
-
-			if (!key_only_)
-				audio_st_ = add_audio_stream();
-
-			av_dump_format(format_context_, 0, filename_.c_str(), 1);
-
-			// Open the output ffmpeg
-			try
+		format_context_.reset(alloc_output_format_context(filename_, output_format_.format), [this](AVFormatContext * f) {
+			if (!(f->oformat->flags & AVFMT_NOFILE))
 			{
-				if (!(format_context_->oformat->flags & AVFMT_NOFILE))
-					avio_open(&format_context_->pb, filename_.c_str(), AVIO_FLAG_WRITE | AVIO_FLAG_NONBLOCK);
-				THROW_ON_ERROR2(avformat_write_header(format_context_, options_), "[ffmpeg_consumer]");
+				LOG_ON_ERROR2(avio_closep(&f->pb), "[ffmpeg_consumer]"); // Close the output ffmpeg.
+				if (!initialized_)
+					boost::filesystem2::remove(filename_); // Delete the file if exists and consumer not fully initialized
 			}
-			catch (...)
-			{
-				if (format_context_)
-				{
-					if (!(format_context_->oformat->flags & AVFMT_NOFILE))
-					{
-						LOG_ON_ERROR2(avio_close(format_context_->pb), "[ffmpeg_consumer]"); // Close the output ffmpeg.
-						boost::filesystem2::remove(filename_); // Delete the file if it exists
-					}
-					avformat_free_context(format_context_);
-				}
-				throw;
-			}
-			ready_ = true;
-			CASPAR_LOG(info) << print() << L" Successfully Initialized.";
+			avformat_free_context(f);
 		});
+
+		//  Add the audio and video streams using the default format codecs	and initialize the codecs.
+
+		video_st_.reset(add_video_stream());
+
+		if (!key_only_)
+			audio_st_.reset(add_audio_stream());
+
+		av_dump_format(format_context_.get(), 0, filename_.c_str(), 1);
+
+		// Open the output ffmpeg
+			if (!(format_context_->oformat->flags & AVFMT_NOFILE))
+				avio_open(&format_context_->pb, filename_.c_str(), AVIO_FLAG_WRITE | AVIO_FLAG_NONBLOCK);
+			THROW_ON_ERROR2(avformat_write_header(format_context_.get(), options_), "[ffmpeg_consumer]");
+		ready_ = true;
+		initialized_ = true;
+		CASPAR_LOG(info) << print() << L" Successfully Initialized.";
 	}
 
 	~ffmpeg_consumer()
@@ -208,16 +212,10 @@ public:
 		ready_ = false;
 		encode_executor_.stop();
 		encode_executor_.join();
-		if (format_context_)
-		{
-			if ((video_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY)
-				|| (!key_only_ && (audio_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY)))
-				flush_encoders();
-			LOG_ON_ERROR2(av_write_trailer(format_context_), "[ffmpeg_consumer]");
-			if (!(format_context_->oformat->flags & AVFMT_NOFILE))
-				LOG_ON_ERROR2(avio_close(format_context_->pb), "[ffmpeg_consumer]"); // Close the output ffmpeg.
-			avformat_free_context(format_context_);
-		}
+		if ((video_st_ && (video_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY))
+			|| (!key_only_ && (audio_st_ && (audio_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY))))
+			flush_encoders();
+		LOG_ON_ERROR2(av_write_trailer(format_context_.get()), "[ffmpeg_consumer]");
 		if (*options_)
 			av_dict_free(options_);
 		CASPAR_LOG(info) << print() << L" Successfully Uninitialized.";
@@ -237,7 +235,7 @@ public:
 		if (!encoder)
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Codec not found."));
 
-		AVStream * st = avformat_new_stream(format_context_, encoder);
+		AVStream * st = avformat_new_stream(format_context_.get(), encoder);
 		if (!st)
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not allocate video-stream.") << boost::errinfo_api_function("av_new_stream"));
 
@@ -290,7 +288,7 @@ public:
 		{
 			c->pix_fmt = AV_PIX_FMT_YUV420P;
 			c->bit_rate = format_desc_.height * 14 * 1000; // about 8Mbps for SD, 14 for HD
-			::av_opt_set(c, "preset", "veryfast", NULL);
+			LOG_ON_ERROR2(av_opt_set(c->priv_data, "preset", "veryfast", NULL), "[ffmpeg_consumer]");
 		}
 		else if (c->codec_id == AV_CODEC_ID_QTRLE)
 		{
@@ -338,7 +336,7 @@ public:
 		c->sample_aspect_ratio = sample_aspect_ratio;
 
 		c->thread_count = boost::thread::hardware_concurrency();
-		if (tbb_avcodec_open(c, encoder, options_, true) < 0)
+		if (avcodec_open2(c, encoder, options_) < 0)
 		{
 			CASPAR_LOG(debug) << print() << L" Multithreaded avcodec_open2 failed";
 			c->thread_count = 1;
@@ -356,7 +354,7 @@ public:
 		if (!encoder)
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("codec not found") << boost::errinfo_api_function("avcodec_find_encoder"));
 
-		auto st = avformat_new_stream(format_context_, encoder);
+		auto st = avformat_new_stream(format_context_.get(), encoder);
 		if (!st)
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not allocate audio-stream") << boost::errinfo_api_function("av_new_stream"));
 		st->id = 1;
@@ -393,7 +391,7 @@ public:
 		
 		audio_is_planar = av_sample_fmt_is_planar(c->sample_fmt) != 0;
 
-		THROW_ON_ERROR2(tbb_avcodec_open(c, encoder, options_, true), "[ffmpeg_consumer]");
+		THROW_ON_ERROR2(avcodec_open2(c, encoder, options_), "[ffmpeg_consumer]");
 
 		return st;
 	}
@@ -448,7 +446,7 @@ public:
 		av_init_packet(pkt.get());
 		int got_packet;
 
-		THROW_ON_ERROR2(avcodec_encode_video2(codec_context, pkt.get(), av_frame.get(), &got_packet), "[video_encoder]");
+		avcodec_encode_video2(codec_context, pkt.get(), av_frame.get(), &got_packet);// , "[video_encoder]");
 
 		if (got_packet == 0)
 			return;
@@ -462,7 +460,7 @@ public:
 			pkt->flags |= AV_PKT_FLAG_KEY;
 
 		pkt->stream_index = video_st_->index;
-		THROW_ON_ERROR2(av_interleaved_write_frame(format_context_, pkt.get()), "[video_encoder]");
+		THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), pkt.get()), "[video_encoder]");
 	}
 	
 	void resample_audio(core::read_frame& frame, AVCodecContext* ctx)
@@ -562,7 +560,7 @@ public:
 			if (pkt->dts != AV_NOPTS_VALUE)
 				pkt->dts = av_rescale_q(pkt->dts, enc->time_base, audio_st_->time_base);
 			pkt->stream_index = audio_st_->index;
-			THROW_ON_ERROR2(av_interleaved_write_frame(format_context_, pkt.get()), "[audio_encoder]");
+			THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), pkt.get()), "[audio_encoder]");
 		}
 	}
 		 
@@ -598,8 +596,8 @@ public:
 	{
 		bool audio_full = false;
 		bool video_full = false;
-		bool need_flush_audio = !key_only_ && (audio_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY) != 0;
-		bool need_flush_video = (video_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY) != 0;
+		bool need_flush_audio = !key_only_ && audio_st_ && (audio_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY) != 0;
+		bool need_flush_video = video_st_ && (video_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY) != 0;
 		do
 		{
 			audio_full |= !need_flush_audio || flush_stream(false);
@@ -613,7 +611,7 @@ public:
 		std::shared_ptr<AVPacket> pkt(av_packet_alloc(), [](AVPacket *p) { av_packet_free(&p); });
 
 		av_init_packet(pkt.get());
-		AVStream * stream = video ? video_st_ : audio_st_;
+		auto stream = video ? video_st_ : audio_st_;
 		int got_packet;
 		if (video)
 			THROW_ON_ERROR2(avcodec_encode_video2(stream->codec, pkt.get(), NULL, &got_packet), "[flush_video]");
@@ -632,7 +630,7 @@ public:
 			pkt->flags |= AV_PKT_FLAG_KEY;
 
 		pkt->stream_index = stream->index;
-		THROW_ON_ERROR2(av_interleaved_write_frame(format_context_, pkt.get()), "[flush_stream]");
+		THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), pkt.get()), "[flush_stream]");
 		return false;
 	}
 
@@ -640,6 +638,7 @@ public:
 
 struct ffmpeg_consumer_proxy : public core::frame_consumer
 {
+	int								index_;
 	const std::wstring				filename_;
 	const bool						separate_key_;
 	output_format					output_format_;
@@ -656,6 +655,7 @@ public:
 		, separate_key_(separate_key)
 		, output_format_(format)
 		, options_(options)
+		, index_(100000 + crc16(boost::to_lower_copy(filename)))
 	{
 	}
 	
@@ -743,7 +743,7 @@ public:
 
 	virtual int index() const override
 	{
-		return 200;
+		return index_;
 	}
 
 };	
