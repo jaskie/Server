@@ -315,7 +315,7 @@ int main(int argc, wchar_t* argv[])
 						else if(wcmd.substr(0, 1) == L"5")
 							wcmd = L"PLAY 1-0 BARS";
 						else if (wcmd.substr(0, 1) == L"6")
-							wcmd = L"ADD 2 STREAM udp://127.0.0.1:5554 acodec AAC vcodec libx264 options=\"c:v=2M\"";
+							wcmd = L"RECORD 2 10:0:0:0 10:0:10:0 3 5 record.mov acodec AAC vcodec libx264 vrate 8192";
 						else if(upper_cmd.substr(0, 1) == L"X")
 						{
 							int num = 0;

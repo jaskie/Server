@@ -191,6 +191,12 @@ class ThumbnailCommand : public AMCPCommandBase<false, 1>
 	bool DoExecuteGenerateAll();
 };
 
+class RecordCommand : public AMCPCommandBase<true, 1>
+{
+	std::wstring print() const { return L"RecordCommand"; }
+	bool DoExecute();
+};
+
 class ClsCommand : public AMCPCommandBase<false, 0>
 {
 	std::wstring print() const { return L"ClsCommand";}

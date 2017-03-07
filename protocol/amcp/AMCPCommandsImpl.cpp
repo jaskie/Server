@@ -1708,6 +1708,12 @@ bool DataCommand::DoExecuteList()
 	return true;
 }
 
+bool RecordCommand::DoExecute()
+{
+	auto channel = GetChannel();
+	return true;
+}
+
 bool ThumbnailCommand::DoExecute()
 {
 	std::wstring command = _parameters[0];

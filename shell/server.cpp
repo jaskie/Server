@@ -33,6 +33,7 @@
 #include <core/mixer/audio/audio_util.h>
 #include <core/mixer/mixer.h>
 #include <core/video_channel.h>
+#include <core/recorder.h>
 #include <core/producer/stage.h>
 #include <core/consumer/output.h>
 #include <core/consumer/synchronizing/synchronizing_consumer.h>
@@ -59,6 +60,7 @@
 #include <modules/ffmpeg/consumer/ffmpeg_consumer.h>
 
 #include <modules/decklink/producer/decklink_producer.h>
+#include <modules/decklink/recorder/decklink_recorder.h>
 
 #include <protocol/amcp/AMCPProtocolStrategy.h>
 #include <protocol/cii/CIIProtocolStrategy.h>
@@ -116,6 +118,7 @@ struct server::implementation : boost::noncopyable
 	osc::client									osc_client_;
 	std::vector<std::shared_ptr<void>>			predefined_osc_subscriptions_;
 	std::vector<safe_ptr<video_channel>>		channels_;
+	std::vector<safe_ptr<recorder>>				recorders_;
 	safe_ptr<media_info_repository>				media_info_repo_;
 	boost::thread								initial_media_info_thread_;
 	tbb::atomic<bool>							running_;
@@ -160,6 +163,9 @@ struct server::implementation : boost::noncopyable
 		setup_controllers(env::properties());
 		CASPAR_LOG(info) << L"Initialized controllers.";
 
+		setup_recorders(env::properties());
+		CASPAR_LOG(info) << L"Initialized recorders.";
+
 		setup_osc(env::properties());
 		CASPAR_LOG(info) << L"Initialized osc.";
 
@@ -176,6 +182,7 @@ struct server::implementation : boost::noncopyable
 		async_servers_.clear();
 		destroy_producers_synchronously();
 		channels_.clear();
+		recorders_.clear();
 		ffmpeg::uninit();
 	}
 
@@ -398,6 +405,29 @@ struct server::implementation : boost::noncopyable
 				media_info_repo_));
 
 		CASPAR_LOG(info) << L"Initialized thumbnail generator.";
+	}
+
+	void setup_recorders(const boost::property_tree::wptree& pt)
+	{
+		using boost::property_tree::wptree;
+		BOOST_FOREACH(auto& xml_recorder, pt.get_child(L"configuration.recorders"))
+		{
+			try
+			{
+				auto recorder_type = xml_recorder.first;
+				if (recorder_type == L"decklink")
+				{
+					auto recorder = decklink::create_recorder(recorders_.size() + 1, xml_recorder.second);
+					recorders_.push_back(recorder);
+				}
+				else
+					CASPAR_LOG(warning) << "Invalid recorder type: " << recorder_type;
+			}
+			catch (...)
+			{
+				CASPAR_LOG_CURRENT_EXCEPTION();
+			}
+		}
 	}
 
 	safe_ptr<IO::IProtocolStrategy> create_protocol(const std::wstring& name) const

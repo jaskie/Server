@@ -16,6 +16,9 @@
     <Filter Include="source\interop">
       <UniqueIdentifier>{31a4591f-510e-4594-9f79-e506cfcacee0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="source\recorder">
+      <UniqueIdentifier>{4428ba94-010c-4231-bc2f-392f905627ee}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="consumer\decklink_consumer.cpp">
@@ -33,6 +36,9 @@
     </ClCompile>
     <ClCompile Include="consumer\blocking_decklink_consumer.cpp">
       <Filter>source\consumer</Filter>
+    </ClCompile>
+    <ClCompile Include="recorder\decklink_recorder.cpp">
+      <Filter>source\recorder</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -57,6 +63,9 @@
     </ClInclude>
     <ClInclude Include="consumer\blocking_decklink_consumer.h">
       <Filter>source\consumer</Filter>
+    </ClInclude>
+    <ClInclude Include="recorder\decklink_recorder.h">
+      <Filter>source\recorder</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
