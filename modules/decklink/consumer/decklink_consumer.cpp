@@ -253,7 +253,7 @@ public:
 		{	
 			if(preroll)
 			{
-				if(++preroll_count_ >= buffer_size_)
+				if(preroll_count_++ >= buffer_size_)
 				{
 					output_->EndAudioPreroll();
 					start_playback();				
