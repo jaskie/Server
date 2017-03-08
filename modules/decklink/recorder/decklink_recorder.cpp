@@ -30,6 +30,8 @@
 #include <core/consumer/output.h>
 #include <ffmpeg/consumer/ffmpeg_consumer.h>
 
+#include <boost/algorithm/string.hpp>
+
 
 
 
@@ -44,6 +46,22 @@ namespace caspar {
 			return result;
 		}
 
+		BMDTimecodeBCD decode_timecode(std::wstring tc)
+		{
+			std::vector<std::wstring> split;
+			boost::split(split, tc, boost::is_any_of(":."));
+			if (split.size() == 4)
+			{
+				unsigned int result =  boost::lexical_cast<unsigned int>(split[3])
+					| (boost::lexical_cast<unsigned int>(split[2]) << 8)
+					| (boost::lexical_cast<unsigned int>(split[1]) << 16)
+					| (boost::lexical_cast<unsigned int>(split[0]) << 24);
+				return result;
+			}
+			return 0;
+		}
+		
+
 		class decklink_recorder : public core::recorder, IDeckLinkDeckControlStatusCallback
 		{
 		private:
@@ -52,6 +70,7 @@ namespace caspar {
 				idle,
 				opening,
 				prerolling,
+				winding,
 				recording,
 			}									record_state_;
 			com_initializer						init_;
@@ -64,6 +83,8 @@ namespace caspar {
 			safe_ptr<core::video_channel> *		channel_;
 			std::wstring						file_name_;
 			safe_ptr<core::frame_consumer> *	consumer_;
+			unsigned int						tc_in_;
+			unsigned int						tc_out_;
 
 			BMDTimecodeBCD						current_timecode_;
 
@@ -78,11 +99,20 @@ namespace caspar {
 				consumer_ = nullptr;
 				channel_ = nullptr;
 				file_name_ = L"";
+				tc_in_ = 0;
+				tc_out_ = 0;
+				record_state_ = record_state::idle;
 			}
 
 			void start_capture()
 			{
-
+				if (FAILED(deck_control_->StartCapture(FALSE, tc_in_, tc_out_, &last_deck_error_)))
+				{
+					CASPAR_LOG(error) << print() << L" Could not start capture";
+					Abort();
+				}
+				else
+					record_state_ = record_state::winding;
 			}
 
 			void begin_recording()
@@ -95,16 +125,30 @@ namespace caspar {
 
 			}
 
+			std::wstring print() const
+			{
+				return L"decklink-recorder [" + get_model_name(decklink_) + L":" + boost::lexical_cast<std::wstring>(index_) + L"]";
+			}
+
+
 		public:
-			decklink_recorder(int index, int device_index) 
+			decklink_recorder(int index, int device_index)
 				: index_(index)
 				, decklink_(get_device(device_index))
 				, deck_control_(get_deck_control(decklink_))
 				, consumer_(nullptr)
 				, current_timecode_(0)
 				, last_deck_error_(bmdDeckControlNoError)
+				, tc_in_(0)
+				, tc_out_(0)
 			{
-				deck_control_->SetCallback(this);
+				if (FAILED(deck_control_->SetCallback(this)))
+					CASPAR_LOG(error) << print() << L" Could not open deck control";
+				else
+				{
+
+					CASPAR_LOG(error) << print() << L" Initialized";
+				}
 			}
 			
 			~decklink_recorder()
@@ -118,11 +162,15 @@ namespace caspar {
 
 			virtual void Capture(std::shared_ptr<core::video_channel> channel, std::wstring tc_in, std::wstring tc_out, int preroll, int offset, std::wstring file_name, const core::parameters& params)
 			{
+				Abort();
 				caspar::core::video_format_desc format_desc = channel->get_video_format_desc();
-				if (FAILED(deck_control_->Open(1, 0, FALSE, &last_deck_error_)))
+				if (FAILED(deck_control_->Open(format_desc.time_scale, format_desc.duration, FALSE, &last_deck_error_)))
 				{
-					CASPAR_LOG(error) << L"Could not open deck control ";
+					CASPAR_LOG(error) << print() << L" Could not open deck control";
+					return;
 				}
+				tc_in_ = decode_timecode(tc_in);
+				tc_out_ = decode_timecode(tc_out);
 				record_state_ = record_state::opening;
 				auto consumer = ffmpeg::create_recorder_consumer(file_name, params);
 				consumer_ = &consumer;
@@ -130,6 +178,8 @@ namespace caspar {
 
 			virtual void Abort()
 			{
+				if (record_state_ > record_state::idle)
+					deck_control_->Close(FALSE);
 				if (record_state_ > record_state::opening)
 					deck_control_->Stop(&last_deck_error_);
 			}
@@ -143,6 +193,15 @@ namespace caspar {
 			STDMETHOD(TimecodeUpdate(BMDTimecodeBCD currentTimecode))
 			{
 				current_timecode_ = currentTimecode;
+				if (record_state_ == record_state::winding && currentTimecode == tc_in_)
+				{
+					(*channel_)->output()->add(*consumer_);
+					record_state_ = record_state::recording;
+				}
+				if (record_state_ == record_state::recording && currentTimecode == tc_out_)
+				{
+					clean_recorder();
+				}
 				return S_OK;
 			}
 
