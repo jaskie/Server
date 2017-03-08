@@ -283,8 +283,5 @@
     <ClCompile Include="producer\media_info\in_memory_media_info_repository.cpp">
       <Filter>source\producer\media_info</Filter>
     </ClCompile>
-    <ClCompile Include="recorder.cpp">
-      <Filter>source</Filter>
-    </ClCompile>
   </ItemGroup>
 </Project>

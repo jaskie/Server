@@ -1711,7 +1711,20 @@ bool DataCommand::DoExecuteList()
 bool RecordCommand::DoExecute()
 {
 	auto channel = GetChannel();
-	return true;
+	int recorder_index = _parameters.get(L"RECORDER", std::numeric_limits<int>().max()) - 1;
+	auto recorders = GetRecorders();
+	auto recorder = recorder_index < recorders.size() ? std::shared_ptr<core::recorder>(recorders[recorder_index]) : nullptr;
+	if (recorder)
+	{
+		std::wstring tcIn = _parameters.get(L"IN", L"00:00:00:00");
+		std::wstring tcOut = _parameters.get(L"OUT", L"00:00:00:00");
+		int preroll = _parameters.get(L"PREROLL", 3);
+		int offset = _parameters.get(L"OFFSET", 0);
+		std::wstring filename = _parameters.get(L"FILE", L"");
+		recorder->Capture(channel, tcIn, tcOut, preroll, offset, filename, _parameters);
+		return true;
+	}
+	return false;
 }
 
 bool ThumbnailCommand::DoExecute()

@@ -158,13 +158,13 @@ struct server::implementation : boost::noncopyable
 		setup_channels(env::properties());
 		CASPAR_LOG(info) << L"Initialized channels.";
 
+		setup_recorders(env::properties());
+		CASPAR_LOG(info) << L"Initialized recorders.";
+
 		setup_thumbnail_generation(env::properties());
 
 		setup_controllers(env::properties());
 		CASPAR_LOG(info) << L"Initialized controllers.";
-
-		setup_recorders(env::properties());
-		CASPAR_LOG(info) << L"Initialized recorders.";
 
 		setup_osc(env::properties());
 		CASPAR_LOG(info) << L"Initialized osc.";
@@ -433,7 +433,7 @@ struct server::implementation : boost::noncopyable
 	safe_ptr<IO::IProtocolStrategy> create_protocol(const std::wstring& name) const
 	{
 		if(boost::iequals(name, L"AMCP"))
-			return make_safe<amcp::AMCPProtocolStrategy>(channels_, thumbnail_generator_, media_info_repo_, shutdown_server_now_);
+			return make_safe<amcp::AMCPProtocolStrategy>(channels_, recorders_, thumbnail_generator_, media_info_repo_, shutdown_server_now_);
 		else if(boost::iequals(name, L"CII"))
 			return make_safe<cii::CIIProtocolStrategy>(channels_);
 		else if(boost::iequals(name, L"CLOCK"))
@@ -471,6 +471,11 @@ server::server(boost::promise<bool>& shutdown_server_now) : impl_(new implementa
 const std::vector<safe_ptr<video_channel>> server::get_channels() const
 {
 	return impl_->channels_;
+}
+
+const std::vector<safe_ptr<recorder>> server::get_recorders() const
+{
+	return impl_->recorders_;
 }
 
 std::shared_ptr<thumbnail_generator> server::get_thumbnail_generator() const

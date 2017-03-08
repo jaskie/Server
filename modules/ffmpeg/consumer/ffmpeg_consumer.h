@@ -26,16 +26,17 @@
 #include <string>
 #include <vector>
 
-namespace caspar { 
+namespace caspar {
 
-namespace core {
-	struct frame_consumer;
-	class parameters;
+	namespace core {
+		struct frame_consumer;
+		class parameters;
+	}
+
+	namespace ffmpeg {
+
+		safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params);
+		safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptree& ptree);
+		safe_ptr<core::frame_consumer> create_recorder_consumer(const std::wstring filename, const core::parameters& params);
+	}
 }
-
-namespace ffmpeg {
-	
-safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params);
-safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptree& ptree);
-
-}}

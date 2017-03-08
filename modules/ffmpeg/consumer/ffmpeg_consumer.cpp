@@ -782,6 +782,25 @@ public:
 
 };	
 
+safe_ptr<core::frame_consumer> create_recorder_consumer(const std::wstring filename, const core::parameters& params) 
+{
+	std::wstring acodec = params.get_original(L"ACODEC");
+	std::wstring vcodec = params.get_original(L"VCODEC");
+	std::wstring options = params.get_original(L"OPTIONS");
+	int64_t		 arate = params.get(L"ARATE", 0LL);
+	int64_t		 vrate = params.get(L"VRATE", 0LL);
+	output_format format(
+		narrow(filename),
+		avcodec_find_encoder_by_name(narrow(acodec).c_str()),
+		avcodec_find_encoder_by_name(narrow(vcodec).c_str()),
+		false,
+		!params.has(L"NARROW"),
+		arate,
+		vrate
+	);
+	return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, format, narrow(options), false);
+}
+
 safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params)
 {
 	if(params.size() < 1 || (params[0] != L"FILE" && params[0] != L"STREAM"))

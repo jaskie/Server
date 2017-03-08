@@ -36,6 +36,13 @@
 #include <string>
 
 namespace caspar { namespace decklink {
+
+	struct com_initializer
+	{
+		com_initializer() { ::CoInitialize(nullptr); }
+		~com_initializer() { ::CoUninitialize(); }
+	};
+
 	
 static BMDDisplayMode get_decklink_video_format(core::video_format::type fmt) 
 {

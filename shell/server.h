@@ -35,6 +35,7 @@ namespace caspar {
 
 namespace core {
 	class video_channel;
+	class recorder;
 	class thumbnail_generator;
 	struct media_info_repository;
 }
@@ -44,6 +45,7 @@ class server : boost::noncopyable
 public:
 	server(boost::promise<bool>& shutdown_server_now);
 	const std::vector<safe_ptr<core::video_channel>> get_channels() const;
+	const std::vector<safe_ptr<core::recorder>> get_recorders() const;
 	std::shared_ptr<core::thumbnail_generator> get_thumbnail_generator() const;
 	safe_ptr<core::media_info_repository> get_media_info_repo() const;
 

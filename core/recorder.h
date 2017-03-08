@@ -20,7 +20,8 @@
 
 #include "monitor/monitor.h"
 
-#include <common/memory/safe_ptr.h>
+#include <core/parameters/parameters.h>
+#include <core/video_channel.h>
 
 #include <boost/noncopyable.hpp>
 #include <boost/property_tree/ptree_fwd.hpp>
@@ -39,12 +40,15 @@ namespace caspar {
 			// Constructors
 
 			// Methods
-
+			virtual void Capture(std::shared_ptr<core::video_channel> channel, std::wstring tc_in, std::wstring tc_out, int preroll, int offset, std::wstring file_name, const core::parameters& params) {};
+			virtual void Abort() {};
+			
 			// Properties
 
-			virtual boost::property_tree::wptree info() const = 0;
-
-			virtual int index() const = 0;
+			virtual int index() const 
+			{
+				return 0;
+			};
 		};
 	}
 }

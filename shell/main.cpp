@@ -278,6 +278,7 @@ int main(int argc, wchar_t* argv[])
 				// Create a amcp parser for console commands.
 				caspar::protocol::amcp::AMCPProtocolStrategy amcp(
 						caspar_server.get_channels(),
+						caspar_server.get_recorders(),
 						caspar_server.get_thumbnail_generator(),
 						caspar_server.get_media_info_repo(),
 						shutdown_server_now);
@@ -315,7 +316,7 @@ int main(int argc, wchar_t* argv[])
 						else if(wcmd.substr(0, 1) == L"5")
 							wcmd = L"PLAY 1-0 BARS";
 						else if (wcmd.substr(0, 1) == L"6")
-							wcmd = L"RECORD 2 10:0:0:0 10:0:10:0 3 5 record.mov acodec AAC vcodec libx264 vrate 8192";
+							wcmd = L"RECORD 2 recorder 1 IN 10:0:0:0 OUT 10:0:10:0 PREROLL 3 OFFSET 5 FILE record.mov acodec aac vcodec libx264 vrate 8192";
 						else if(upper_cmd.substr(0, 1) == L"X")
 						{
 							int num = 0;
