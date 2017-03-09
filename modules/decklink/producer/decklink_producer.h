@@ -41,5 +41,6 @@ safe_ptr<core::frame_producer> create_producer(
 	const safe_ptr<core::frame_factory>& frame_factory, 
 	const core::video_format_desc format_desc, 
 	const core::channel_layout channel_layout, 
-	int device_index);
+	const int device_index,
+	const std::wstring timecode_source);
 }}

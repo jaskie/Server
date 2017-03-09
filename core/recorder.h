@@ -40,7 +40,7 @@ namespace caspar {
 			// Constructors
 
 			// Methods
-			virtual void Capture(std::shared_ptr<core::video_channel> channel, std::wstring tc_in, std::wstring tc_out, unsigned int preroll, int offset, std::wstring file_name, const core::parameters& params) {};
+			virtual void Capture(std::shared_ptr<core::video_channel> channel, std::wstring tc_in, std::wstring tc_out, std::wstring file_name, const core::parameters& params) {};
 			virtual void Abort() {};
 			
 			// Properties

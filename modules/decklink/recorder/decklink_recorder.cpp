@@ -114,6 +114,7 @@ namespace caspar {
 			enum record_state
 			{
 				idle,
+				ready,
 				recording
 			}									record_state_;
 			com_initializer						init_;
@@ -178,7 +179,7 @@ namespace caspar {
 
 
 		public:
-			decklink_recorder(int index, int device_index, safe_ptr<core::video_channel> channel)
+			decklink_recorder(int index, int device_index, unsigned int preroll, safe_ptr<core::video_channel> channel)
 				: index_(index)
 				, decklink_(get_device(device_index))
 				, deck_control_(get_deck_control(decklink_))
@@ -188,11 +189,11 @@ namespace caspar {
 			{
 				if (FAILED(deck_control_->SetCallback(this)))
 					CASPAR_LOG(error) << print() << L" Could not open deck control";
-				else
-				{
-					open_deck_control(caspar::core::video_format_desc::get(caspar::core::video_format::pal));
-					CASPAR_LOG(debug) << print() << L" Initialized";
-				}
+				if (FAILED(deck_control_->SetPreroll(preroll)))
+					CASPAR_LOG(warning) << print() << L" Could not set deck preroll time";
+				open_deck_control(caspar::core::video_format_desc::get(caspar::core::video_format::pal));
+				CASPAR_LOG(debug) << print() << L" Initialized";
+
 			}
 			
 			~decklink_recorder()
@@ -205,7 +206,7 @@ namespace caspar {
 			}
 
 
-			virtual void Capture(std::shared_ptr<core::video_channel> channel, std::wstring tc_in, std::wstring tc_out, unsigned int preroll, int offset, std::wstring file_name, const core::parameters& params)
+			virtual void Capture(std::shared_ptr<core::video_channel> channel, std::wstring tc_in, std::wstring tc_out, std::wstring file_name, const core::parameters& params)
 			{
 				Abort();
 				caspar::core::video_format_desc new_format_desc = channel->get_video_format_desc();
@@ -215,10 +216,7 @@ namespace caspar {
 					deck_control_->Close(false);
 					open_deck_control(new_format_desc);
 				}
-				if (FAILED(deck_control_->SetPreroll(preroll)))
-					CASPAR_LOG(warning) << print() << L" Could not set deck preroll time";
-				if (FAILED(deck_control_->SetCaptureOffset(offset)))
-					CASPAR_LOG(warning) << print() << L" Could not set deck capture offset time";
+
 				tc_in_ = encode_timecode(tc_in);
 				tc_out_ = encode_timecode(tc_out);
 				
@@ -242,14 +240,16 @@ namespace caspar {
 			STDMETHOD(TimecodeUpdate(BMDTimecodeBCD currentTimecode))
 			{
 				current_timecode_ = bcd2i(currentTimecode);
+				if (record_state_ == record_state::ready)
+					begin_recording();
 				return S_OK;
 			}
 
 			STDMETHOD(VTRControlStateChanged(BMDDeckControlVTRControlState newState, BMDDeckControlError error))
 			{
-				CASPAR_LOG(trace) << print() << L" VTR Control state changed: " << widen(STATE_TO_STR(newState));
 				if (record_state_ == record_state::recording)
 					Abort();
+				CASPAR_LOG(trace) << print() << L" VTR Control state changed: " << widen(STATE_TO_STR(newState));
 				return S_OK;
 			}
 
@@ -257,10 +257,9 @@ namespace caspar {
 			{
 				if (record_state_ == record_state::recording)
 					Abort();
+				// this thread is unable to initialize FFmpeg consumer
 				if (e == bmdDeckControlPrepareForCaptureEvent)
-				{
-					begin_recording();
-				}
+					record_state_ = record_state::ready;
 				CASPAR_LOG(trace) << print() << L" Event received: " << widen(EVT_TO_STR(e));
 				return S_OK;
 			}
@@ -286,12 +285,12 @@ namespace caspar {
 #pragma endregion
 
 		};
-
-
+		
 		safe_ptr<core::recorder> create_recorder(int index, safe_ptr<core::video_channel> channel, const boost::property_tree::wptree& ptree)
 		{
 			auto device_index = ptree.get(L"device", 1);
-			return make_safe<decklink_recorder>(index, device_index, channel);
+			auto preroll = ptree.get(L"preroll", 3U);
+			return make_safe<decklink_recorder>(index, device_index, preroll, channel);
 		}
 
 	}

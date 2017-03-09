@@ -300,7 +300,8 @@ struct server::implementation : boost::noncopyable
 			if (xml_producer.is_initialized())
 			{
 				auto device_index = xml_producer.get().get(L"device", 1);
-				producer = decklink::create_producer(channel->mixer(), channel->get_video_format_desc(), channel->get_channel_layot(), device_index);
+				auto timecode_source = xml_producer.get().get(L"timecode-source", L"serial");
+				producer = decklink::create_producer(channel->mixer(), channel->get_video_format_desc(), channel->get_channel_layot(), device_index, timecode_source);
 				channel->stage()->load(layer, producer);
 				channel->stage()->play(layer);
 				return;

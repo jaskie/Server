@@ -1718,10 +1718,8 @@ bool CaptureCommand::DoExecute()
 	{
 		std::wstring tcIn = _parameters.get(L"IN", L"00:00:00:00");
 		std::wstring tcOut = _parameters.get(L"OUT", L"00:00:00:00");
-		int preroll = _parameters.get(L"PREROLL", 3);
-		int offset = _parameters.get(L"OFFSET", 0);
 		std::wstring filename = _parameters.get(L"FILE", L"");
-		recorder->Capture(channel, tcIn, tcOut, preroll, offset, filename, _parameters);
+		recorder->Capture(channel, tcIn, tcOut, filename, _parameters);
 		return true;
 	}
 	return false;
