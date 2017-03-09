@@ -50,6 +50,7 @@ struct write_frame::implementation
 	core::field_mode::type						mode_;
 	boost::timer								since_created_timer_;
 	tbb::atomic<int64_t>						recorded_frame_age_;
+	tbb::atomic<unsigned int>					timecode_;
 
 	implementation(const void* tag, const channel_layout& channel_layout)
 		: channel_layout_(channel_layout)
@@ -107,7 +108,7 @@ struct write_frame::implementation
 			commit(n);
 	}
 
-	void commit(size_t plane_index)
+	void commit(uint32_t plane_index)
 	{
 		if(plane_index >= buffers_.size())
 			return;
@@ -173,5 +174,8 @@ void write_frame::set_type(const field_mode::type& mode){impl_->mode_ = mode;}
 core::field_mode::type write_frame::get_type() const{return impl_->mode_;}
 void write_frame::accept(core::frame_visitor& visitor){impl_->accept(*this, visitor);}
 int64_t write_frame::get_and_record_age_millis() { return impl_->get_and_record_age_millis(); }
+unsigned int write_frame::get_timecode() { return impl_->timecode_; }
+void write_frame::set_timecode(unsigned int timecode) { impl_->timecode_ = timecode; }
+
 
 }}

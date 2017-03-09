@@ -35,6 +35,7 @@
 #include <deque>
 #include <map>
 #include <memory>
+#include <math.h>
 #include <queue>
 #include <string>
 #include <vector>

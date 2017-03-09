@@ -81,32 +81,7 @@ namespace caspar {
 			return result;
 		}
 		
-		// levis501 SO code
-		unsigned int bcd2i(unsigned int bcd) {
-			unsigned int decimalMultiplier = 1;
-			unsigned int digit;
-			unsigned int i = 0;
-			while (bcd > 0) {
-				digit = bcd & 0xF;
-				i += digit * decimalMultiplier;
-				decimalMultiplier *= 10;
-				bcd >>= 4;
-			}
-			return i;
-		}
 
-		unsigned int i2bcd(unsigned int i) {
-			unsigned int binaryShift = 0;
-			unsigned int digit;
-			unsigned int bcd = 0;
-			while (i > 0) {
-				digit = i % 10;
-				bcd += (digit << binaryShift);
-				binaryShift += 4;
-				i /= 10;
-			}
-			return bcd;
-		}
 
 		BMDTimecodeBCD encode_timecode(std::wstring tc)
 		{
@@ -139,9 +114,7 @@ namespace caspar {
 			enum record_state
 			{
 				idle,
-				prerolling,
-				prepared,
-				recording,
+				recording
 			}									record_state_;
 			com_initializer						init_;
 			int									index_;
@@ -155,8 +128,7 @@ namespace caspar {
 			safe_ptr<core::video_channel>		channel_;
 			std::wstring						file_name_;
 			safe_ptr<core::frame_consumer>		consumer_;
-			tbb::atomic<int>					offset_;
-
+			
 			// timecodes are converted from BCD to unsigned integers
 			tbb::atomic<unsigned int>			tc_in_;
 			tbb::atomic<unsigned int>			tc_out_;
@@ -166,15 +138,14 @@ namespace caspar {
 
 			void clean_recorder()
 			{
+				record_state_ = record_state::idle;
 				if (consumer_ != core::frame_consumer::empty())
 					channel_->output()->remove(consumer_);
-
 				consumer_ = core::frame_consumer::empty();
 				//channel_ = core::video_channel();
 				file_name_ = L"";
 				tc_in_ = 0;
 				tc_out_ = 0;
-				record_state_ = record_state::idle;
 			}
 
 			void start_capture()
@@ -196,12 +167,8 @@ namespace caspar {
 
 			void begin_recording()
 			{
-
-			}
-
-			void finish_recording()
-			{
-
+				record_state_ = record_state::recording;
+				channel_->output()->add(consumer_);
 			}
 
 			std::wstring print() const
@@ -250,13 +217,12 @@ namespace caspar {
 				}
 				if (FAILED(deck_control_->SetPreroll(preroll)))
 					CASPAR_LOG(warning) << print() << L" Could not set deck preroll time";
-				//if (FAILED(deck_control_->SetCaptureOffset(offset)))
-				//	CASPAR_LOG(warning) << print() << L" Could not set deck capture offset time";
+				if (FAILED(deck_control_->SetCaptureOffset(offset)))
+					CASPAR_LOG(warning) << print() << L" Could not set deck capture offset time";
 				tc_in_ = encode_timecode(tc_in);
 				tc_out_ = encode_timecode(tc_out);
-				offset_ = offset;
 				
-				consumer_ = ffmpeg::create_recorder_consumer(file_name, params);
+				consumer_ = ffmpeg::create_recorder_consumer(file_name, params, tc_in_, tc_out_);
 				start_capture();
 			}
 
@@ -276,17 +242,6 @@ namespace caspar {
 			STDMETHOD(TimecodeUpdate(BMDTimecodeBCD currentTimecode))
 			{
 				current_timecode_ = bcd2i(currentTimecode);
-				if (record_state_ == record_state::prepared && current_timecode_ + offset_ >= tc_in_)
-				{
-					channel_->output()->add(consumer_);
-					record_state_ = record_state::recording;
-					CASPAR_LOG(info) << print() << L" Recording started";
-				}
-				if (record_state_ == record_state::recording && current_timecode_ + offset_ > tc_out_ + 1)
-				{
-					clean_recorder();
-					CASPAR_LOG(info) << print() << L" Recording finished";
-				}
 				return S_OK;
 			}
 
@@ -300,10 +255,12 @@ namespace caspar {
 
 			STDMETHOD(DeckControlEventReceived(BMDDeckControlEvent e, BMDDeckControlError error))
 			{
-				if (e == bmdDeckControlPrepareForCaptureEvent)
-					record_state_ = record_state::prepared;
 				if (record_state_ == record_state::recording)
 					Abort();
+				if (e == bmdDeckControlPrepareForCaptureEvent)
+				{
+					begin_recording();
+				}
 				CASPAR_LOG(trace) << print() << L" Event received: " << widen(EVT_TO_STR(e));
 				return S_OK;
 			}

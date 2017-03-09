@@ -246,7 +246,11 @@ public:
 			auto fieldDominance = current_display_mode_->GetFieldDominance();
 			av_frame->interlaced_frame	= fieldDominance == bmdLowerFieldFirst || fieldDominance == bmdUpperFieldFirst;
 			av_frame->top_field_first	= fieldDominance == bmdUpperFieldFirst;
-				
+			IDeckLinkTimecode * decklink_timecode_bcd = NULL;
+			unsigned int frame_timecode = 0;
+			if (SUCCEEDED(video->GetTimecode(bmdTimecodeRP188Any, &decklink_timecode_bcd)) && decklink_timecode_bcd)
+				frame_timecode = bcd2i(decklink_timecode_bcd->GetBCD());
+			
 			std::shared_ptr<core::audio_buffer> audio_buffer;
 
 			// It is assumed that audio is always equal or ahead of video.
@@ -292,7 +296,7 @@ public:
 			}
 
 			muxer_.push(audio_buffer);
-			muxer_.push(av_frame, hints_);	
+			muxer_.push(av_frame, hints_, frame_timecode);
 											
 			boost::range::rotate(audio_cadence_, std::begin(audio_cadence_)+1);
 			

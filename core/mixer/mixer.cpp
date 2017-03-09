@@ -110,6 +110,7 @@ public:
 				mix_timer_.restart();
 
 				auto frames = packet.first;
+				unsigned int timecode = 0;
 				
 				BOOST_FOREACH(auto& frame, frames)
 				{
@@ -118,8 +119,9 @@ public:
 													
 					frame.second->accept(audio_mixer_);					
 					frame.second->accept(image_mixer_);
-
+					
 					image_mixer_.end_layer();
+					timecode = std::max(timecode, frame.second->get_timecode());
 				}
 
 				auto image = image_mixer_(format_desc_, straighten_alpha_);
@@ -130,7 +132,7 @@ public:
 				graph_->set_value("mix-time", mix_time*format_desc_.fps*0.5);
 				current_mix_time_ = static_cast<int64_t>(mix_time * 1000.0);
 
-				target_->send(std::make_pair(make_safe<read_frame>(ogl_, format_desc_.size, std::move(image.get()), std::move(audio), audio_channel_layout_), packet.second));
+				target_->send(std::make_pair(make_safe<read_frame>(ogl_, format_desc_.size, std::move(image.get()), std::move(audio), audio_channel_layout_, timecode), packet.second));
 			}
 			catch(...)
 			{

@@ -678,18 +678,22 @@ struct ffmpeg_consumer_proxy : public core::frame_consumer
 	output_format					output_format_;
 	core::video_format_desc			format_desc_;
 	const std::string				options_;
+	const unsigned int				tc_in_;
+	const unsigned int				tc_out_;
 
 	std::unique_ptr<ffmpeg_consumer> consumer_;
 	std::unique_ptr<ffmpeg_consumer> key_only_consumer_;
 
 public:
 
-	ffmpeg_consumer_proxy(const std::wstring& filename, output_format format, const std::string options, const bool separate_key)
+	ffmpeg_consumer_proxy(const std::wstring& filename, output_format format, const std::string options, const bool separate_key, const unsigned int tc_in = 0, const unsigned int tc_out = std::numeric_limits<unsigned int>().max())
 		: filename_(filename)
 		, separate_key_(separate_key)
 		, output_format_(format)
 		, options_(options)
 		, index_(100000 + crc16(boost::to_lower_copy(filename)))
+		, tc_in_(tc_in)
+		, tc_out_(tc_out)
 	{
 	}
 	
@@ -736,10 +740,13 @@ public:
 
 		if (ready_for_frame)
 		{
-			consumer_->send(frame);
-
-			if (separate_key_)
-				key_only_consumer_->send(frame);
+			unsigned int timecode = frame->get_timecode();
+			if (timecode >= tc_in_ && timecode < tc_out_)
+			{
+				consumer_->send(frame);
+				if (separate_key_)
+					key_only_consumer_->send(frame);
+			}
 		}
 		else
 		{
@@ -782,7 +789,7 @@ public:
 
 };	
 
-safe_ptr<core::frame_consumer> create_recorder_consumer(const std::wstring filename, const core::parameters& params) 
+safe_ptr<core::frame_consumer> create_recorder_consumer(const std::wstring filename, const core::parameters& params, const unsigned int tc_in, const unsigned int tc_out)
 {
 	std::wstring acodec = params.get_original(L"ACODEC");
 	std::wstring vcodec = params.get_original(L"VCODEC");
@@ -798,7 +805,7 @@ safe_ptr<core::frame_consumer> create_recorder_consumer(const std::wstring filen
 		arate,
 		vrate
 	);
-	return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, format, narrow(options), false);
+	return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, format, narrow(options), false, tc_in, tc_out);
 }
 
 safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params)

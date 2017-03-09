@@ -50,6 +50,7 @@ struct read_frame::implementation : boost::noncopyable
 	audio_buffer				audio_data_;
 	channel_layout				audio_channel_layout_;
 	int64_t						created_timestamp_;
+	const unsigned int			frame_timecode_;
 
 public:
 	implementation(
@@ -57,13 +58,16 @@ public:
 			size_t size,
 			safe_ptr<host_buffer>&& image_data,
 			audio_buffer&& audio_data,
-			const channel_layout& audio_channel_layout) 
+			const channel_layout& audio_channel_layout,
+			const unsigned int frame_timecode
+	) 
 		: ogl_(ogl)
 		, size_(size)
 		, image_data_(std::move(image_data))
 		, audio_data_(std::move(audio_data))
 		, audio_channel_layout_(audio_channel_layout)
 		, created_timestamp_(get_current_time_millis())
+		, frame_timecode_(frame_timecode)
 	{
 	}	
 	
@@ -93,8 +97,9 @@ read_frame::read_frame(
 		size_t size,
 		safe_ptr<host_buffer>&& image_data,
 		audio_buffer&& audio_data,
-		const channel_layout& audio_channel_layout) 
-	: impl_(new implementation(ogl, size, std::move(image_data), std::move(audio_data), audio_channel_layout))
+		const channel_layout& audio_channel_layout,
+		unsigned int frame_timecode)
+	: impl_(new implementation(ogl, size, std::move(image_data), std::move(audio_data), audio_channel_layout, frame_timecode))
 {
 }
 
@@ -122,6 +127,11 @@ const multichannel_view<const int32_t, boost::iterator_range<const int32_t*>::co
 int64_t read_frame::get_age_millis() const
 {
 	return impl_ ? get_current_time_millis() - impl_->created_timestamp_ : 0;
+}
+
+unsigned int read_frame::get_timecode() const
+{
+	return impl_ ? impl_->frame_timecode_ : 0;
 }
 
 //#include <tbb/scalable_allocator.h>

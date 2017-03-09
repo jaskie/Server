@@ -118,6 +118,35 @@ static core::video_format::type get_caspar_video_format(BMDDisplayMode fmt)
 	}
 }
 
+// levis501 SO code
+static unsigned int bcd2i(unsigned int bcd) 
+{
+	unsigned int decimalMultiplier = 1;
+	unsigned int digit;
+	unsigned int i = 0;
+	while (bcd > 0) {
+		digit = bcd & 0xF;
+		i += digit * decimalMultiplier;
+		decimalMultiplier *= 10;
+		bcd >>= 4;
+	}
+	return i;
+}
+
+static unsigned int i2bcd(unsigned int i) 
+{
+	unsigned int binaryShift = 0;
+	unsigned int digit;
+	unsigned int bcd = 0;
+	while (i > 0) {
+		digit = i % 10;
+		bcd += (digit << binaryShift);
+		binaryShift += 4;
+		i /= 10;
+	}
+	return bcd;
+}
+
 template<typename T, typename F>
 CComPtr<IDeckLinkDisplayMode> get_display_mode(const T& device, BMDDisplayMode format, BMDPixelFormat pix_fmt, F flag)
 {
