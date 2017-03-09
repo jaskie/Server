@@ -316,7 +316,7 @@ int main(int argc, wchar_t* argv[])
 						else if(wcmd.substr(0, 1) == L"5")
 							wcmd = L"PLAY 1-0 BARS";
 						else if (wcmd.substr(0, 1) == L"6")
-							wcmd = L"RECORD 2 recorder 1 IN 0:23:44:0 OUT 0:24:20:0 PREROLL 3 OFFSET 5 FILE record.mov acodec aac vcodec libx264 vrate 8192";
+							wcmd = L"CAPTURE 2 recorder 1 IN 0:00:10:0 OUT 0:0:20:0 PREROLL 3 OFFSET 6 FILE record.mov acodec aac vcodec libx264 vrate 8192";
 						else if(upper_cmd.substr(0, 1) == L"X")
 						{
 							int num = 0;

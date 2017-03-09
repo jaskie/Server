@@ -30,9 +30,10 @@ namespace caspar {
 
 	namespace core {
 		class recorder;
+		class video_channel;
 	}
 
 	namespace decklink {
-		safe_ptr<core::recorder> create_recorder(int id, const boost::property_tree::wptree& ptree);
+		safe_ptr<core::recorder> create_recorder(int id, safe_ptr<core::video_channel> channel, const boost::property_tree::wptree& ptree);
 	}
 }

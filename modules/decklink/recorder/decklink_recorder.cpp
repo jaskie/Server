@@ -33,11 +33,46 @@
 #include <boost/algorithm/string.hpp>
 
 
+#define ERR_TO_STR(err) ((err)==bmdDeckControlNoError) ? "No error" :\
+						((err)==bmdDeckControlModeError) ? "Mode error":\
+						((err)==bmdDeckControlMissedInPointError) ? "Missed InPoint error":\
+						((err)==bmdDeckControlDeckTimeoutError) ? "DeckTimeout error":\
+						((err)==bmdDeckControlCommandFailedError) ? "Cmd failed error":\
+						((err)==bmdDeckControlDeviceAlreadyOpenedError) ? "Device already open":\
+						((err)==bmdDeckControlFailedToOpenDeviceError) ? "Failed to open device error":\
+						((err)==bmdDeckControlInLocalModeError) ? "InLocal mode error":\
+						((err)==bmdDeckControlEndOfTapeError) ? "EOT error":\
+						((err)==bmdDeckControlUserAbortError) ? "UserAbort error":\
+						((err)==bmdDeckControlNoTapeInDeckError) ? "NoTape error":\
+						((err)==bmdDeckControlNoVideoFromCardError) ? "No video from card error":\
+						((err)==bmdDeckControlNoCommunicationError) ? "No communication error":"Unknown error"
 
+// translate a BMDDeckControlStatusFlags to string
+#define FLAGS_TO_STR(flags) ((flags) & bmdDeckControlStatusDeckConnected) ? " Deck connected" : " Deck disconnected" +\
+						((flags) & bmdDeckControlStatusRemoteMode) ? " Remote mode" : " Local mode" +\
+						((flags) & bmdDeckControlStatusRecordInhibited) ? " Rec. disabled" : " Rec. enabled" +\
+						((flags) & bmdDeckControlStatusCassetteOut) ? " Cassette out" : " Cassette in"
+
+// translate a BMDDeckControlEvent to a string
+#define EVT_TO_STR(evt) ((evt)==bmdDeckControlPrepareForExportEvent) ? "Prepare for export" :\
+						((evt)==bmdDeckControlPrepareForCaptureEvent) ? "Prepare for capture" :\
+						((evt)==bmdDeckControlExportCompleteEvent) ? "Export complete" :\
+						((evt)==bmdDeckControlCaptureCompleteEvent) ? "Capture complete" : "Abort"
+
+// translate a BMDDeckControlVTRControlState to a string
+#define STATE_TO_STR(state) (state==bmdDeckControlNotInVTRControlMode) ? "N/A" :\
+						(state==bmdDeckControlVTRControlPlaying) ? "Play" :\
+						(state==bmdDeckControlVTRControlRecording) ? "Record" :\
+						(state==bmdDeckControlVTRControlStill) ? "Still" :\
+						(state==bmdDeckControlVTRControlShuttleForward) ? "Shuttle forward" :\
+						(state==bmdDeckControlVTRControlShuttleReverse) ? "Shuttle reverse" :\
+						(state==bmdDeckControlVTRControlJogForward) ? "Jog forward" :\
+						(state==bmdDeckControlVTRControlJogReverse) ? "Jog reverse" : "Stop"
 
 
 namespace caspar {
 	namespace decklink {
+
 
 		CComPtr<IDeckLinkDeckControl>  get_deck_control(const CComPtr<IDeckLink>& decklink)
 		{
@@ -45,22 +80,58 @@ namespace caspar {
 			decklink->QueryInterface(IID_IDeckLinkDeckControl, (void**)&result);
 			return result;
 		}
+		
+		// levis501 SO code
+		unsigned int bcd2i(unsigned int bcd) {
+			unsigned int decimalMultiplier = 1;
+			unsigned int digit;
+			unsigned int i = 0;
+			while (bcd > 0) {
+				digit = bcd & 0xF;
+				i += digit * decimalMultiplier;
+				decimalMultiplier *= 10;
+				bcd >>= 4;
+			}
+			return i;
+		}
 
-		BMDTimecodeBCD decode_timecode(std::wstring tc)
+		unsigned int i2bcd(unsigned int i) {
+			unsigned int binaryShift = 0;
+			unsigned int digit;
+			unsigned int bcd = 0;
+			while (i > 0) {
+				digit = i % 10;
+				bcd += (digit << binaryShift);
+				binaryShift += 4;
+				i /= 10;
+			}
+			return bcd;
+		}
+
+		BMDTimecodeBCD encode_timecode(std::wstring tc)
 		{
 			std::vector<std::wstring> split;
 			boost::split(split, tc, boost::is_any_of(":."));
 			if (split.size() == 4)
 			{
-				unsigned int result =  boost::lexical_cast<unsigned int>(split[3])
-					| (boost::lexical_cast<unsigned int>(split[2]) << 8)
-					| (boost::lexical_cast<unsigned int>(split[1]) << 16)
-					| (boost::lexical_cast<unsigned int>(split[0]) << 24);
-				return result;
+				unsigned int bcd =  i2bcd(boost::lexical_cast<unsigned int>(split[3]))
+					| i2bcd(boost::lexical_cast<unsigned int>(split[2])) << 8
+					| i2bcd(boost::lexical_cast<unsigned int>(split[1])) << 16
+					| i2bcd(boost::lexical_cast<unsigned int>(split[0])) << 24;
+				return bcd2i(bcd);
 			}
 			return 0;
 		}
 		
+		std::wstring decode_timecode(unsigned int tc)
+		{
+			unsigned int bcd = i2bcd(tc);
+			return boost::lexical_cast<std::wstring>(bcd2i(bcd >> 24 & 0xFF)) + L":"
+				+ boost::lexical_cast<std::wstring>(bcd2i(bcd >> 16 & 0xFF)) + L":"
+				+ boost::lexical_cast<std::wstring>(bcd2i(bcd >> 8 & 0xFF)) + L":"
+				+ boost::lexical_cast<std::wstring>(bcd2i(bcd & 0xFF));
+		}
+
 
 		class decklink_recorder : public core::recorder, IDeckLinkDeckControlStatusCallback
 		{
@@ -68,9 +139,8 @@ namespace caspar {
 			enum record_state
 			{
 				idle,
-				opening,
 				prerolling,
-				winding,
+				prepared,
 				recording,
 			}									record_state_;
 			com_initializer						init_;
@@ -78,26 +148,29 @@ namespace caspar {
 			CComPtr<IDeckLink>					decklink_;
 			CComPtr<IDeckLinkDeckControl>		deck_control_;
 			BMDDeckControlError					last_deck_error_;
+			caspar::core::video_format_desc		format_desc_;
+			tbb::atomic<bool>					deck_is_open_;
 
 			//fields of the current operation
-			safe_ptr<core::video_channel> *		channel_;
+			safe_ptr<core::video_channel>		channel_;
 			std::wstring						file_name_;
-			safe_ptr<core::frame_consumer> *	consumer_;
-			unsigned int						tc_in_;
-			unsigned int						tc_out_;
+			safe_ptr<core::frame_consumer>		consumer_;
+			tbb::atomic<int>					offset_;
 
-			BMDTimecodeBCD						current_timecode_;
+			// timecodes are converted from BCD to unsigned integers
+			tbb::atomic<unsigned int>			tc_in_;
+			tbb::atomic<unsigned int>			tc_out_;
+
+			tbb::atomic<unsigned int>			current_timecode_;
 
 
 			void clean_recorder()
 			{
-				auto channel = channel_;
-				auto consumer = consumer_;
-				if (channel && consumer)
-					(*channel)->output()->remove(*consumer);
+				if (consumer_ != core::frame_consumer::empty())
+					channel_->output()->remove(consumer_);
 
-				consumer_ = nullptr;
-				channel_ = nullptr;
+				consumer_ = core::frame_consumer::empty();
+				//channel_ = core::video_channel();
 				file_name_ = L"";
 				tc_in_ = 0;
 				tc_out_ = 0;
@@ -106,13 +179,19 @@ namespace caspar {
 
 			void start_capture()
 			{
-				if (FAILED(deck_control_->StartCapture(FALSE, tc_in_, tc_out_, &last_deck_error_)))
+				if (FAILED(deck_control_->StartCapture(FALSE, i2bcd(tc_in_), i2bcd(tc_out_), &last_deck_error_)))
 				{
 					CASPAR_LOG(error) << print() << L" Could not start capture";
 					Abort();
 				}
+			}
+
+			void open_deck_control(caspar::core::video_format_desc format)
+			{
+				if (FAILED(deck_control_->Open(format.time_scale, format.duration, FALSE, &last_deck_error_)))
+					CASPAR_LOG(error) << print() << L" Could not open deck control";
 				else
-					record_state_ = record_state::winding;
+					format_desc_ = format;
 			}
 
 			void begin_recording()
@@ -127,27 +206,25 @@ namespace caspar {
 
 			std::wstring print() const
 			{
-				return L"decklink-recorder [" + get_model_name(decklink_) + L":" + boost::lexical_cast<std::wstring>(index_) + L"]";
+				return L"[decklink-recorder] [" + get_model_name(decklink_) + L":" + boost::lexical_cast<std::wstring>(index_) + L"]";
 			}
 
 
 		public:
-			decklink_recorder(int index, int device_index)
+			decklink_recorder(int index, int device_index, safe_ptr<core::video_channel> channel)
 				: index_(index)
 				, decklink_(get_device(device_index))
 				, deck_control_(get_deck_control(decklink_))
-				, consumer_(nullptr)
-				, current_timecode_(0)
+				, consumer_(core::frame_consumer::empty())
+				, channel_(channel)
 				, last_deck_error_(bmdDeckControlNoError)
-				, tc_in_(0)
-				, tc_out_(0)
 			{
 				if (FAILED(deck_control_->SetCallback(this)))
 					CASPAR_LOG(error) << print() << L" Could not open deck control";
 				else
 				{
-
-					CASPAR_LOG(error) << print() << L" Initialized";
+					open_deck_control(caspar::core::video_format_desc::get(caspar::core::video_format::pal));
+					CASPAR_LOG(debug) << print() << L" Initialized";
 				}
 			}
 			
@@ -160,28 +237,34 @@ namespace caspar {
 				return index_;
 			}
 
-			virtual void Capture(std::shared_ptr<core::video_channel> channel, std::wstring tc_in, std::wstring tc_out, int preroll, int offset, std::wstring file_name, const core::parameters& params)
+
+			virtual void Capture(std::shared_ptr<core::video_channel> channel, std::wstring tc_in, std::wstring tc_out, unsigned int preroll, int offset, std::wstring file_name, const core::parameters& params)
 			{
 				Abort();
-				caspar::core::video_format_desc format_desc = channel->get_video_format_desc();
-				if (FAILED(deck_control_->Open(format_desc.time_scale, format_desc.duration, FALSE, &last_deck_error_)))
+				caspar::core::video_format_desc new_format_desc = channel->get_video_format_desc();
+				if (new_format_desc.time_scale != format_desc_.time_scale || new_format_desc.duration != format_desc_.duration)
 				{
-					CASPAR_LOG(error) << print() << L" Could not open deck control";
-					return;
+					CASPAR_LOG(debug) << print() << L" Video format has changed. Reopening deck control for new time scale";
+					deck_control_->Close(false);
+					open_deck_control(new_format_desc);
 				}
-				tc_in_ = decode_timecode(tc_in);
-				tc_out_ = decode_timecode(tc_out);
-				record_state_ = record_state::opening;
-				auto consumer = ffmpeg::create_recorder_consumer(file_name, params);
-				consumer_ = &consumer;
+				if (FAILED(deck_control_->SetPreroll(preroll)))
+					CASPAR_LOG(warning) << print() << L" Could not set deck preroll time";
+				//if (FAILED(deck_control_->SetCaptureOffset(offset)))
+				//	CASPAR_LOG(warning) << print() << L" Could not set deck capture offset time";
+				tc_in_ = encode_timecode(tc_in);
+				tc_out_ = encode_timecode(tc_out);
+				offset_ = offset;
+				
+				consumer_ = ffmpeg::create_recorder_consumer(file_name, params);
+				start_capture();
 			}
 
 			virtual void Abort()
 			{
 				if (record_state_ > record_state::idle)
-					deck_control_->Close(FALSE);
-				if (record_state_ > record_state::opening)
 					deck_control_->Stop(&last_deck_error_);
+				clean_recorder();
 			}
 
 #pragma region IDeckLinkDeckControlStatusCallback
@@ -192,38 +275,54 @@ namespace caspar {
 
 			STDMETHOD(TimecodeUpdate(BMDTimecodeBCD currentTimecode))
 			{
-				current_timecode_ = currentTimecode;
-				if (record_state_ == record_state::winding && currentTimecode == tc_in_)
+				current_timecode_ = bcd2i(currentTimecode);
+				if (record_state_ == record_state::prepared && current_timecode_ + offset_ >= tc_in_)
 				{
-					(*channel_)->output()->add(*consumer_);
+					channel_->output()->add(consumer_);
 					record_state_ = record_state::recording;
+					CASPAR_LOG(info) << print() << L" Recording started";
 				}
-				if (record_state_ == record_state::recording && currentTimecode == tc_out_)
+				if (record_state_ == record_state::recording && current_timecode_ + offset_ > tc_out_ + 1)
 				{
 					clean_recorder();
+					CASPAR_LOG(info) << print() << L" Recording finished";
 				}
 				return S_OK;
 			}
 
 			STDMETHOD(VTRControlStateChanged(BMDDeckControlVTRControlState newState, BMDDeckControlError error))
 			{
-
+				CASPAR_LOG(trace) << print() << L" VTR Control state changed: " << widen(STATE_TO_STR(newState));
+				if (record_state_ == record_state::recording)
+					Abort();
 				return S_OK;
 			}
 
-			STDMETHOD(DeckControlEventReceived(BMDDeckControlEvent event, BMDDeckControlError error))
+			STDMETHOD(DeckControlEventReceived(BMDDeckControlEvent e, BMDDeckControlError error))
 			{
-				
+				if (e == bmdDeckControlPrepareForCaptureEvent)
+					record_state_ = record_state::prepared;
+				if (record_state_ == record_state::recording)
+					Abort();
+				CASPAR_LOG(trace) << print() << L" Event received: " << widen(EVT_TO_STR(e));
 				return S_OK;
 			}
 
 			STDMETHOD(DeckControlStatusChanged(BMDDeckControlStatusFlags flags, unsigned int mask))
 			{
-				if (record_state_ == record_state::opening && (flags & bmdDeckControlStatusDeckConnected))
+				if (!deck_is_open_ && (flags & bmdDeckControlStatusDeckConnected))
 				{
-					record_state_ = record_state::prerolling;
-					start_capture();
+					deck_is_open_ = true;
+					CASPAR_LOG(info) << print() << L" Deck connected ";
 				}
+				if (deck_is_open_ && !(flags & bmdDeckControlStatusDeckConnected))
+				{
+					deck_is_open_ = false;
+					CASPAR_LOG(info) << print() << L" Deck disconnected ";
+				}
+				if (record_state_ == record_state::recording)
+					Abort();
+				CASPAR_LOG(trace) << print() << L" Deck control status changed: " << widen(FLAGS_TO_STR(flags));
 				return S_OK;
 			}
 
@@ -232,10 +331,10 @@ namespace caspar {
 		};
 
 
-		safe_ptr<core::recorder> create_recorder(int index, const boost::property_tree::wptree& ptree)
+		safe_ptr<core::recorder> create_recorder(int index, safe_ptr<core::video_channel> channel, const boost::property_tree::wptree& ptree)
 		{
 			auto device_index = ptree.get(L"device", 1);
-			return make_safe<decklink_recorder>(index, device_index);
+			return make_safe<decklink_recorder>(index, device_index, channel);
 		}
 
 	}

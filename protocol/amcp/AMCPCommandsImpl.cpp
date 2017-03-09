@@ -1708,7 +1708,7 @@ bool DataCommand::DoExecuteList()
 	return true;
 }
 
-bool RecordCommand::DoExecute()
+bool CaptureCommand::DoExecute()
 {
 	auto channel = GetChannel();
 	int recorder_index = _parameters.get(L"RECORDER", std::numeric_limits<int>().max()) - 1;
