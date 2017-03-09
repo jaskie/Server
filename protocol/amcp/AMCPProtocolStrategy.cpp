@@ -333,6 +333,7 @@ AMCPCommandPtr AMCPProtocolStrategy::CommandFactory(const std::wstring& str)
 	else if(s == TEXT("CG"))			return std::make_shared<CGCommand>();
 	else if(s == TEXT("DATA"))			return std::make_shared<DataCommand>();
 	else if(s == TEXT("CAPTURE"))		return std::make_shared<CaptureCommand>();
+	else if(s == TEXT("RECORDER"))		return std::make_shared<RecorderCommand>();
 	else if(s == TEXT("CINF"))			return std::make_shared<CinfCommand>();
 	else if(s == TEXT("INFO"))			return std::make_shared<InfoCommand>(channels_);
 	else if(s == TEXT("CLS"))			return std::make_shared<ClsCommand>();

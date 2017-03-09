@@ -197,6 +197,12 @@ class CaptureCommand : public AMCPCommandBase<true, 1>
 	bool DoExecute();
 };
 
+class RecorderCommand : public AMCPCommandBase<false, 2>
+{
+	std::wstring print() const { return L"RecorderCommand"; }
+	bool DoExecute();
+};
+
 class ClsCommand : public AMCPCommandBase<false, 0>
 {
 	std::wstring print() const { return L"ClsCommand";}

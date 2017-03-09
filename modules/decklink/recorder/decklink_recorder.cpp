@@ -201,12 +201,12 @@ namespace caspar {
 				deck_control_->Close(FALSE);
 			}
 
-			virtual int index() const {
+			virtual int index() const override {
 				return index_;
 			}
 
 
-			virtual void Capture(std::shared_ptr<core::video_channel> channel, std::wstring tc_in, std::wstring tc_out, std::wstring file_name, const core::parameters& params)
+			virtual void Capture(std::shared_ptr<core::video_channel> channel, const std::wstring tc_in, const std::wstring tc_out, const std::wstring file_name, const core::parameters& params) override
 			{
 				Abort();
 				caspar::core::video_format_desc new_format_desc = channel->get_video_format_desc();
@@ -224,11 +224,37 @@ namespace caspar {
 				start_capture();
 			}
 
-			virtual void Abort()
+			virtual bool Abort() override
 			{
 				if (record_state_ > record_state::idle)
 					deck_control_->Stop(&last_deck_error_);
 				clean_recorder();
+				return (SUCCEEDED(deck_control_->Abort()));
+			}
+
+			virtual bool Play() override
+			{
+				return (SUCCEEDED(deck_control_->Play(&last_deck_error_)));
+			}
+			
+			virtual bool Stop() override
+			{
+				return (SUCCEEDED(deck_control_->Stop(&last_deck_error_)));
+			}
+			
+			virtual bool FastForward() override
+			{
+				return (SUCCEEDED(deck_control_->FastForward(FALSE, &last_deck_error_)));
+			}
+			
+			virtual bool Rewind() override
+			{
+				return (SUCCEEDED(deck_control_->Rewind(FALSE, &last_deck_error_)));
+			}
+
+			virtual bool GoToTimecode(const std::wstring tc) override
+			{
+				return (SUCCEEDED(deck_control_->GoToTimecode(i2bcd(encode_timecode(tc)), &last_deck_error_)));
 			}
 
 #pragma region IDeckLinkDeckControlStatusCallback

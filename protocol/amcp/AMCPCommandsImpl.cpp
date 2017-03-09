@@ -1725,6 +1725,33 @@ bool CaptureCommand::DoExecute()
 	return false;
 }
 
+bool RecorderCommand::DoExecute()
+{
+	auto recorders = GetRecorders();
+	int recorder_index  = _parameters.get(L"PLAY", std::numeric_limits<int>().max())-1;
+	if (recorder_index < recorders.size())
+		return recorders[recorder_index]->Play();
+	recorder_index = _parameters.get(L"STOP", std::numeric_limits<int>().max()) - 1;
+	if (recorder_index < recorders.size())
+		return recorders[recorder_index]->Stop();
+	recorder_index = _parameters.get(L"ABORT", std::numeric_limits<int>().max()) - 1;
+	if (recorder_index < recorders.size())
+		return recorders[recorder_index]->Abort();
+	recorder_index = _parameters.get(L"FF", std::numeric_limits<int>().max()) - 1;
+	if (recorder_index < recorders.size())
+		return recorders[recorder_index]->FastForward();
+	recorder_index = _parameters.get(L"REWIND", std::numeric_limits<int>().max()) - 1;
+	if (recorder_index < recorders.size())
+		return recorders[recorder_index]->Rewind();
+	recorder_index = _parameters.get(L"GOTO", std::numeric_limits<int>().max()) - 1;
+	if (recorder_index < recorders.size())
+	{
+		std::wstring tc = _parameters.get(L"TC", L"");
+		return recorders[recorder_index]->GoToTimecode(tc);
+	}
+	return false;
+}
+
 bool ThumbnailCommand::DoExecute()
 {
 	std::wstring command = _parameters[0];
