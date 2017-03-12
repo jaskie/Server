@@ -61,8 +61,8 @@ struct buffer_pool
 class ogl_device : public std::enable_shared_from_this<ogl_device>, boost::noncopyable
 {	
 	std::unordered_map<GLenum, bool> caps_;
-	std::array<size_t, 4>			 viewport_;
-	std::array<size_t, 4>			 scissor_;
+	std::array<uint32_t, 4>			 viewport_;
+	std::array<uint32_t, 4>			 scissor_;
 	const GLubyte*					 pattern_;
 	GLint							 attached_texture_;
 	GLuint							 attached_fbo_;
@@ -73,8 +73,8 @@ class ogl_device : public std::enable_shared_from_this<ogl_device>, boost::nonco
 
 	std::unique_ptr<sf::Context> context_;
 	
-	std::array<tbb::concurrent_unordered_map<size_t, safe_ptr<buffer_pool<device_buffer>>>, 4> device_pools_;
-	std::array<tbb::concurrent_unordered_map<size_t, safe_ptr<buffer_pool<host_buffer>>>, 2> host_pools_;
+	std::array<tbb::concurrent_unordered_map<uint32_t, safe_ptr<buffer_pool<device_buffer>>>, 4> device_pools_;
+	std::array<tbb::concurrent_unordered_map<uint32_t, safe_ptr<buffer_pool<host_buffer>>>, 2> host_pools_;
 	
 	GLuint fbo_;
 
@@ -88,8 +88,8 @@ public:
 	// Not thread-safe, must be called inside of context
 	void enable(GLenum cap);
 	void disable(GLenum cap);
-	void viewport(size_t x, size_t y, size_t width, size_t height);
-	void scissor(size_t x, size_t y, size_t width, size_t height);
+	void viewport(uint32_t x, uint32_t y, uint32_t width, uint32_t height);
+	void scissor(uint32_t x, uint32_t y, uint32_t width, uint32_t height);
 	void stipple_pattern(const GLubyte* pattern);
 
 	void attach(device_buffer& texture);
@@ -117,8 +117,8 @@ public:
 		return executor_.invoke(std::forward<Func>(func), priority);
 	}
 		
-	safe_ptr<device_buffer> create_device_buffer(size_t width, size_t height, size_t stride);
-	safe_ptr<host_buffer> create_host_buffer(size_t size, usage_t usage);
+	safe_ptr<device_buffer> create_device_buffer(uint32_t width, uint32_t height, uint32_t stride);
+	safe_ptr<host_buffer> create_host_buffer(uint32_t size, usage_t usage);
 	
 	void yield();
 	boost::unique_future<void> gc();
@@ -126,8 +126,8 @@ public:
 	std::wstring version();
 
 private:
-	safe_ptr<device_buffer> allocate_device_buffer(size_t width, size_t height, size_t stride);
-	safe_ptr<host_buffer> allocate_host_buffer(size_t size, usage_t usage);
+	safe_ptr<device_buffer> allocate_device_buffer(uint32_t width, uint32_t height, uint32_t stride);
+	safe_ptr<host_buffer> allocate_host_buffer(uint32_t size, usage_t usage);
 };
 
 }}

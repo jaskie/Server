@@ -69,7 +69,7 @@ struct fence::implementation
 			}
 		}
 		
-		static tbb::atomic<size_t> count;
+		static tbb::atomic<uint32_t> count;
 		static tbb::atomic<bool> warned;
 		
 		if(delay > 2 && ++count > 50)

@@ -148,9 +148,9 @@ public:
 		});
 	}
 	
-	std::map<int, size_t> buffer_depths_snapshot() const
+	std::map<int, uint32_t> buffer_depths_snapshot() const
 	{
-		std::map<int, size_t> result;
+		std::map<int, uint32_t> result;
 
 		BOOST_FOREACH(auto& consumer, consumers_)
 			result.insert(std::make_pair(
@@ -160,8 +160,8 @@ public:
 		return std::move(result);
 	}
 
-	std::pair<size_t, size_t> minmax_buffer_depth(
-			const std::map<int, size_t>& buffer_depths) const
+	std::pair<uint32_t, uint32_t> minmax_buffer_depth(
+			const std::map<int, uint32_t>& buffer_depths) const
 	{		
 		if(consumers_.empty())
 			return std::make_pair(0, 0);

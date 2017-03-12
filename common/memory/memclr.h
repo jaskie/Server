@@ -27,14 +27,14 @@
 
 namespace caspar {
 
-static void* fast_memclr(void* dest, size_t count)
+static void* fast_memclr(void* dest, uint32_t count)
 {
 	if(count < 2048)
 		return memset(dest, 0, count);
 
 	assert(dest != nullptr);
 	
-	size_t rest = count % 128;
+	uint32_t rest = count % 128;
 	count -= rest;
 
 	__asm   

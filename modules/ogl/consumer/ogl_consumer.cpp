@@ -85,7 +85,7 @@ struct configuration
 	};
 		
 	std::wstring	name;
-	size_t			screen_index;
+	unsigned int 	screen_index;
 	stretch			stretch;
 	bool			windowed;
 	bool			auto_deinterlace;
@@ -123,8 +123,8 @@ struct ogl_consumer : boost::noncopyable
 	unsigned int			screen_y_;
 	unsigned int			screen_width_;
 	unsigned int			screen_height_;
-	size_t					square_width_;
-	size_t					square_height_;				
+	unsigned int			square_width_;
+	unsigned int			square_height_;
 	
 	sf::Window				window_;
 	
@@ -332,7 +332,7 @@ public:
 
 	void render_and_draw_frame(const safe_ptr<core::read_frame>& frame)
 	{
-		if(static_cast<size_t>(frame->image_data().size()) != format_desc_.size)
+		if(static_cast<uint32_t>(frame->image_data().size()) != format_desc_.size)
 			return;
 					
 		perf_timer_.restart();
@@ -515,7 +515,7 @@ public:
 		return false;
 	}
 	
-	virtual size_t buffer_depth() const override
+	virtual uint32_t buffer_depth() const override
 	{
 		return 1;
 	}

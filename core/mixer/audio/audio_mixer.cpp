@@ -72,7 +72,7 @@ struct audio_mixer::implementation
 	std::stack<core::frame_transform>	transform_stack_;
 	std::map<const void*, audio_stream>	audio_streams_;
 	std::vector<audio_item>				items_;
-	std::vector<size_t>					audio_cadence_;
+	std::vector<uint32_t>					audio_cadence_;
 	video_format_desc					format_desc_;
 	channel_layout						channel_layout_;
 	float								master_volume_;
@@ -191,7 +191,7 @@ public:
 									
 			auto alpha = (next_volume-prev_volume)/static_cast<float>(item.audio_data.size()/channel_layout_.num_channels);
 			
-			for(size_t n = 0; n < item.audio_data.size(); ++n)
+			for(uint32_t n = 0; n < item.audio_data.size(); ++n)
 			{
 				auto sample_multiplier = (prev_volume + (n/channel_layout_.num_channels) * alpha);
 				next_audio.push_back(item.audio_data[n] * sample_multiplier);
@@ -248,7 +248,7 @@ public:
 
 		auto max = std::vector<int32_t>(num_channels, std::numeric_limits<int32_t>::min());
 
-		for (size_t n = 0; n < result.size(); n += num_channels)
+		for (uint32_t n = 0; n < result.size(); n += num_channels)
 			for (int ch = 0; ch < num_channels; ++ch)
 				max[ch] = std::max(max[ch], std::abs(result[n + ch]));
 		
@@ -272,7 +272,7 @@ public:
 		return result;
 	}
 
-	size_t audio_size(size_t num_samples) const
+	uint32_t audio_size(uint32_t num_samples) const
 	{
 		return num_samples * channel_layout_.num_channels;
 	}

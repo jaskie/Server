@@ -94,7 +94,7 @@ struct write_frame::implementation
 		return recorded_frame_age_;
 	}
 
-	boost::iterator_range<uint8_t*> image_data(size_t index)
+	boost::iterator_range<uint8_t*> image_data(uint32_t index)
 	{
 		if(index >= buffers_.size() || !buffers_[index]->data())
 			return boost::iterator_range<uint8_t*>();
@@ -104,7 +104,7 @@ struct write_frame::implementation
 	
 	void commit()
 	{
-		for(size_t n = 0; n < buffers_.size(); ++n)
+		for(uint32_t n = 0; n < buffers_.size(); ++n)
 			commit(n);
 	}
 
@@ -158,7 +158,7 @@ write_frame& write_frame::operator=(write_frame&& other)
 }
 void write_frame::swap(write_frame& other){impl_.swap(other.impl_);}
 
-boost::iterator_range<uint8_t*> write_frame::image_data(size_t index){return impl_->image_data(index);}
+boost::iterator_range<uint8_t*> write_frame::image_data(uint32_t index){return impl_->image_data(index);}
 audio_buffer& write_frame::audio_data() { return impl_->audio_data_; }
 const void* write_frame::tag() const {return impl_->tag_;}
 const core::pixel_format_desc& write_frame::get_pixel_format_desc() const{return impl_->desc_;}
@@ -168,7 +168,7 @@ multichannel_view<int32_t, audio_buffer::iterator> write_frame::get_multichannel
 	return make_multichannel_view<int32_t>(impl_->audio_data_.begin(), impl_->audio_data_.end(), impl_->channel_layout_);
 }
 const std::vector<safe_ptr<device_buffer>>& write_frame::get_textures() const{return impl_->textures_;}
-void write_frame::commit(size_t plane_index){impl_->commit(plane_index);}
+void write_frame::commit(uint32_t plane_index){impl_->commit(plane_index);}
 void write_frame::commit(){impl_->commit();}
 void write_frame::set_type(const field_mode::type& mode){impl_->mode_ = mode;}
 core::field_mode::type write_frame::get_type() const{return impl_->mode_;}

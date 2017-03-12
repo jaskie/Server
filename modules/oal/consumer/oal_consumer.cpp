@@ -178,7 +178,7 @@ public:
 		return info;
 	}
 	
-	virtual size_t buffer_depth() const override
+	virtual uint32_t buffer_depth() const override
 	{
 		return 6;
 	}

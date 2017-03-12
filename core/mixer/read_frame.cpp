@@ -44,7 +44,7 @@ int64_t get_current_time_millis()
 struct read_frame::implementation : boost::noncopyable
 {
 	safe_ptr<ogl_device>		ogl_;
-	size_t						size_;
+	uint32_t						size_;
 	safe_ptr<host_buffer>		image_data_;
 	tbb::mutex					mutex_;
 	audio_buffer				audio_data_;
@@ -55,7 +55,7 @@ struct read_frame::implementation : boost::noncopyable
 public:
 	implementation(
 			const safe_ptr<ogl_device>& ogl,
-			size_t size,
+			uint32_t size,
 			safe_ptr<host_buffer>&& image_data,
 			audio_buffer&& audio_data,
 			const channel_layout& audio_channel_layout,
@@ -94,7 +94,7 @@ public:
 
 read_frame::read_frame(
 		const safe_ptr<ogl_device>& ogl,
-		size_t size,
+		uint32_t size,
 		safe_ptr<host_buffer>&& image_data,
 		audio_buffer&& audio_data,
 		const channel_layout& audio_channel_layout,
@@ -114,7 +114,7 @@ const boost::iterator_range<const int32_t*> read_frame::audio_data()
 	return impl_ ? impl_->audio_data() : boost::iterator_range<const int32_t*>();
 }
 
-size_t read_frame::image_size() const{return impl_ ? impl_->size_ : 0;}
+uint32_t read_frame::image_size() const{return impl_ ? impl_->size_ : 0;}
 int read_frame::num_channels() const { return impl_ ? impl_->audio_channel_layout_.num_channels : 0; }
 const multichannel_view<const int32_t, boost::iterator_range<const int32_t*>::const_iterator> read_frame::multichannel_view() const
 {
@@ -158,7 +158,7 @@ unsigned int read_frame::get_timecode() const
 //	CASPAR_ASSERT(frame->image_data().size() % height == 0);
 //			
 //	tbb::affinity_partitioner ap;
-//	tbb::parallel_for(tbb::blocked_range<size_t>(0, height), [&](tbb::blocked_range<size_t>& r)
+//	tbb::parallel_for(tbb::blocked_range<uint32_t>(0, height), [&](tbb::blocked_range<uint32_t>& r)
 //	{
 //		CopyFrame(const_cast<uint8_t*>(src)+r.begin()*width4, reinterpret_cast<uint8_t*>(dest)+r.begin()*width4, width4, r.size(), width4);
 //	}, ap);

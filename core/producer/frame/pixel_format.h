@@ -46,11 +46,11 @@ struct pixel_format_desc
 {
 	struct plane
 	{
-		size_t linesize;
-		size_t width;
-		size_t height;
-		size_t size;
-		size_t channels;
+		uint32_t linesize;
+		uint32_t width;
+		uint32_t height;
+		uint32_t size;
+		uint32_t channels;
 
 		plane() 
 			: linesize(0)
@@ -59,7 +59,7 @@ struct pixel_format_desc
 			, size(0)
 			, channels(0){}
 
-		plane(size_t width, size_t height, size_t channels)
+		plane(uint32_t width, uint32_t height, uint32_t channels)
 			: linesize(width*channels)
 			, width(width)
 			, height(height)

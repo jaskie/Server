@@ -23,8 +23,6 @@
 
 #include <common/memory/safe_ptr.h>
 
-#include <core/video_format.h>
-
 #include <boost/property_tree/ptree.hpp>
 #include <boost/filesystem.hpp>
 
@@ -37,6 +35,7 @@ namespace core {
 	struct frame_consumer;
 	class parameters;
 	class read_frame;
+	struct video_format;
 	struct video_format_desc;
 }
 

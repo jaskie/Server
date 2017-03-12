@@ -91,7 +91,7 @@ struct image_kernel::implementation : boost::noncopyable
 		
 		// Bind textures
 
-		for(size_t n = 0; n < params.textures.size(); ++n)
+		for(uint32_t n = 0; n < params.textures.size(); ++n)
 			params.textures[n]->bind(n);
 
 		if(params.local_key)
@@ -218,7 +218,7 @@ struct image_kernel::implementation : boost::noncopyable
 			double h = static_cast<double>(params.background->height());
 		
 			ogl_->enable(GL_SCISSOR_TEST);
-			ogl_->scissor(static_cast<size_t>(m_p[0]*w), static_cast<size_t>(m_p[1]*h), static_cast<size_t>(m_s[0]*w), static_cast<size_t>(m_s[1]*h));
+			ogl_->scissor(static_cast<uint32_t>(m_p[0]*w), static_cast<uint32_t>(m_p[1]*h), static_cast<uint32_t>(m_s[0]*w), static_cast<uint32_t>(m_s[1]*h));
 		}
 
 		auto f_p = params.transform.fill_translation;
