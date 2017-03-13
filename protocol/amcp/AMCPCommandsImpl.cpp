@@ -1988,6 +1988,17 @@ bool InfoCommand::DoExecute()
 			
 			boost::property_tree::write_xml(replyString, info, w);
 		}
+		else if (_parameters.size() >= 1 && _parameters[0] == L"RECORDERS")
+		{
+			replyString << L"201 INFO RECORDERS OK\r\n";
+			boost::property_tree::wptree info;
+
+			int index = 0;
+			BOOST_FOREACH(auto rec, recorders_)
+				info.add_child(L"recorders", rec->info())
+				.add(L"index", ++index);
+			boost::property_tree::write_xml(replyString, info, w);
+		}
 		else if(_parameters.size() >= 2 && _parameters[1] == L"DELAY")
 		{
 			replyString << L"201 INFO DELAY OK\r\n";

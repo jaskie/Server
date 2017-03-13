@@ -119,6 +119,7 @@ namespace caspar {
 			}									record_state_;
 			com_initializer						init_;
 			int									index_;
+			const int							device_index_;
 			CComPtr<IDeckLink>					decklink_;
 			CComPtr<IDeckLinkDeckControl>		deck_control_;
 			BMDDeckControlError					last_deck_error_;
@@ -186,6 +187,7 @@ namespace caspar {
 				, consumer_(core::frame_consumer::empty())
 				, channel_(channel)
 				, last_deck_error_(bmdDeckControlNoError)
+				, device_index_(device_index)
 			{
 				if (FAILED(deck_control_->SetCallback(this)))
 					CASPAR_LOG(error) << print() << L" Could not open deck control";
@@ -309,6 +311,14 @@ namespace caspar {
 			}
 
 #pragma endregion
+
+			virtual boost::property_tree::wptree info() 
+			{
+				boost::property_tree::wptree info;
+				info.add(L"device", device_index_);
+				return info;
+			}
+
 
 		};
 		

@@ -47,6 +47,8 @@ namespace caspar {
 			virtual bool FastForward() = 0;
 			virtual bool Rewind() = 0;
 			virtual bool GoToTimecode(const std::wstring tc) = 0;
+			virtual boost::property_tree::wptree info() = 0;
+
 			
 			// Properties
 

@@ -225,10 +225,14 @@ class InfoCommand : public AMCPCommandBase<false, 0>
 {
 public:
 	std::wstring print() const { return L"InfoCommand";}
-	InfoCommand(const std::vector<safe_ptr<core::video_channel>>& channels) : channels_(channels){}
+	InfoCommand(const std::vector<safe_ptr<core::video_channel>>& channels, const std::vector<safe_ptr<core::recorder>>& recorders) 
+		: channels_(channels)
+		, recorders_(recorders)
+	{}
 	bool DoExecute();
 private:
 	const std::vector<safe_ptr<core::video_channel>>& channels_;
+	const std::vector<safe_ptr<core::recorder>>& recorders_;
 };
 
 class VersionCommand : public AMCPCommandBase<false, 0>
