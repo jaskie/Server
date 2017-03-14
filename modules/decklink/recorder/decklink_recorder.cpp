@@ -16,6 +16,7 @@
 *
 */
 
+
 #include "../StdAfx.h"
 
 #include "decklink_recorder.h"
@@ -28,6 +29,7 @@
 #include <core/consumer/frame_consumer.h>
 #include <core/video_channel.h>
 #include <core/consumer/output.h>
+#include <core/monitor/monitor.h>
 #include <ffmpeg/consumer/ffmpeg_consumer.h>
 
 #include <boost/algorithm/string.hpp>
@@ -48,10 +50,10 @@
 						((err)==bmdDeckControlNoCommunicationError) ? "No communication error":"Unknown error"
 
 // translate a BMDDeckControlStatusFlags to string
-#define FLAGS_TO_STR(flags) ((flags) & bmdDeckControlStatusDeckConnected) ? " Deck connected" : " Deck disconnected" +\
-						((flags) & bmdDeckControlStatusRemoteMode) ? " Remote mode" : " Local mode" +\
-						((flags) & bmdDeckControlStatusRecordInhibited) ? " Rec. disabled" : " Rec. enabled" +\
-						((flags) & bmdDeckControlStatusCassetteOut) ? " Cassette out" : " Cassette in"
+#define FLAGS_TO_STR(flags) ((flags & bmdDeckControlStatusDeckConnected) > 0) ? " Deck connected" : " Deck disconnected" +\
+						((flags & bmdDeckControlStatusRemoteMode) > 0) ? " Remote mode" : " Local mode" +\
+						((flags & bmdDeckControlStatusRecordInhibited) > 0) ? " Rec. disabled" : " Rec. enabled" +\
+						((flags & bmdDeckControlStatusCassetteOut) > 0) ? " Cassette out" : " Cassette in"
 
 // translate a BMDDeckControlEvent to a string
 #define EVT_TO_STR(evt) ((evt)==bmdDeckControlPrepareForExportEvent) ? "Prepare for export" :\
@@ -120,6 +122,7 @@ namespace caspar {
 			com_initializer						init_;
 			int									index_;
 			const int							device_index_;
+			const int							preroll_;
 			CComPtr<IDeckLink>					decklink_;
 			CComPtr<IDeckLinkDeckControl>		deck_control_;
 			BMDDeckControlError					last_deck_error_;
@@ -137,6 +140,7 @@ namespace caspar {
 
 			tbb::atomic<unsigned int>			current_timecode_;
 
+			safe_ptr<core::monitor::subject>	monitor_subject_;
 
 			void clean_recorder()
 			{
@@ -188,6 +192,8 @@ namespace caspar {
 				, channel_(channel)
 				, last_deck_error_(bmdDeckControlNoError)
 				, device_index_(device_index)
+				, preroll_(preroll)
+				, monitor_subject_(make_safe<core::monitor::subject>("/recorder/" + boost::lexical_cast<std::string>(index)))
 			{
 				if (FAILED(deck_control_->SetCallback(this)))
 					CASPAR_LOG(error) << print() << L" Could not open deck control";
@@ -270,6 +276,7 @@ namespace caspar {
 				current_timecode_ = bcd2i(currentTimecode);
 				if (record_state_ == record_state::ready)
 					begin_recording();
+				*monitor_subject_ << core::monitor::message("/tc") % narrow(decode_timecode(current_timecode_));
 				return S_OK;
 			}
 
@@ -277,6 +284,36 @@ namespace caspar {
 			{
 				if (record_state_ == record_state::recording)
 					Abort();
+				switch (newState)
+				{
+				case bmdDeckControlNotInVTRControlMode:
+					*monitor_subject_ << core::monitor::message("/deck") % std::string("not_vtr_control");
+					break;
+				case bmdDeckControlVTRControlPlaying:
+					*monitor_subject_ << core::monitor::message("/deck") % std::string("playing");
+					break;
+				case bmdDeckControlVTRControlRecording:
+					*monitor_subject_ << core::monitor::message("/deck") % std::string("recording");
+					break;
+				case bmdDeckControlVTRControlStill:
+					*monitor_subject_ << core::monitor::message("/deck") % std::string("still");
+					break;
+				case bmdDeckControlVTRControlShuttleForward:
+					*monitor_subject_ << core::monitor::message("/deck") % std::string("shuttle_forward");
+					break;
+				case bmdDeckControlVTRControlShuttleReverse:
+					*monitor_subject_ << core::monitor::message("/deck") % std::string("shuttle_reverse");
+					break;
+				case bmdDeckControlVTRControlJogForward:
+					*monitor_subject_ << core::monitor::message("/deck") % std::string("jog_forward");
+					break;
+				case bmdDeckControlVTRControlJogReverse:
+					*monitor_subject_ << core::monitor::message("/deck") % std::string("jog_reverse");
+					break;
+				case bmdDeckControlVTRControlStopped:
+					*monitor_subject_ << core::monitor::message("/deck") % std::string("stopped");
+					break;
+				}
 				CASPAR_LOG(trace) << print() << L" VTR Control state changed: " << widen(STATE_TO_STR(newState));
 				return S_OK;
 			}
@@ -288,6 +325,18 @@ namespace caspar {
 				// this thread is unable to initialize FFmpeg consumer
 				if (e == bmdDeckControlPrepareForCaptureEvent)
 					record_state_ = record_state::ready;
+				switch (e)
+				{
+				case bmdDeckControlAbortedEvent:
+					*monitor_subject_ << core::monitor::message("/recording") % std::string("aborted");
+					break;
+				case bmdDeckControlPrepareForCaptureEvent:
+					*monitor_subject_ << core::monitor::message("/recording") % std::string("prepared");
+					break;
+				case bmdDeckControlCaptureCompleteEvent:
+					*monitor_subject_ << core::monitor::message("/recording") % std::string("completed");
+					break;
+				}
 				CASPAR_LOG(trace) << print() << L" Event received: " << widen(EVT_TO_STR(e));
 				return S_OK;
 			}
@@ -312,13 +361,19 @@ namespace caspar {
 
 #pragma endregion
 
-			virtual boost::property_tree::wptree info() 
+			virtual boost::property_tree::wptree info() override
 			{
 				boost::property_tree::wptree info;
+				info.add(L"recorder-kind", L"decklink");
 				info.add(L"device", device_index_);
+				info.add(L"preroll", preroll_);
 				return info;
 			}
 
+			virtual core::monitor::subject& monitor_output() override
+			{
+				return *monitor_subject_;
+			}
 
 		};
 		

@@ -18,7 +18,6 @@
 
 #pragma once
 
-#include "monitor/monitor.h"
 
 #include <core/parameters/parameters.h>
 #include <core/video_channel.h>
@@ -47,9 +46,9 @@ namespace caspar {
 			virtual bool FastForward() = 0;
 			virtual bool Rewind() = 0;
 			virtual bool GoToTimecode(const std::wstring tc) = 0;
-			virtual boost::property_tree::wptree info() = 0;
 
-			
+			virtual boost::property_tree::wptree info() = 0;
+			virtual monitor::subject& monitor_output() = 0;
 			// Properties
 
 			virtual int index() const 

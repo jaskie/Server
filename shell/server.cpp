@@ -420,6 +420,7 @@ struct server::implementation : boost::noncopyable
 				{
 					auto recorder = decklink::create_recorder(recorders_.size() + 1, channels_.back(), xml_recorder.second);
 					recorders_.push_back(recorder);
+					recorder->monitor_output().attach_parent(monitor_subject_);
 				}
 				else
 					CASPAR_LOG(warning) << "Invalid recorder type: " << recorder_type;
