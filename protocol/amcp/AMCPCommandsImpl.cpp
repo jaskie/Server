@@ -1995,7 +1995,7 @@ bool InfoCommand::DoExecute()
 
 			int index = 0;
 			BOOST_FOREACH(auto rec, recorders_)
-				info.add_child(L"recorders", rec->info())
+				info.add_child(L"recorders.recorder", rec->info())
 				.add(L"index", ++index);
 			boost::property_tree::write_xml(replyString, info, w);
 		}

@@ -411,25 +411,27 @@ struct server::implementation : boost::noncopyable
 	void setup_recorders(const boost::property_tree::wptree& pt)
 	{
 		using boost::property_tree::wptree;
-		BOOST_FOREACH(auto& xml_recorder, pt.get_child(L"configuration.recorders"))
-		{
-			try
+		auto xml_recorders = pt.get_child_optional(L"configuration.recorders");
+		if (xml_recorders.is_initialized())
+			BOOST_FOREACH(auto& xml_recorder, xml_recorders.get())
 			{
-				auto recorder_type = xml_recorder.first;
-				if (recorder_type == L"decklink")
+				try
 				{
-					auto recorder = decklink::create_recorder(recorders_.size() + 1, channels_.back(), xml_recorder.second);
-					recorders_.push_back(recorder);
-					recorder->monitor_output().attach_parent(monitor_subject_);
+					auto recorder_type = xml_recorder.first;
+					if (recorder_type == L"decklink")
+					{
+						auto recorder = decklink::create_recorder(recorders_.size() + 1, channels_.back(), xml_recorder.second);
+						recorders_.push_back(recorder);
+						recorder->monitor_output().attach_parent(monitor_subject_);
+					}
+					else
+						CASPAR_LOG(warning) << "Invalid recorder type: " << recorder_type;
 				}
-				else
-					CASPAR_LOG(warning) << "Invalid recorder type: " << recorder_type;
+				catch (...)
+				{
+					CASPAR_LOG_CURRENT_EXCEPTION();
+				}
 			}
-			catch (...)
-			{
-				CASPAR_LOG_CURRENT_EXCEPTION();
-			}
-		}
 	}
 
 	safe_ptr<IO::IProtocolStrategy> create_protocol(const std::wstring& name) const

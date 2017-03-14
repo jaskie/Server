@@ -287,31 +287,31 @@ namespace caspar {
 				switch (newState)
 				{
 				case bmdDeckControlNotInVTRControlMode:
-					*monitor_subject_ << core::monitor::message("/deck") % std::string("not_vtr_control");
+					*monitor_subject_ << core::monitor::message("/state") % std::string("not_vtr_control");
 					break;
 				case bmdDeckControlVTRControlPlaying:
-					*monitor_subject_ << core::monitor::message("/deck") % std::string("playing");
+					*monitor_subject_ << core::monitor::message("/state") % std::string("playing");
 					break;
 				case bmdDeckControlVTRControlRecording:
-					*monitor_subject_ << core::monitor::message("/deck") % std::string("recording");
+					*monitor_subject_ << core::monitor::message("/state") % std::string("recording");
 					break;
 				case bmdDeckControlVTRControlStill:
-					*monitor_subject_ << core::monitor::message("/deck") % std::string("still");
+					*monitor_subject_ << core::monitor::message("/state") % std::string("still");
 					break;
 				case bmdDeckControlVTRControlShuttleForward:
-					*monitor_subject_ << core::monitor::message("/deck") % std::string("shuttle_forward");
+					*monitor_subject_ << core::monitor::message("/state") % std::string("shuttle_forward");
 					break;
 				case bmdDeckControlVTRControlShuttleReverse:
-					*monitor_subject_ << core::monitor::message("/deck") % std::string("shuttle_reverse");
+					*monitor_subject_ << core::monitor::message("/state") % std::string("shuttle_reverse");
 					break;
 				case bmdDeckControlVTRControlJogForward:
-					*monitor_subject_ << core::monitor::message("/deck") % std::string("jog_forward");
+					*monitor_subject_ << core::monitor::message("/state") % std::string("jog_forward");
 					break;
 				case bmdDeckControlVTRControlJogReverse:
-					*monitor_subject_ << core::monitor::message("/deck") % std::string("jog_reverse");
+					*monitor_subject_ << core::monitor::message("/state") % std::string("jog_reverse");
 					break;
 				case bmdDeckControlVTRControlStopped:
-					*monitor_subject_ << core::monitor::message("/deck") % std::string("stopped");
+					*monitor_subject_ << core::monitor::message("/state") % std::string("stopped");
 					break;
 				}
 				CASPAR_LOG(trace) << print() << L" VTR Control state changed: " << widen(STATE_TO_STR(newState));
@@ -327,14 +327,19 @@ namespace caspar {
 					record_state_ = record_state::ready;
 				switch (e)
 				{
+				case bmdDeckControlPrepareForExportEvent:
+					*monitor_subject_ << core::monitor::message("/control") % std::string("export_prepare");
+					break;
+				case bmdDeckControlExportCompleteEvent:
+					*monitor_subject_ << core::monitor::message("/control") % std::string("export_complete");
 				case bmdDeckControlAbortedEvent:
-					*monitor_subject_ << core::monitor::message("/recording") % std::string("aborted");
+					*monitor_subject_ << core::monitor::message("/control") % std::string("aborted");
 					break;
 				case bmdDeckControlPrepareForCaptureEvent:
-					*monitor_subject_ << core::monitor::message("/recording") % std::string("prepared");
+					*monitor_subject_ << core::monitor::message("/control") % std::string("capture_prepare");
 					break;
 				case bmdDeckControlCaptureCompleteEvent:
-					*monitor_subject_ << core::monitor::message("/recording") % std::string("completed");
+					*monitor_subject_ << core::monitor::message("/control") % std::string("capture_complete");
 					break;
 				}
 				CASPAR_LOG(trace) << print() << L" Event received: " << widen(EVT_TO_STR(e));
@@ -346,11 +351,13 @@ namespace caspar {
 				if (!deck_is_open_ && (flags & bmdDeckControlStatusDeckConnected))
 				{
 					deck_is_open_ = true;
+					*monitor_subject_ << core::monitor::message("/state") % std::string("connected");
 					CASPAR_LOG(info) << print() << L" Deck connected ";
 				}
 				if (deck_is_open_ && !(flags & bmdDeckControlStatusDeckConnected))
 				{
 					deck_is_open_ = false;
+					*monitor_subject_ << core::monitor::message("/state") % std::string("disconnected");
 					CASPAR_LOG(info) << print() << L" Deck disconnected ";
 				}
 				if (record_state_ == record_state::recording)
