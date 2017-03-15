@@ -110,7 +110,7 @@ public:
 				mix_timer_.restart();
 
 				auto frames = packet.first;
-				unsigned int timecode = 0;
+				unsigned int timecode = std::numeric_limits<unsigned int>().max();
 				
 				BOOST_FOREACH(auto& frame, frames)
 				{
@@ -121,7 +121,7 @@ public:
 					frame.second->accept(image_mixer_);
 					
 					image_mixer_.end_layer();
-					timecode = std::max(timecode, frame.second->get_timecode());
+					timecode = std::min(timecode, frame.second->get_timecode());
 				}
 
 				auto image = image_mixer_(format_desc_, straighten_alpha_);

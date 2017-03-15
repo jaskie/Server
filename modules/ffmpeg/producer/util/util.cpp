@@ -237,7 +237,7 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 
 		write = frame_factory->create_frame(tag, target_desc, audio_channel_layout);
 		write->set_type(get_mode(*decoded_frame));
-		write->set_timecode(static_cast<unsigned int>(decoded_frame->display_picture_number));
+		write->set_timecode((unsigned int)(decoded_frame->display_picture_number));
 
 		std::shared_ptr<SwsContext> sws_context;
 
@@ -287,6 +287,7 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 	{
 		write = frame_factory->create_frame(tag, desc, audio_channel_layout);
 		write->set_type(get_mode(*decoded_frame));
+		write->set_timecode((unsigned int)(decoded_frame->display_picture_number));
 
 		for(int n = 0; n < static_cast<int>(desc.planes.size()); ++n)
 		{

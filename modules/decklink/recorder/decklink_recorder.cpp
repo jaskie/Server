@@ -75,38 +75,34 @@
 namespace caspar {
 	namespace decklink {
 
-
-		CComPtr<IDeckLinkDeckControl>  get_deck_control(const CComPtr<IDeckLink>& decklink)
-		{
-			CComPtr<IDeckLinkDeckControl> result;
-			decklink->QueryInterface(IID_IDeckLinkDeckControl, (void**)&result);
-			return result;
-		}
-		
-
-
 		BMDTimecodeBCD encode_timecode(std::wstring tc)
 		{
 			std::vector<std::wstring> split;
 			boost::split(split, tc, boost::is_any_of(":."));
 			if (split.size() == 4)
 			{
-				unsigned int bcd =  i2bcd(boost::lexical_cast<unsigned int>(split[3]))
-					| i2bcd(boost::lexical_cast<unsigned int>(split[2])) << 8
-					| i2bcd(boost::lexical_cast<unsigned int>(split[1])) << 16
-					| i2bcd(boost::lexical_cast<unsigned int>(split[0])) << 24;
-				return bcd2i(bcd);
+				unsigned int hours   = boost::lexical_cast<unsigned int>(split[0]);
+				unsigned int minutes = boost::lexical_cast<unsigned int>(split[1]);
+				unsigned int seconds = boost::lexical_cast<unsigned int>(split[2]);
+				unsigned int frames  = boost::lexical_cast<unsigned int>(split[3]);
+				return ((hours / 10) << 28) | (((hours % 10) & 0xF) << 24)
+					| ((minutes / 10) << 20) | (((minutes % 10) & 0xF) << 16)
+					| ((seconds / 10) << 12) | (((seconds % 10) & 0xF) << 8)
+					| ((frames / 10) << 4) | ((frames & 0xF) << 24);
 			}
 			return 0;
 		}
 		
-		std::wstring decode_timecode(unsigned int tc)
+		std::wstring decode_timecode(BMDTimecodeBCD bcd)
 		{
-			unsigned int bcd = i2bcd(tc);
-			return boost::lexical_cast<std::wstring>(bcd2i(bcd >> 24 & 0xFF)) + L":"
-				+ boost::lexical_cast<std::wstring>(bcd2i(bcd >> 16 & 0xFF)) + L":"
-				+ boost::lexical_cast<std::wstring>(bcd2i(bcd >> 8 & 0xFF)) + L":"
-				+ boost::lexical_cast<std::wstring>(bcd2i(bcd & 0xFF));
+			byte hour = (bcd >> 24 & 0xF) + (bcd >> 28 & 0xF) * 10;
+			byte min = (bcd >> 16 & 0xF) + (bcd >> 20 & 0xF) * 10;
+			byte sec = (bcd >> 8 & 0xF) + (bcd >> 12 & 0xF) * 10;
+			byte frames = (bcd & 0xF) + (bcd >> 28 & 0xF) * 10;
+			return boost::lexical_cast<std::wstring>(hour) + L":"
+				+ boost::lexical_cast<std::wstring>(min) + L":"
+				+ boost::lexical_cast<std::wstring>(sec) + L":"
+				+ boost::lexical_cast<std::wstring>(frames);
 		}
 
 
@@ -122,7 +118,8 @@ namespace caspar {
 			com_initializer						init_;
 			int									index_;
 			const int							device_index_;
-			const int							preroll_;
+			const unsigned int					preroll_;
+			int									offset_;
 			CComPtr<IDeckLink>					decklink_;
 			CComPtr<IDeckLinkDeckControl>		deck_control_;
 			BMDDeckControlError					last_deck_error_;
@@ -154,9 +151,21 @@ namespace caspar {
 				tc_out_ = 0;
 			}
 
+			BMDTimecodeBCD tc_to_bcd(unsigned int tc)
+			{
+				auto format_desc = format_desc_;
+				return frame2bcd(tc, static_cast<byte>(format_desc.time_scale / format_desc.duration));
+			}
+
+			unsigned int bcd_to_frame(BMDTimecodeBCD bcd)
+			{
+				auto format_desc = format_desc_;
+				return bcd2frame(bcd, static_cast<byte>(format_desc.time_scale / format_desc.duration));
+			}
+
 			void start_capture()
 			{
-				if (FAILED(deck_control_->StartCapture(FALSE, i2bcd(tc_in_), i2bcd(tc_out_), &last_deck_error_)))
+				if (FAILED(deck_control_->StartCapture(FALSE, tc_to_bcd(tc_in_), tc_to_bcd(tc_out_), &last_deck_error_)))
 				{
 					CASPAR_LOG(error) << print() << L" Could not start capture";
 					Abort();
@@ -167,8 +176,7 @@ namespace caspar {
 			{
 				if (FAILED(deck_control_->Open(format.time_scale, format.duration, FALSE, &last_deck_error_)))
 					CASPAR_LOG(error) << print() << L" Could not open deck control";
-				else
-					format_desc_ = format;
+				format_desc_ = format;
 			}
 
 			void begin_recording()
@@ -184,7 +192,7 @@ namespace caspar {
 
 
 		public:
-			decklink_recorder(int index, int device_index, unsigned int preroll, safe_ptr<core::video_channel> channel)
+			decklink_recorder(int index, int device_index, unsigned int preroll, int offset, safe_ptr<core::video_channel> channel)
 				: index_(index)
 				, decklink_(get_device(device_index))
 				, deck_control_(get_deck_control(decklink_))
@@ -193,10 +201,11 @@ namespace caspar {
 				, last_deck_error_(bmdDeckControlNoError)
 				, device_index_(device_index)
 				, preroll_(preroll)
+				, offset_(offset)
 				, monitor_subject_(make_safe<core::monitor::subject>("/recorder/" + boost::lexical_cast<std::string>(index)))
 			{
 				if (FAILED(deck_control_->SetCallback(this)))
-					CASPAR_LOG(error) << print() << L" Could not open deck control";
+					CASPAR_LOG(error) << print() << L" Could not setup callback";
 				if (FAILED(deck_control_->SetPreroll(preroll)))
 					CASPAR_LOG(warning) << print() << L" Could not set deck preroll time";
 				open_deck_control(caspar::core::video_format_desc::get(caspar::core::video_format::pal));
@@ -225,10 +234,10 @@ namespace caspar {
 					open_deck_control(new_format_desc);
 				}
 
-				tc_in_ = encode_timecode(tc_in);
-				tc_out_ = encode_timecode(tc_out);
+				tc_in_ = bcd_to_frame(encode_timecode(tc_in));
+				tc_out_ = bcd_to_frame(encode_timecode(tc_out));
 				
-				consumer_ = ffmpeg::create_recorder_consumer(file_name, params, tc_in_, tc_out_);
+				consumer_ = ffmpeg::create_recorder_consumer(file_name, params, tc_in_, tc_out_, this);
 				start_capture();
 			}
 
@@ -262,7 +271,7 @@ namespace caspar {
 
 			virtual bool GoToTimecode(const std::wstring tc) override
 			{
-				return (SUCCEEDED(deck_control_->GoToTimecode(i2bcd(encode_timecode(tc)), &last_deck_error_)));
+				return (SUCCEEDED(deck_control_->GoToTimecode(tc_to_bcd(encode_timecode(tc)), &last_deck_error_)));
 			}
 
 #pragma region IDeckLinkDeckControlStatusCallback
@@ -273,10 +282,10 @@ namespace caspar {
 
 			STDMETHOD(TimecodeUpdate(BMDTimecodeBCD currentTimecode))
 			{
-				current_timecode_ = bcd2i(currentTimecode);
+				current_timecode_ = bcd_to_frame(currentTimecode);
 				if (record_state_ == record_state::ready)
 					begin_recording();
-				*monitor_subject_ << core::monitor::message("/tc") % narrow(decode_timecode(current_timecode_));
+				*monitor_subject_ << core::monitor::message("/tc") % narrow(decode_timecode(currentTimecode));
 				return S_OK;
 			}
 
@@ -368,6 +377,18 @@ namespace caspar {
 
 #pragma endregion
 
+			unsigned int GetTimecode() override
+			{
+				BMDTimecodeBCD timecode_bcd;
+				if (deck_control_ && SUCCEEDED(deck_control_->GetTimecodeBCD(&timecode_bcd, &last_deck_error_)))
+				{
+					auto format_desc = format_desc_;
+					return bcd2frame(timecode_bcd, static_cast<byte>(format_desc.time_scale / format_desc.duration)) + offset_;
+				}
+				else
+					return std::numeric_limits<unsigned int>().max();
+			}
+
 			virtual boost::property_tree::wptree info() override
 			{
 				boost::property_tree::wptree info;
@@ -388,7 +409,8 @@ namespace caspar {
 		{
 			auto device_index = ptree.get(L"device", 1);
 			auto preroll = ptree.get(L"preroll", 3U);
-			return make_safe<decklink_recorder>(index, device_index, preroll, channel);
+			int offset = ptree.get(L"offset", 0);
+			return make_safe<decklink_recorder>(index, device_index, preroll, offset, channel);
 		}
 
 	}

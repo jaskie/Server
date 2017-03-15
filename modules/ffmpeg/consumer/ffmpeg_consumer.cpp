@@ -32,6 +32,7 @@
 #include <core/mixer/audio/audio_util.h>
 #include <core/consumer/frame_consumer.h>
 #include <core/video_format.h>
+#include <core/recorder.h>
 
 #include <common/concurrency/executor.h>
 #include <common/concurrency/future_util.h>
@@ -127,8 +128,6 @@ typedef std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>	byte_vector;
 
 struct ffmpeg_consumer : boost::noncopyable
 {
-	static core::read_frame					flush_frame;
-
 	tbb::atomic<bool>						ready_;
 	const std::string						filename_;
 	AVDictionary **							options_;
@@ -680,13 +679,14 @@ struct ffmpeg_consumer_proxy : public core::frame_consumer
 	const std::string				options_;
 	const unsigned int				tc_in_;
 	const unsigned int				tc_out_;
+	core::recorder*					recorder_;
 
 	std::unique_ptr<ffmpeg_consumer> consumer_;
 	std::unique_ptr<ffmpeg_consumer> key_only_consumer_;
 
 public:
 
-	ffmpeg_consumer_proxy(const std::wstring& filename, output_format format, const std::string options, const bool separate_key, const unsigned int tc_in = 0, const unsigned int tc_out = std::numeric_limits<unsigned int>().max())
+	ffmpeg_consumer_proxy(const std::wstring& filename, output_format format, const std::string options, const bool separate_key, core::recorder* recorder = nullptr, const unsigned int tc_in = 0, const unsigned int tc_out = std::numeric_limits<unsigned int>().max())
 		: filename_(filename)
 		, separate_key_(separate_key)
 		, output_format_(format)
@@ -694,6 +694,7 @@ public:
 		, index_(100000 + crc16(boost::to_lower_copy(filename)))
 		, tc_in_(tc_in)
 		, tc_out_(tc_out)
+		, recorder_(recorder)
 	{
 	}
 	
@@ -741,6 +742,8 @@ public:
 		if (ready_for_frame)
 		{
 			unsigned int timecode = frame->get_timecode();
+			if (recorder_ && timecode == std::numeric_limits<unsigned int>().max())
+				timecode = recorder_->GetTimecode();
 			if (timecode >= tc_in_ && timecode < tc_out_)
 			{
 				consumer_->send(frame);
@@ -789,7 +792,7 @@ public:
 
 };	
 
-safe_ptr<core::frame_consumer> create_recorder_consumer(const std::wstring filename, const core::parameters& params, const unsigned int tc_in, const unsigned int tc_out)
+safe_ptr<core::frame_consumer> create_recorder_consumer(const std::wstring filename, const core::parameters& params, const unsigned int tc_in, const unsigned int tc_out, core::recorder* recorder)
 {
 	std::wstring acodec = params.get_original(L"ACODEC");
 	std::wstring vcodec = params.get_original(L"VCODEC");
@@ -805,7 +808,7 @@ safe_ptr<core::frame_consumer> create_recorder_consumer(const std::wstring filen
 		arate,
 		vrate
 	);
-	return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, format, narrow(options), false, tc_in, tc_out);
+	return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, format, narrow(options), false, recorder, tc_in, tc_out);
 }
 
 safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params)

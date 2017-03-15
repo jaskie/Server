@@ -118,33 +118,22 @@ static core::video_format::type get_caspar_video_format(BMDDisplayMode fmt)
 	}
 }
 
-// levis501 SO code
-static unsigned int bcd2i(unsigned int bcd) 
+static unsigned int bcd2frame(BMDTimecodeBCD bcd, byte fps) 
 {
-	unsigned int decimalMultiplier = 1;
-	unsigned int digit;
-	unsigned int i = 0;
-	while (bcd > 0) {
-		digit = bcd & 0xF;
-		i += digit * decimalMultiplier;
-		decimalMultiplier *= 10;
-		bcd >>= 4;
-	}
-	return i;
+	byte hour   = (bcd >> 24 & 0xF) + (bcd >> 28 & 0xF) * 10;
+	byte min    = (bcd >> 16 & 0xF) + (bcd >> 20 & 0xF) * 10;
+	byte sec    = (bcd >>  8 & 0xF) + (bcd >> 12 & 0xF) * 10;
+	byte frames = (bcd       & 0xF) + (bcd >>  4 & 0xF) * 10;
+	return ((((static_cast<int>(hour) * 60) + min) * 60) + sec) * fps + frames;
 }
 
-static unsigned int i2bcd(unsigned int i) 
+static BMDTimecodeBCD frame2bcd(unsigned int frames, byte fps)
 {
-	unsigned int binaryShift = 0;
-	unsigned int digit;
-	unsigned int bcd = 0;
-	while (i > 0) {
-		digit = i % 10;
-		bcd += (digit << binaryShift);
-		binaryShift += 4;
-		i /= 10;
-	}
-	return bcd;
+	unsigned int frame = frames   %  fps;
+	unsigned int sec   = (frames  /  fps) % 60;
+	unsigned int min   = (frames  / (fps * 60)) % 60;
+	unsigned int hour  = (frames  / (fps * 60 * 60));
+	return (frame % 10) | ((frame / 10) << 4) | ((sec % 10) << 8) | ((sec / 10) << 12) | ((min % 10) << 16) | ((min / 10) << 20) | ((hour % 10) << 24) | ((hour / 10) << 28);
 }
 
 template<typename T, typename F>
@@ -211,6 +200,14 @@ static CComPtr<IDeckLink> get_device(size_t device_index)
 		
 	return decklink;
 }
+
+static CComPtr<IDeckLinkDeckControl> get_deck_control(const CComPtr<IDeckLink>& decklink)
+{
+	CComPtr<IDeckLinkDeckControl> result;
+	decklink->QueryInterface(IID_IDeckLinkDeckControl, (void**)&result);
+	return result;
+}
+
 
 template <typename T>
 static std::wstring get_model_name(const T& device)

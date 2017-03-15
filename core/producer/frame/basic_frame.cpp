@@ -74,12 +74,12 @@ public:
 
 	unsigned int get_timecode(const basic_frame& self)
 	{
-		unsigned int result = 0;
+		unsigned int result = std::numeric_limits<unsigned int>().max();
 
 		BOOST_FOREACH(auto& frame, frames_)
 		{
 			if (is_concrete_frame(frame) && frame.get() != &self)
-				result = std::max(result, frame->get_timecode());
+				result = std::min(result, frame->get_timecode());
 		}
 		return result;
 	}

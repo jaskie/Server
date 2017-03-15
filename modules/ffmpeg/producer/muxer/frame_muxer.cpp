@@ -138,7 +138,7 @@ struct frame_muxer::implementation : boost::noncopyable
 		}
 		else
 		{
-			video_frame->display_picture_number = static_cast<int>(timecode);
+			video_frame->display_picture_number = (int)(timecode);
 			bool deinterlace_hint = (hints & core::frame_producer::DEINTERLACE_HINT) != 0;
 			if(auto_deinterlace_ && force_deinterlacing_ != deinterlace_hint)
 			{

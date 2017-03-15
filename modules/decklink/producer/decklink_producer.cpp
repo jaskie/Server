@@ -86,6 +86,7 @@ class decklink_producer : boost::noncopyable, public IDeckLinkInputCallback
 	safe_ptr<diagnostics::graph>								graph_;
 	boost::timer												tick_timer_;
 	boost::timer												frame_timer_;
+	core::video_format_desc										format_desc_;
 
 	CComPtr<IDeckLink>											decklink_;
 	CComQIPtr<IDeckLinkInput>									input_;
@@ -96,7 +97,6 @@ class decklink_producer : boost::noncopyable, public IDeckLinkInputCallback
 	const size_t												device_index_;
 	const std::wstring											filter_;
 	
-	core::video_format_desc										format_desc_;
 	std::vector<size_t>											audio_cadence_;
 	boost::circular_buffer<size_t>								sync_buffer_;
 	ffmpeg::frame_muxer											muxer_;
@@ -110,6 +110,8 @@ class decklink_producer : boost::noncopyable, public IDeckLinkInputCallback
 	int															num_input_channels_;
 	core::channel_layout										audio_channel_layout_;
 	const BMDTimecodeFormat										timecode_source_;
+	BMDTimeValue												frame_duration_;
+	BMDTimeScale												time_scale_;
 
 public:
 	decklink_producer(
@@ -134,6 +136,9 @@ public:
 		, frame_factory_(frame_factory)
 		, audio_channel_layout_(audio_channel_layout)
 		, timecode_source_(timecode_source)
+		, current_display_mode_(get_display_mode(input_, format_desc_.format, bmdFormat8BitYUV, bmdVideoInputFlagDefault))
+		, frame_duration_(format_desc_.duration)
+		, time_scale_(format_desc_.time_scale)
 	{		
 		hints_ = 0;
 		frame_buffer_.set_capacity(buffer_depth);
@@ -145,7 +150,6 @@ public:
 		else
 			num_input_channels_ = 16;
 
-		current_display_mode_ = get_display_mode(input_, format_desc_.format, bmdFormat8BitYUV, bmdVideoInputFlagDefault);
 
 		graph_->set_color("tick-time", diagnostics::color(0.0f, 0.6f, 0.9f));	
 		graph_->set_color("late-frame", diagnostics::color(0.6f, 0.3f, 0.3f));
@@ -188,6 +192,7 @@ public:
 			BOOST_THROW_EXCEPTION(caspar_exception() 
 									<< msg_info(narrow(print()) + " Failed to start input stream.")
 									<< boost::errinfo_api_function("StartStreams"));
+
 	}
 
 	void close_input()
@@ -209,8 +214,9 @@ public:
 		close_input();
 		open_input(newDisplayMode->GetDisplayMode(), bmdVideoInputEnableFormatDetection);
 		current_display_mode_ = newDisplayMode;
+		newDisplayMode->GetFrameRate(&frame_duration_, &time_scale_);
 		BSTR displayModeString = NULL; 
-		if (!FAILED(newDisplayMode->GetName(&displayModeString)) && displayModeString != NULL)
+		if (SUCCEEDED(newDisplayMode->GetName(&displayModeString)) && displayModeString != NULL)
 		{
 			std::wstring modeName(displayModeString, SysStringLen(displayModeString));
 			SysFreeString(displayModeString);
@@ -251,9 +257,9 @@ public:
 			av_frame->interlaced_frame	= fieldDominance == bmdLowerFieldFirst || fieldDominance == bmdUpperFieldFirst;
 			av_frame->top_field_first	= fieldDominance == bmdUpperFieldFirst;
 			IDeckLinkTimecode * decklink_timecode_bcd = NULL;
-			unsigned int frame_timecode = 0;
+			unsigned int frame_timecode = std::numeric_limits<unsigned int>().max();
 			if (SUCCEEDED(video->GetTimecode(timecode_source_, &decklink_timecode_bcd)) && decklink_timecode_bcd)
-				frame_timecode = bcd2i(decklink_timecode_bcd->GetBCD());
+				frame_timecode = bcd2frame(decklink_timecode_bcd->GetBCD(), static_cast<byte>(time_scale_/frame_duration_));
 			
 			std::shared_ptr<core::audio_buffer> audio_buffer;
 

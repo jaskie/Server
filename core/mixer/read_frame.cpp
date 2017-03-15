@@ -131,7 +131,7 @@ int64_t read_frame::get_age_millis() const
 
 unsigned int read_frame::get_timecode() const
 {
-	return impl_ ? impl_->frame_timecode_ : 0;
+	return impl_ ? impl_->frame_timecode_ : std::numeric_limits<unsigned int>().max();
 }
 
 //#include <tbb/scalable_allocator.h>

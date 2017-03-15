@@ -21,9 +21,10 @@
 
 #include <core/parameters/parameters.h>
 #include <core/video_channel.h>
+#include <common/memory/safe_ptr.h>
 
 #include <boost/noncopyable.hpp>
-#include <boost/property_tree/ptree_fwd.hpp>
+#include <boost/property_tree/ptree.hpp>
 
 #include <agents.h>
 
@@ -46,6 +47,7 @@ namespace caspar {
 			virtual bool FastForward() = 0;
 			virtual bool Rewind() = 0;
 			virtual bool GoToTimecode(const std::wstring tc) = 0;
+			virtual unsigned int GetTimecode() = 0;
 
 			virtual boost::property_tree::wptree info() = 0;
 			virtual monitor::subject& monitor_output() = 0;
