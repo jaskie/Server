@@ -57,8 +57,8 @@ public:
 
 	virtual void accept(frame_visitor& visitor) override;
 	virtual int64_t get_and_record_age_millis() override;
-	virtual unsigned int get_timecode() override;
-	void set_timecode(unsigned int timecode);
+	virtual int get_timecode() override;
+	void set_timecode(int timecode);
 
 	// write _frame
 

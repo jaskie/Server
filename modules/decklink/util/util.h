@@ -118,7 +118,7 @@ static core::video_format::type get_caspar_video_format(BMDDisplayMode fmt)
 	}
 }
 
-static unsigned int bcd2frame(BMDTimecodeBCD bcd, byte fps) 
+static int bcd2frame(BMDTimecodeBCD bcd, byte fps) 
 {
 	byte hour   = (bcd >> 24 & 0xF) + (bcd >> 28 & 0xF) * 10;
 	byte min    = (bcd >> 16 & 0xF) + (bcd >> 20 & 0xF) * 10;
@@ -127,7 +127,7 @@ static unsigned int bcd2frame(BMDTimecodeBCD bcd, byte fps)
 	return ((((static_cast<int>(hour) * 60) + min) * 60) + sec) * fps + frames;
 }
 
-static BMDTimecodeBCD frame2bcd(unsigned int frames, byte fps)
+static BMDTimecodeBCD frame2bcd(int frames, byte fps)
 {
 	unsigned int frame = frames   %  fps;
 	unsigned int sec   = (frames  /  fps) % 60;

@@ -72,9 +72,9 @@ public:
 		visitor.end();
 	}	
 
-	unsigned int get_timecode(const basic_frame& self)
+	int get_timecode(const basic_frame& self)
 	{
-		unsigned int result = std::numeric_limits<unsigned int>().max();
+		int result = std::numeric_limits<int>().max();
 
 		BOOST_FOREACH(auto& frame, frames_)
 		{
@@ -109,7 +109,7 @@ void basic_frame::swap(basic_frame& other){impl_.swap(other.impl_);}
 const frame_transform& basic_frame::get_frame_transform() const { return impl_->frame_transform_;}
 frame_transform& basic_frame::get_frame_transform() { return impl_->frame_transform_;}
 int64_t basic_frame::get_and_record_age_millis() { return impl_->get_and_record_age_millis(*this); }
-unsigned int basic_frame::get_timecode() { return impl_->get_timecode(*this);; }
+int basic_frame::get_timecode() { return impl_->get_timecode(*this);; }
 void basic_frame::accept(frame_visitor& visitor){impl_->accept(*this, visitor);}
 
 safe_ptr<basic_frame> basic_frame::interlace(const safe_ptr<basic_frame>& frame1, const safe_ptr<basic_frame>& frame2, field_mode::type mode)

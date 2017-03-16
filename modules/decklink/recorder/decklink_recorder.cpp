@@ -132,10 +132,10 @@ namespace caspar {
 			safe_ptr<core::frame_consumer>		consumer_;
 			
 			// timecodes are converted from BCD to unsigned integers
-			tbb::atomic<unsigned int>			tc_in_;
-			tbb::atomic<unsigned int>			tc_out_;
+			tbb::atomic<int>					tc_in_;
+			tbb::atomic<int>					tc_out_;
 
-			tbb::atomic<unsigned int>			current_timecode_;
+			tbb::atomic<int>					current_timecode_;
 
 			safe_ptr<core::monitor::subject>	monitor_subject_;
 
@@ -151,13 +151,13 @@ namespace caspar {
 				tc_out_ = 0;
 			}
 
-			BMDTimecodeBCD tc_to_bcd(unsigned int tc)
+			BMDTimecodeBCD tc_to_bcd(int tc)
 			{
 				auto format_desc = format_desc_;
 				return frame2bcd(tc, static_cast<byte>(format_desc.time_scale / format_desc.duration));
 			}
 
-			unsigned int bcd_to_frame(BMDTimecodeBCD bcd)
+			int bcd_to_frame(BMDTimecodeBCD bcd)
 			{
 				auto format_desc = format_desc_;
 				return bcd2frame(bcd, static_cast<byte>(format_desc.time_scale / format_desc.duration));
@@ -377,7 +377,7 @@ namespace caspar {
 
 #pragma endregion
 
-			unsigned int GetTimecode() override
+			int GetTimecode() override
 			{
 				BMDTimecodeBCD timecode_bcd;
 				if (deck_control_ && SUCCEEDED(deck_control_->GetTimecodeBCD(&timecode_bcd, &last_deck_error_)))
@@ -386,7 +386,7 @@ namespace caspar {
 					return bcd2frame(timecode_bcd, static_cast<byte>(format_desc.time_scale / format_desc.duration)) + offset_;
 				}
 				else
-					return std::numeric_limits<unsigned int>().max();
+					return std::numeric_limits<int>().max();
 			}
 
 			virtual boost::property_tree::wptree info() override

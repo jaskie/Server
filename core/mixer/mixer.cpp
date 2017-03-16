@@ -110,7 +110,7 @@ public:
 				mix_timer_.restart();
 
 				auto frames = packet.first;
-				unsigned int timecode = std::numeric_limits<unsigned int>().max();
+				int timecode = std::numeric_limits<int>().max();
 				
 				BOOST_FOREACH(auto& frame, frames)
 				{

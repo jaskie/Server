@@ -677,8 +677,8 @@ struct ffmpeg_consumer_proxy : public core::frame_consumer
 	output_format					output_format_;
 	core::video_format_desc			format_desc_;
 	const std::string				options_;
-	const unsigned int				tc_in_;
-	const unsigned int				tc_out_;
+	const int						tc_in_;
+	const int						tc_out_;
 	core::recorder*					recorder_;
 
 	std::unique_ptr<ffmpeg_consumer> consumer_;
@@ -686,7 +686,7 @@ struct ffmpeg_consumer_proxy : public core::frame_consumer
 
 public:
 
-	ffmpeg_consumer_proxy(const std::wstring& filename, output_format format, const std::string options, const bool separate_key, core::recorder* recorder = nullptr, const unsigned int tc_in = 0, const unsigned int tc_out = std::numeric_limits<unsigned int>().max())
+	ffmpeg_consumer_proxy(const std::wstring& filename, output_format format, const std::string options, const bool separate_key, core::recorder* recorder = nullptr, const int tc_in = 0, const int tc_out = std::numeric_limits<int>().max())
 		: filename_(filename)
 		, separate_key_(separate_key)
 		, output_format_(format)
@@ -741,8 +741,8 @@ public:
 
 		if (ready_for_frame)
 		{
-			unsigned int timecode = frame->get_timecode();
-			if (recorder_ && timecode == std::numeric_limits<unsigned int>().max())
+			int timecode = frame->get_timecode();
+			if (recorder_ && timecode == std::numeric_limits<int>().max())
 				timecode = recorder_->GetTimecode();
 			if (timecode >= tc_in_ && timecode < tc_out_)
 			{
@@ -792,7 +792,7 @@ public:
 
 };	
 
-safe_ptr<core::frame_consumer> create_recorder_consumer(const std::wstring filename, const core::parameters& params, const unsigned int tc_in, const unsigned int tc_out, core::recorder* recorder)
+safe_ptr<core::frame_consumer> create_recorder_consumer(const std::wstring filename, const core::parameters& params, const int tc_in, const int tc_out, core::recorder* recorder)
 {
 	std::wstring acodec = params.get_original(L"ACODEC");
 	std::wstring vcodec = params.get_original(L"VCODEC");

@@ -114,7 +114,7 @@ struct frame_muxer::implementation : boost::noncopyable
 
 
 
-	void push(const std::shared_ptr<AVFrame>& video_frame, int hints, unsigned int timecode)
+	void push(const std::shared_ptr<AVFrame>& video_frame, int hints, int timecode)
 	{		
 		if(!video_frame)
 			return;
@@ -138,7 +138,7 @@ struct frame_muxer::implementation : boost::noncopyable
 		}
 		else
 		{
-			video_frame->display_picture_number = (int)(timecode);
+			video_frame->display_picture_number = timecode;
 			bool deinterlace_hint = (hints & core::frame_producer::DEINTERLACE_HINT) != 0;
 			if(auto_deinterlace_ && force_deinterlacing_ != deinterlace_hint)
 			{
@@ -382,7 +382,7 @@ frame_muxer::frame_muxer(
 		const core::channel_layout& audio_channel_layout,
 		const std::string& filter)
 	: impl_(new implementation(in_fps, frame_factory, filter, thumbnail_mode, audio_channel_layout)){}
-void frame_muxer::push(const std::shared_ptr<AVFrame>& video_frame, int hints, unsigned int frame_timecode){impl_->push(video_frame, hints, frame_timecode);}
+void frame_muxer::push(const std::shared_ptr<AVFrame>& video_frame, int hints, int frame_timecode){impl_->push(video_frame, hints, frame_timecode);}
 void frame_muxer::push(const std::shared_ptr<core::audio_buffer>& audio_samples){return impl_->push(audio_samples);}
 void frame_muxer::clear(){return impl_->clear();}
 std::shared_ptr<basic_frame> frame_muxer::poll(){return impl_->poll();}

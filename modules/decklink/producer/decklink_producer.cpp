@@ -257,7 +257,7 @@ public:
 			av_frame->interlaced_frame	= fieldDominance == bmdLowerFieldFirst || fieldDominance == bmdUpperFieldFirst;
 			av_frame->top_field_first	= fieldDominance == bmdUpperFieldFirst;
 			IDeckLinkTimecode * decklink_timecode_bcd = NULL;
-			unsigned int frame_timecode = std::numeric_limits<unsigned int>().max();
+			int frame_timecode = std::numeric_limits<int>().max();
 			if (SUCCEEDED(video->GetTimecode(timecode_source_, &decklink_timecode_bcd)) && decklink_timecode_bcd)
 				frame_timecode = bcd2frame(decklink_timecode_bcd->GetBCD(), static_cast<byte>(time_scale_/frame_duration_));
 			

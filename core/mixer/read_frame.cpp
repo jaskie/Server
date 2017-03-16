@@ -50,7 +50,7 @@ struct read_frame::implementation : boost::noncopyable
 	audio_buffer				audio_data_;
 	channel_layout				audio_channel_layout_;
 	int64_t						created_timestamp_;
-	const unsigned int			frame_timecode_;
+	const int					frame_timecode_;
 
 public:
 	implementation(
@@ -98,7 +98,7 @@ read_frame::read_frame(
 		safe_ptr<host_buffer>&& image_data,
 		audio_buffer&& audio_data,
 		const channel_layout& audio_channel_layout,
-		unsigned int frame_timecode)
+		int frame_timecode)
 	: impl_(new implementation(ogl, size, std::move(image_data), std::move(audio_data), audio_channel_layout, frame_timecode))
 {
 }
@@ -129,9 +129,9 @@ int64_t read_frame::get_age_millis() const
 	return impl_ ? get_current_time_millis() - impl_->created_timestamp_ : 0;
 }
 
-unsigned int read_frame::get_timecode() const
+int read_frame::get_timecode() const
 {
-	return impl_ ? impl_->frame_timecode_ : std::numeric_limits<unsigned int>().max();
+	return impl_ ? impl_->frame_timecode_ : std::numeric_limits<int>().max();
 }
 
 //#include <tbb/scalable_allocator.h>
