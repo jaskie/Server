@@ -741,10 +741,20 @@ public:
 
 		if (ready_for_frame)
 		{
-			int timecode = frame->get_timecode();
-			if (recorder_ && timecode == std::numeric_limits<int>().max())
-				timecode = recorder_->GetTimecode();
-			if (timecode >= tc_in_ && timecode < tc_out_)
+			if (recorder_)
+			{
+				int timecode = frame->get_timecode();
+				if (timecode == std::numeric_limits<int>().max())
+					timecode = recorder_->GetTimecode();
+				if (timecode == std::numeric_limits<int>().max() 
+					|| (timecode >= tc_in_ && timecode < tc_out_))
+				{
+					consumer_->send(frame);
+					if (separate_key_)
+						key_only_consumer_->send(frame);
+				}
+			}
+			else
 			{
 				consumer_->send(frame);
 				if (separate_key_)

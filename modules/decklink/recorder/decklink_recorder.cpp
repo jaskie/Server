@@ -114,36 +114,38 @@ namespace caspar {
 				idle,
 				ready,
 				recording
-			}									record_state_;
-			com_initializer						init_;
-			int									index_;
-			const int							device_index_;
-			const unsigned int					preroll_;
-			int									offset_;
-			CComPtr<IDeckLink>					decklink_;
-			CComPtr<IDeckLinkDeckControl>		deck_control_;
-			BMDDeckControlError					last_deck_error_;
-			caspar::core::video_format_desc		format_desc_;
-			tbb::atomic<bool>					deck_is_open_;
+			}										record_state_;
+			com_initializer							init_;
+			int										index_;
+			const int								device_index_;
+			const unsigned int						preroll_;
+			int										offset_;
+			CComPtr<IDeckLink>						decklink_;
+			CComPtr<IDeckLinkDeckControl>			deck_control_;
+			BMDDeckControlError						last_deck_error_;
+			caspar::core::video_format_desc			format_desc_;
+			tbb::atomic<bool>						deck_is_open_;
 
 			//fields of the current operation
-			safe_ptr<core::video_channel>		channel_;
-			std::wstring						file_name_;
-			safe_ptr<core::frame_consumer>		consumer_;
+			std::shared_ptr<core::video_channel>	channel_;
+			std::wstring							file_name_;
+			safe_ptr<core::frame_consumer>			consumer_;
 			
 			// timecodes are converted from BCD to unsigned integers
-			tbb::atomic<int>					tc_in_;
-			tbb::atomic<int>					tc_out_;
+			tbb::atomic<int>						tc_in_;
+			tbb::atomic<int>						tc_out_;
 
-			tbb::atomic<int>					current_timecode_;
+			tbb::atomic<int>						current_timecode_;
 
-			safe_ptr<core::monitor::subject>	monitor_subject_;
+			safe_ptr<core::monitor::subject>		monitor_subject_;
 
 			void clean_recorder()
 			{
 				record_state_ = record_state::idle;
-				if (consumer_ != core::frame_consumer::empty())
-					channel_->output()->remove(consumer_);
+				auto consumer = consumer_;
+				auto channel = channel_;
+				if (channel && consumer != core::frame_consumer::empty())
+					channel->output()->remove(consumer);
 				consumer_ = core::frame_consumer::empty();
 				//channel_ = core::video_channel();
 				file_name_ = L"";
@@ -181,8 +183,12 @@ namespace caspar {
 
 			void begin_recording()
 			{
-				record_state_ = record_state::recording;
-				channel_->output()->add(consumer_);
+				auto channel = channel_;
+				if (channel)
+				{
+					record_state_ = record_state::recording;
+					channel->output()->add(consumer_);
+				}
 			}
 
 			std::wstring print() const
@@ -192,12 +198,11 @@ namespace caspar {
 
 
 		public:
-			decklink_recorder(int index, int device_index, unsigned int preroll, int offset, safe_ptr<core::video_channel> channel)
+			decklink_recorder(int index, int device_index, unsigned int preroll, int offset)
 				: index_(index)
 				, decklink_(get_device(device_index))
 				, deck_control_(get_deck_control(decklink_))
 				, consumer_(core::frame_consumer::empty())
-				, channel_(channel)
 				, last_deck_error_(bmdDeckControlNoError)
 				, device_index_(device_index)
 				, preroll_(preroll)
@@ -236,6 +241,7 @@ namespace caspar {
 
 				tc_in_ = bcd_to_frame(encode_timecode(tc_in));
 				tc_out_ = bcd_to_frame(encode_timecode(tc_out));
+				channel_ = channel;
 				
 				consumer_ = ffmpeg::create_recorder_consumer(file_name, params, tc_in_, tc_out_, this);
 				start_capture();
@@ -405,12 +411,12 @@ namespace caspar {
 
 		};
 		
-		safe_ptr<core::recorder> create_recorder(int index, safe_ptr<core::video_channel> channel, const boost::property_tree::wptree& ptree)
+		safe_ptr<core::recorder> create_recorder(int index, const boost::property_tree::wptree& ptree)
 		{
 			auto device_index = ptree.get(L"device", 1);
 			auto preroll = ptree.get(L"preroll", 3U);
 			int offset = ptree.get(L"offset", 0);
-			return make_safe<decklink_recorder>(index, device_index, preroll, offset, channel);
+			return make_safe<decklink_recorder>(index, device_index, preroll, offset);
 		}
 
 	}

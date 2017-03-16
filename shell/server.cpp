@@ -420,7 +420,7 @@ struct server::implementation : boost::noncopyable
 					auto recorder_type = xml_recorder.first;
 					if (recorder_type == L"decklink")
 					{
-						auto recorder = decklink::create_recorder(recorders_.size() + 1, channels_.back(), xml_recorder.second);
+						auto recorder = decklink::create_recorder(recorders_.size() + 1, xml_recorder.second);
 						recorders_.push_back(recorder);
 						recorder->monitor_output().attach_parent(monitor_subject_);
 					}
