@@ -33,6 +33,7 @@
 #include <ffmpeg/consumer/ffmpeg_consumer.h>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/format.hpp>
 
 
 #define ERR_TO_STR(err) ((err)==bmdDeckControlNoError) ? "No error" :\
@@ -88,21 +89,18 @@ namespace caspar {
 				return ((hours / 10) << 28) | (((hours % 10) & 0xF) << 24)
 					| ((minutes / 10) << 20) | (((minutes % 10) & 0xF) << 16)
 					| ((seconds / 10) << 12) | (((seconds % 10) & 0xF) << 8)
-					| ((frames / 10) << 4) | ((frames & 0xF) << 24);
+					| ((frames / 10) << 4) | (frames & 0xF);
 			}
 			return 0;
 		}
 		
-		std::wstring decode_timecode(BMDTimecodeBCD bcd)
+		std::string decode_timecode(BMDTimecodeBCD bcd)
 		{
-			byte hour = (bcd >> 24 & 0xF) + (bcd >> 28 & 0xF) * 10;
-			byte min = (bcd >> 16 & 0xF) + (bcd >> 20 & 0xF) * 10;
-			byte sec = (bcd >> 8 & 0xF) + (bcd >> 12 & 0xF) * 10;
-			byte frames = (bcd & 0xF) + (bcd >> 28 & 0xF) * 10;
-			return boost::lexical_cast<std::wstring>(hour) + L":"
-				+ boost::lexical_cast<std::wstring>(min) + L":"
-				+ boost::lexical_cast<std::wstring>(sec) + L":"
-				+ boost::lexical_cast<std::wstring>(frames);
+			short hour = (bcd >> 24 & 0xF) + (bcd >> 28 & 0xF) * 10;
+			short min = (bcd >> 16 & 0xF) + (bcd >> 20 & 0xF) * 10;
+			short sec = (bcd >> 8 & 0xF) + (bcd >> 12 & 0xF) * 10;
+			short frames = (bcd & 0xF) + (bcd >> 4 & 0xF) * 10;
+			return (boost::format( "%02d:%02d:%02d:%02d" ) % hour % min % sec % frames).str();
 		}
 
 
@@ -124,7 +122,7 @@ namespace caspar {
 			CComPtr<IDeckLinkDeckControl>			deck_control_;
 			BMDDeckControlError						last_deck_error_;
 			caspar::core::video_format_desc			format_desc_;
-			tbb::atomic<bool>						deck_is_open_;
+			tbb::atomic<bool>						deck_connected_;
 
 			//fields of the current operation
 			std::shared_ptr<core::video_channel>	channel_;
@@ -291,7 +289,7 @@ namespace caspar {
 				current_timecode_ = bcd_to_frame(currentTimecode);
 				if (record_state_ == record_state::ready)
 					begin_recording();
-				*monitor_subject_ << core::monitor::message("/tc") % narrow(decode_timecode(currentTimecode));
+				*monitor_subject_ << core::monitor::message("/tc") % decode_timecode(currentTimecode);
 				return S_OK;
 			}
 
@@ -363,16 +361,16 @@ namespace caspar {
 
 			STDMETHOD(DeckControlStatusChanged(BMDDeckControlStatusFlags flags, unsigned int mask))
 			{
-				if (!deck_is_open_ && (flags & bmdDeckControlStatusDeckConnected))
+				if (!deck_connected_ && (flags & bmdDeckControlStatusDeckConnected))
 				{
-					deck_is_open_ = true;
-					*monitor_subject_ << core::monitor::message("/state") % std::string("connected");
+					deck_connected_ = true;
+					*monitor_subject_ << core::monitor::message("/connected") % std::string("true");
 					CASPAR_LOG(info) << print() << L" Deck connected ";
 				}
-				if (deck_is_open_ && !(flags & bmdDeckControlStatusDeckConnected))
+				if (deck_connected_ && !(flags & bmdDeckControlStatusDeckConnected))
 				{
-					deck_is_open_ = false;
-					*monitor_subject_ << core::monitor::message("/state") % std::string("disconnected");
+					deck_connected_ = false;
+					*monitor_subject_ << core::monitor::message("/connected") % std::string("false");
 					CASPAR_LOG(info) << print() << L" Deck disconnected ";
 				}
 				if (record_state_ == record_state::recording)
@@ -401,6 +399,7 @@ namespace caspar {
 				info.add(L"recorder-kind", L"decklink");
 				info.add(L"device", device_index_);
 				info.add(L"preroll", preroll_);
+				info.add(L"connected", deck_connected_);
 				return info;
 			}
 
