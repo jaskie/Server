@@ -680,6 +680,7 @@ struct ffmpeg_consumer_proxy : public core::frame_consumer
 	const int						tc_in_;
 	const int						tc_out_;
 	core::recorder*					recorder_;
+	bool							recording_;
 
 	std::unique_ptr<ffmpeg_consumer> consumer_;
 	std::unique_ptr<ffmpeg_consumer> key_only_consumer_;
@@ -695,6 +696,7 @@ public:
 		, tc_in_(tc_in)
 		, tc_out_(tc_out)
 		, recorder_(recorder)
+		, recording_(false)
 	{
 	}
 	
@@ -746,8 +748,14 @@ public:
 				int timecode = frame->get_timecode();
 				if (timecode == std::numeric_limits<int>().max())
 					timecode = recorder_->GetTimecode();
-				if (timecode == std::numeric_limits<int>().max() 
-					|| (timecode >= tc_in_ && timecode < tc_out_))
+				if (timecode != std::numeric_limits<int>().max())
+				{
+					if (recording_ && timecode >= tc_out_ -1) // last recorded frame is one before tc_out_
+						recording_ = false;
+					if (!recording_ && timecode >= tc_in_)
+						recording_ = true;
+				}
+				if (recording_)
 				{
 					consumer_->send(frame);
 					if (separate_key_)

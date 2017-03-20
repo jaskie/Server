@@ -149,6 +149,7 @@ namespace caspar {
 				file_name_ = L"";
 				tc_in_ = 0;
 				tc_out_ = 0;
+				current_timecode_ = std::numeric_limits<int>().max();
 			}
 
 			BMDTimecodeBCD tc_to_bcd(int tc)
@@ -390,7 +391,7 @@ namespace caspar {
 					return bcd2frame(timecode_bcd, static_cast<byte>(format_desc.time_scale / format_desc.duration)) + offset_;
 				}
 				else
-					return std::numeric_limits<int>().max();
+					return current_timecode_;
 			}
 
 			virtual boost::property_tree::wptree info() override
