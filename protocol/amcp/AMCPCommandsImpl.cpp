@@ -1994,6 +1994,7 @@ bool InfoCommand::DoExecute()
 			boost::property_tree::wptree info;
 
 			int index = 0;
+			info.add(L"recorders", L"");
 			BOOST_FOREACH(auto rec, recorders_)
 				info.add_child(L"recorders.recorder", rec->info())
 				.add(L"index", ++index);
