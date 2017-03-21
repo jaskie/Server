@@ -1719,7 +1719,11 @@ bool CaptureCommand::DoExecute()
 		std::wstring tcIn = _parameters.get(L"IN", L"00:00:00:00");
 		std::wstring tcOut = _parameters.get(L"OUT", L"00:00:00:00");
 		std::wstring filename = _parameters.get(L"FILE", L"");
-		recorder->Capture(channel, tcIn, tcOut, filename, _parameters);
+		unsigned int frames_limit = _parameters.get(L"LIMIT", std::numeric_limits<unsigned int>().max());
+		if (frames_limit == std::numeric_limits<unsigned int>().max())
+			recorder->Capture(channel, tcIn, tcOut, filename, _parameters);
+		else
+			recorder->Capture(channel, frames_limit, filename, _parameters);
 		return true;
 	}
 	return false;
@@ -1748,6 +1752,13 @@ bool RecorderCommand::DoExecute()
 	{
 		std::wstring tc = _parameters.get(L"TC", L"");
 		return recorders[recorder_index]->GoToTimecode(tc);
+	}
+	recorder_index = _parameters.get(L"CALL", std::numeric_limits<int>().max()) - 1;
+	if (recorder_index < recorders.size())
+	{
+		unsigned int limit = _parameters.get(L"LIMIT", std::numeric_limits<unsigned int>().min());
+		recorders[recorder_index]->SetFrameLimit(limit);
+		return true;
 	}
 	return false;
 }

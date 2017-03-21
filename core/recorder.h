@@ -40,7 +40,8 @@ namespace caspar {
 			// Constructors
 
 			// Methods
-			virtual void Capture(std::shared_ptr<core::video_channel> channel, const std::wstring tc_in, const std::wstring tc_out, const std::wstring file_name, const core::parameters& params) = 0;
+			virtual void Capture(std::shared_ptr<core::video_channel>& channel, const std::wstring tc_in, const std::wstring tc_out, const std::wstring file_name, const core::parameters& params) = 0;
+			virtual void Capture(std::shared_ptr<core::video_channel>& channel, const unsigned int frame_limit, const std::wstring file_name, const core::parameters& params) = 0;
 			virtual bool Abort() = 0;
 			virtual bool Play() = 0;
 			virtual bool Stop() = 0;
@@ -48,7 +49,10 @@ namespace caspar {
 			virtual bool Rewind() = 0;
 			virtual bool GoToTimecode(const std::wstring tc) = 0;
 			virtual int GetTimecode() = 0;
+			virtual void SetFrameLimit(unsigned int frame_limit) = 0;
 
+			// internal methods
+			virtual void frame_captured(const unsigned int frames_left) = 0;
 			virtual boost::property_tree::wptree info() = 0;
 			virtual monitor::subject& monitor_output() = 0;
 			// Properties

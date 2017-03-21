@@ -30,6 +30,7 @@
 #include <core/video_channel.h>
 #include <core/consumer/output.h>
 #include <core/monitor/monitor.h>
+#include <common/concurrency/executor.h>
 #include <ffmpeg/consumer/ffmpeg_consumer.h>
 
 #include <boost/algorithm/string.hpp>
@@ -110,8 +111,8 @@ namespace caspar {
 			enum record_state
 			{
 				idle,
-				ready,
-				recording
+				manual_recording,
+				vcr_recording
 			}										record_state_;
 			com_initializer							init_;
 			int										index_;
@@ -134,8 +135,8 @@ namespace caspar {
 			tbb::atomic<int>						tc_out_;
 
 			tbb::atomic<int>						current_timecode_;
-
 			safe_ptr<core::monitor::subject>		monitor_subject_;
+			executor								executor_;
 
 			void clean_recorder()
 			{
@@ -143,9 +144,13 @@ namespace caspar {
 				auto consumer = consumer_;
 				auto channel = channel_;
 				if (channel && consumer != core::frame_consumer::empty())
-					channel->output()->remove(consumer);
-				consumer_ = core::frame_consumer::empty();
-				//channel_ = core::video_channel();
+				{
+					consumer_ = core::frame_consumer::empty();
+					executor_.begin_invoke([=]() {
+						channel->output()->remove(consumer);
+					});
+				}
+				channel_.reset();
 				file_name_ = L"";
 				tc_in_ = 0;
 				tc_out_ = 0;
@@ -180,13 +185,17 @@ namespace caspar {
 				format_desc_ = format;
 			}
 
-			void begin_recording()
+			void begin_vcr_recording()
 			{
 				auto channel = channel_;
-				if (channel)
+				auto consumer = consumer_;
+				if (channel && consumer != core::frame_consumer::empty())
 				{
-					record_state_ = record_state::recording;
-					channel->output()->add(consumer_);
+					executor_.begin_invoke([=]
+					{
+						channel->output()->add(consumer);
+					});
+					record_state_ = record_state::vcr_recording;
 				}
 			}
 
@@ -207,14 +216,15 @@ namespace caspar {
 				, preroll_(preroll)
 				, offset_(offset)
 				, monitor_subject_(make_safe<core::monitor::subject>("/recorder/" + boost::lexical_cast<std::string>(index)))
+				, executor_(print())
 			{
+				current_timecode_ = 0;
 				if (FAILED(deck_control_->SetCallback(this)))
 					CASPAR_LOG(error) << print() << L" Could not setup callback";
 				if (FAILED(deck_control_->SetPreroll(preroll)))
 					CASPAR_LOG(warning) << print() << L" Could not set deck preroll time";
 				open_deck_control(caspar::core::video_format_desc::get(caspar::core::video_format::pal));
 				CASPAR_LOG(debug) << print() << L" Initialized";
-
 			}
 			
 			~decklink_recorder()
@@ -227,7 +237,7 @@ namespace caspar {
 			}
 
 
-			virtual void Capture(std::shared_ptr<core::video_channel> channel, const std::wstring tc_in, const std::wstring tc_out, const std::wstring file_name, const core::parameters& params) override
+			virtual void Capture(std::shared_ptr<core::video_channel>& channel, const std::wstring tc_in, const std::wstring tc_out, const std::wstring file_name, const core::parameters& params) override
 			{
 				Abort();
 				caspar::core::video_format_desc new_format_desc = channel->get_video_format_desc();
@@ -242,8 +252,31 @@ namespace caspar {
 				tc_out_ = bcd_to_frame(encode_timecode(tc_out));
 				channel_ = channel;
 				
-				consumer_ = ffmpeg::create_recorder_consumer(file_name, params, tc_in_, tc_out_, this);
+				consumer_ = ffmpeg::create_capture_consumer(file_name, params, tc_in_, tc_out_, this);
 				start_capture();
+			}
+
+			virtual void Capture(std::shared_ptr<core::video_channel>& channel, const unsigned int frame_limit, const std::wstring file_name, const core::parameters& params) override
+			{
+				auto consumer = ffmpeg::create_manual_record_consumer(file_name, params, frame_limit, this);
+				channel_ = channel;
+				consumer_ = consumer;
+				executor_.begin_invoke([=] {
+					channel->output()->add(consumer);
+				});
+				record_state_ = record_state::manual_recording;
+			}
+
+			// Method called back from ffmpeg_consumer only
+			void frame_captured(const unsigned int frames_left) override
+			{
+				if (frames_left)
+					*monitor_subject_ << core::monitor::message("/frames_left") % static_cast<int>(frames_left);
+				else
+				{
+					clean_recorder();
+					*monitor_subject_ << core::monitor::message("/control") % std::string("capture_complete");
+				}
 			}
 
 			virtual bool Abort() override
@@ -287,16 +320,13 @@ namespace caspar {
 
 			STDMETHOD(TimecodeUpdate(BMDTimecodeBCD currentTimecode))
 			{
-				current_timecode_ = bcd_to_frame(currentTimecode);
-				if (record_state_ == record_state::ready)
-					begin_recording();
-				*monitor_subject_ << core::monitor::message("/tc") % decode_timecode(currentTimecode);
+				*monitor_subject_ << core::monitor::message("/tc") % decode_timecode(bcd_to_frame(currentTimecode));
 				return S_OK;
 			}
 
 			STDMETHOD(VTRControlStateChanged(BMDDeckControlVTRControlState newState, BMDDeckControlError error))
 			{
-				if (record_state_ == record_state::recording)
+				if (record_state_ == record_state::vcr_recording)
 					Abort();
 				switch (newState)
 				{
@@ -334,11 +364,11 @@ namespace caspar {
 
 			STDMETHOD(DeckControlEventReceived(BMDDeckControlEvent e, BMDDeckControlError error))
 			{
-				if (record_state_ == record_state::recording)
+				if (record_state_ == record_state::vcr_recording)
 					Abort();
 				// this thread is unable to initialize FFmpeg consumer
 				if (e == bmdDeckControlPrepareForCaptureEvent)
-					record_state_ = record_state::ready;
+					begin_vcr_recording();
 				switch (e)
 				{
 				case bmdDeckControlPrepareForExportEvent:
@@ -374,7 +404,7 @@ namespace caspar {
 					*monitor_subject_ << core::monitor::message("/connected") % std::string("false");
 					CASPAR_LOG(info) << print() << L" Deck disconnected ";
 				}
-				if (record_state_ == record_state::recording)
+				if (record_state_ == record_state::vcr_recording)
 					Abort();
 				CASPAR_LOG(trace) << print() << L" Deck control status changed: " << widen(FLAGS_TO_STR(flags));
 				return S_OK;
@@ -388,10 +418,18 @@ namespace caspar {
 				if (deck_control_ && SUCCEEDED(deck_control_->GetTimecodeBCD(&timecode_bcd, &last_deck_error_)))
 				{
 					auto format_desc = format_desc_;
-					return bcd2frame(timecode_bcd, static_cast<byte>(format_desc.time_scale / format_desc.duration)) + offset_;
+					current_timecode_ = bcd_to_frame(timecode_bcd) - offset_;
+					return current_timecode_;
 				}
 				else
-					return current_timecode_;
+					return ++current_timecode_; //assuming 1 call per frame
+			}
+
+			virtual void SetFrameLimit(unsigned int frame_limit) override
+			{
+				auto consumer = consumer_;
+				if (consumer != core::frame_consumer::empty())
+					ffmpeg::set_time_limit(consumer, frame_limit);
 			}
 
 			virtual boost::property_tree::wptree info() override

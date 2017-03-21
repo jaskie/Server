@@ -242,40 +242,41 @@ public:
 				// Retrieve results
 				for (auto result_it = send_results.begin(); result_it != send_results.end(); ++result_it)
 				{
-					auto consumer		= consumers_.at(result_it->first);
-					auto frame			= frames_.at(buffer_depths[result_it->first]-minmax.first);
-					auto& result_future	= result_it->second;
-						
-					try
-					{
-						if(!result_future.get())
-						{
-							CASPAR_LOG(info) << print() << L" " << consumer->print() << L" Removed.";
-							send_to_consumers_delays_.erase(result_it->first);
-							consumers_.erase(result_it->first);
-						}
-					}
-					catch(...)
-					{
-						CASPAR_LOG_CURRENT_EXCEPTION();
+					auto consumer = consumers_.find(result_it->first);
+					auto frame = frames_.at(buffer_depths[result_it->first] - minmax.first);
+					auto& result_future = result_it->second;
+
+					if (consumer != consumers_.end())
 						try
 						{
-							consumer->initialize(format_desc_, channel_index_);
-							if(!consumer->send(frame).get())
+							if (!result_future.get())
 							{
-								CASPAR_LOG(info) << print() << L" " << consumer->print() << L" Removed.";
+								CASPAR_LOG(info) << print() << L" " << consumer->second->print() << L" Removed.";
 								send_to_consumers_delays_.erase(result_it->first);
 								consumers_.erase(result_it->first);
 							}
 						}
-						catch(...)
+						catch (...)
 						{
 							CASPAR_LOG_CURRENT_EXCEPTION();
-							CASPAR_LOG(error) << "Failed to recover consumer: " << consumer->print() << L". Removing it.";
-							send_to_consumers_delays_.erase(result_it->first);
-							consumers_.erase(result_it->first);
+							try
+							{
+								consumer->second->initialize(format_desc_, channel_index_);
+								if (!consumer->second->send(frame).get())
+								{
+									CASPAR_LOG(info) << print() << L" " << consumer->second->print() << L" Removed.";
+									send_to_consumers_delays_.erase(result_it->first);
+									consumers_.erase(result_it->first);
+								}
+							}
+							catch (...)
+							{
+								CASPAR_LOG_CURRENT_EXCEPTION();
+								CASPAR_LOG(error) << "Failed to recover consumer: " << consumer->second->print() << L". Removing it.";
+								send_to_consumers_delays_.erase(result_it->first);
+								consumers_.erase(result_it->first);
+							}
 						}
-					}
 				}
 						
 				graph_->set_value("consume-time", consume_timer_.elapsed()*format_desc_.fps*0.5);
