@@ -72,7 +72,7 @@ namespace caspar {
 				return nullptr;
 		}
 
-		int crc16(const std::wstring& str)
+		int crc16(const std::string& str)
 		{
 			boost::crc_16_type result;
 			result.process_bytes(str.data(), str.length());
@@ -83,6 +83,7 @@ namespace caspar {
 
 		struct output_format
 		{
+			const std::string							file_name;
 			AVCodec *									video_codec;
 			AVCodec *									audio_codec;
 			AVOutputFormat*								format;
@@ -90,8 +91,10 @@ namespace caspar {
 			const bool									is_widescreen;
 			const int64_t								audio_bitrate;
 			const int64_t								video_bitrate;
+			const std::string							file_timecode;
 
-			output_format(const std::string& filename, AVCodec * acodec, AVCodec * vcodec, const bool is_stream, const bool is_wide, const int64_t a_rate, const int64_t v_rate)
+
+			output_format(const std::string& filename, AVCodec * acodec, AVCodec * vcodec, const bool is_stream, const bool is_wide, const int64_t a_rate, const int64_t v_rate, const std::string& file_tc)
 				: format(av_guess_format(NULL, filename.c_str(), NULL))
 				, video_codec(vcodec)
 				, audio_codec(acodec)
@@ -99,6 +102,8 @@ namespace caspar {
 				, is_mxf(std::equal(MXF.rbegin(), MXF.rend(), boost::to_upper_copy(filename).rbegin()))
 				, audio_bitrate(a_rate)
 				, video_bitrate(v_rate)
+				, file_name(filename)
+				, file_timecode(file_tc)
 			{
 				if (is_mxf) // is MXF
 					format = av_guess_format("mxf_d10", filename.c_str(), NULL);
@@ -195,6 +200,8 @@ namespace caspar {
 					video_st_ = add_video_stream();
 					if (!key_only_)
 						audio_st_ = add_audio_stream();
+
+					av_dict_set(&video_st_->metadata, "timecode", output_format_.file_timecode.c_str(), AV_DICT_DONT_OVERWRITE);
 
 					av_dump_format(format_context_, 0, filename_.c_str(), 1);
 
@@ -673,7 +680,6 @@ namespace caspar {
 		struct ffmpeg_consumer_proxy : public core::frame_consumer
 		{
 			const int						index_;
-			const std::wstring				filename_;
 			const bool						separate_key_;
 			output_format					output_format_;
 			core::video_format_desc			format_desc_;
@@ -689,12 +695,11 @@ namespace caspar {
 
 		public:
 
-			ffmpeg_consumer_proxy(const std::wstring& filename, output_format format, const std::string options, const bool separate_key, core::recorder* recorder = nullptr, const int tc_in = 0, const int tc_out = std::numeric_limits<int>().max(), const unsigned int frame_limit = std::numeric_limits<unsigned int>().max())
-				: filename_(filename)
-				, separate_key_(separate_key)
+			ffmpeg_consumer_proxy(output_format format, const std::string options, const bool separate_key, core::recorder* recorder = nullptr, const int tc_in = 0, const int tc_out = std::numeric_limits<int>().max(), const unsigned int frame_limit = std::numeric_limits<unsigned int>().max())
+				: separate_key_(separate_key)
 				, output_format_(format)
 				, options_(options)
-				, index_(100000 + crc16(boost::to_lower_copy(filename)))
+				, index_(100000 + crc16(boost::to_lower_copy(format.file_name)))
 				, tc_in_(tc_in)
 				, tc_out_(tc_out)
 				, recorder_(recorder)
@@ -709,7 +714,7 @@ namespace caspar {
 				consumer_.reset();
 				key_only_consumer_.reset();
 				consumer_.reset(new ffmpeg_consumer(
-					narrow(filename_),
+					narrow(output_format_.file_name),
 					format_desc_,
 					false,
 					output_format_,
@@ -718,9 +723,9 @@ namespace caspar {
 
 				if (separate_key_)
 				{
-					boost::filesystem::wpath fill_file(filename_);
+					boost::filesystem::path fill_file(output_format_.file_name);
 					auto without_extension = fill_file.stem();
-					auto key_file = env::media_folder() + without_extension + L"_A" + fill_file.extension();
+					auto key_file = narrow(env::media_folder()) + without_extension + "_A" + fill_file.extension();
 
 					key_only_consumer_.reset(new ffmpeg_consumer(
 						narrow(key_file),
@@ -794,7 +799,7 @@ namespace caspar {
 			{
 				boost::property_tree::wptree info;
 				info.add(L"type", L"ffmpeg_consumer");
-				info.add(L"filename", filename_);
+				info.add(L"filename", widen(output_format_.file_name));
 				info.add(L"separate_key", separate_key_);
 				return info;
 			}
@@ -828,16 +833,18 @@ namespace caspar {
 			std::wstring options = params.get_original(L"OPTIONS");
 			int64_t		 arate = params.get(L"ARATE", 0LL);
 			int64_t		 vrate = params.get(L"VRATE", 0LL);
+			std::wstring file_tc = params.get(L"IN", L"00:00:00:00");
 			output_format format(
-				narrow(filename),
+				narrow(env::media_folder() + filename),
 				avcodec_find_encoder_by_name(narrow(acodec).c_str()),
 				avcodec_find_encoder_by_name(narrow(vcodec).c_str()),
 				false,
 				!params.has(L"NARROW"),
 				arate,
-				vrate
+				vrate,
+				narrow(file_tc)
 			);
-			return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, format, narrow(options), false, recorder, tc_in, tc_out, static_cast<unsigned int>(tc_out - tc_in));
+			return make_safe<ffmpeg_consumer_proxy>(format, narrow(options), false, recorder, tc_in, tc_out, static_cast<unsigned int>(tc_out - tc_in));
 		}
 
 		safe_ptr<core::frame_consumer> create_manual_record_consumer(const std::wstring filename, const core::parameters& params, const unsigned int frame_limit, core::recorder* recorder)
@@ -848,15 +855,16 @@ namespace caspar {
 			int64_t		 arate = params.get(L"ARATE", 0LL);
 			int64_t		 vrate = params.get(L"VRATE", 0LL);
 			output_format format(
-				narrow(filename),
+				narrow(env::media_folder() + filename),
 				avcodec_find_encoder_by_name(narrow(acodec).c_str()),
 				avcodec_find_encoder_by_name(narrow(vcodec).c_str()),
 				false,
 				!params.has(L"NARROW"),
 				arate,
-				vrate
+				vrate,
+				std::string("00:00:00:00")
 			);
-			return make_safe<ffmpeg_consumer_proxy>(env::media_folder() + filename, format, narrow(options), false, recorder, 0, std::numeric_limits<int>().max(), frame_limit);
+			return make_safe<ffmpeg_consumer_proxy>(format, narrow(options), false, recorder, 0, std::numeric_limits<int>().max(), frame_limit);
 		}
 
 
@@ -876,16 +884,17 @@ namespace caspar {
 			int64_t		 arate = params2.get(L"ARATE", 0LL);
 			int64_t		 vrate = params2.get(L"VRATE", 0LL);
 			output_format format(
-				narrow(filename),
+				narrow(is_stream ? filename : env::media_folder() + filename),
 				avcodec_find_encoder_by_name(narrow(acodec).c_str()),
 				avcodec_find_encoder_by_name(narrow(vcodec).c_str()),
 				is_stream,
 				!params2.remove_if_exists(L"NARROW"),
 				arate,
-				vrate
+				vrate,
+				std::string("00:00:00:00")
 			);
 
-			return make_safe<ffmpeg_consumer_proxy>(is_stream ? filename : env::media_folder() + filename, format, narrow(options), separate_key);
+			return make_safe<ffmpeg_consumer_proxy>(format, narrow(options), separate_key);
 		}
 
 		safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptree& ptree)
@@ -904,10 +913,11 @@ namespace caspar {
 				true,
 				!ptree.get(L"narrow", true),
 				arate,
-				vrate
+				vrate, 
+				std::string("00:00:00:00")
 			);
 
-			return make_safe<ffmpeg_consumer_proxy>(filename, format, narrow(options), separate_key);
+			return make_safe<ffmpeg_consumer_proxy>(format, narrow(options), separate_key);
 		}
 
 		void set_time_limit(safe_ptr<core::frame_consumer> consumer, unsigned int frame_limit)

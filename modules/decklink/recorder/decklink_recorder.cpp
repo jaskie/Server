@@ -219,6 +219,7 @@ namespace caspar {
 				, executor_(print())
 			{
 				current_timecode_ = 0;
+				executor_.set_capacity(1);
 				if (FAILED(deck_control_->SetCallback(this)))
 					CASPAR_LOG(error) << print() << L" Could not setup callback";
 				if (FAILED(deck_control_->SetPreroll(preroll)))
@@ -270,9 +271,8 @@ namespace caspar {
 			// Method called back from ffmpeg_consumer only
 			void frame_captured(const unsigned int frames_left) override
 			{
-				if (frames_left)
-					*monitor_subject_ << core::monitor::message("/frames_left") % static_cast<int>(frames_left);
-				else
+				*monitor_subject_ << core::monitor::message("/frames_left") % static_cast<int>(frames_left);
+				if (!frames_left)
 				{
 					clean_recorder();
 					*monitor_subject_ << core::monitor::message("/control") % std::string("capture_complete");
