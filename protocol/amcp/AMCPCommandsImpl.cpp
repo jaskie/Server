@@ -1719,11 +1719,12 @@ bool CaptureCommand::DoExecute()
 		std::wstring tcIn = _parameters.get(L"IN", L"00:00:00:00");
 		std::wstring tcOut = _parameters.get(L"OUT", L"00:00:00:00");
 		std::wstring filename = _parameters.get(L"FILE", L"");
+		bool narrow_aspect_ratio = _parameters.get(L"NARROW", L"FALSE") == L"TRUE";
 		unsigned int frames_limit = _parameters.get(L"LIMIT", std::numeric_limits<unsigned int>().max());
 		if (frames_limit == std::numeric_limits<unsigned int>().max())
-			recorder->Capture(channel, tcIn, tcOut, filename, _parameters);
+			recorder->Capture(channel, tcIn, tcOut, filename, narrow_aspect_ratio, _parameters);
 		else
-			recorder->Capture(channel, frames_limit, filename, _parameters);
+			recorder->Capture(channel, frames_limit, filename, narrow_aspect_ratio, _parameters);
 		return true;
 	}
 	return false;
@@ -1747,6 +1748,9 @@ bool RecorderCommand::DoExecute()
 	recorder_index = _parameters.get(L"REWIND", std::numeric_limits<int>().max()) - 1;
 	if (recorder_index < recorders.size())
 		return recorders[recorder_index]->Rewind();
+	recorder_index = _parameters.get(L"FINISH", std::numeric_limits<int>().max()) - 1;
+	if (recorder_index < recorders.size())
+		return recorders[recorder_index]->FinishCapture();
 	recorder_index = _parameters.get(L"GOTO", std::numeric_limits<int>().max()) - 1;
 	if (recorder_index < recorders.size())
 	{

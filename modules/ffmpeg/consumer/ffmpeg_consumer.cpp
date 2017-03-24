@@ -826,7 +826,7 @@ namespace caspar {
 
 		};
 
-		safe_ptr<core::frame_consumer> create_capture_consumer(const std::wstring filename, const core::parameters& params, const int tc_in, const int tc_out, core::recorder* recorder)
+		safe_ptr<core::frame_consumer> create_capture_consumer(const std::wstring filename, const core::parameters& params, const int tc_in, const int tc_out, bool narrow_aspect_ratio, core::recorder* recorder)
 		{
 			std::wstring acodec = params.get_original(L"ACODEC");
 			std::wstring vcodec = params.get_original(L"VCODEC");
@@ -839,7 +839,7 @@ namespace caspar {
 				avcodec_find_encoder_by_name(narrow(acodec).c_str()),
 				avcodec_find_encoder_by_name(narrow(vcodec).c_str()),
 				false,
-				!params.has(L"NARROW"),
+				!narrow_aspect_ratio,
 				arate,
 				vrate,
 				narrow(file_tc)
@@ -847,7 +847,7 @@ namespace caspar {
 			return make_safe<ffmpeg_consumer_proxy>(format, narrow(options), false, recorder, tc_in, tc_out, static_cast<unsigned int>(tc_out - tc_in));
 		}
 
-		safe_ptr<core::frame_consumer> create_manual_record_consumer(const std::wstring filename, const core::parameters& params, const unsigned int frame_limit, core::recorder* recorder)
+		safe_ptr<core::frame_consumer> create_manual_record_consumer(const std::wstring filename, const core::parameters& params, const unsigned int frame_limit, bool narrow_aspect_ratio, core::recorder* recorder)
 		{
 			std::wstring acodec = params.get_original(L"ACODEC");
 			std::wstring vcodec = params.get_original(L"VCODEC");
@@ -859,7 +859,7 @@ namespace caspar {
 				avcodec_find_encoder_by_name(narrow(acodec).c_str()),
 				avcodec_find_encoder_by_name(narrow(vcodec).c_str()),
 				false,
-				!params.has(L"NARROW"),
+				!narrow_aspect_ratio,
 				arate,
 				vrate,
 				std::string("00:00:00:00")
@@ -872,23 +872,21 @@ namespace caspar {
 		{
 			if (params.size() < 1 || (params[0] != L"FILE" && params[0] != L"STREAM"))
 				return core::frame_consumer::empty();
-
-			auto params2 = params;
-
-			std::wstring filename = (params2.size() > 1 ? params2.at_original(1) : L"");
-			bool separate_key = params2.remove_if_exists(L"SEPARATE_KEY");
-			bool is_stream = params2[0] == L"STREAM";
-			std::wstring acodec = params2.get_original(L"ACODEC");
-			std::wstring vcodec = params2.get_original(L"VCODEC");
-			std::wstring options = params2.get_original(L"OPTIONS");
-			int64_t		 arate = params2.get(L"ARATE", 0LL);
-			int64_t		 vrate = params2.get(L"VRATE", 0LL);
+			std::wstring filename = (params.size() > 1 ? params.at_original(1) : L"");
+			bool separate_key = params.has(L"SEPARATE_KEY");
+			bool is_stream = params[0] == L"STREAM";
+			std::wstring acodec = params.get_original(L"ACODEC");
+			std::wstring vcodec = params.get_original(L"VCODEC");
+			std::wstring options = params.get_original(L"OPTIONS");
+			int64_t		 arate = params.get(L"ARATE", 0LL);
+			int64_t		 vrate = params.get(L"VRATE", 0LL);
+			bool		 narrow_aspect_ratio = params.get(L"NARROW", false);
 			output_format format(
 				narrow(is_stream ? filename : env::media_folder() + filename),
 				avcodec_find_encoder_by_name(narrow(acodec).c_str()),
 				avcodec_find_encoder_by_name(narrow(vcodec).c_str()),
 				is_stream,
-				!params2.remove_if_exists(L"NARROW"),
+				!narrow_aspect_ratio,
 				arate,
 				vrate,
 				std::string("00:00:00:00")

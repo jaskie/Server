@@ -169,15 +169,6 @@ namespace caspar {
 				return bcd2frame(bcd, static_cast<byte>(format_desc.time_scale / format_desc.duration));
 			}
 
-			void start_capture()
-			{
-				if (FAILED(deck_control_->StartCapture(FALSE, tc_to_bcd(tc_in_), tc_to_bcd(tc_out_), &last_deck_error_)))
-				{
-					CASPAR_LOG(error) << print() << L" Could not start capture";
-					Abort();
-				}
-			}
-
 			void open_deck_control(caspar::core::video_format_desc format)
 			{
 				if (FAILED(deck_control_->Open(format.time_scale, format.duration, FALSE, &last_deck_error_)))
@@ -238,13 +229,13 @@ namespace caspar {
 			}
 
 
-			virtual void Capture(std::shared_ptr<core::video_channel>& channel, const std::wstring tc_in, const std::wstring tc_out, const std::wstring file_name, const core::parameters& params) override
+			virtual void Capture(std::shared_ptr<core::video_channel>& channel, const std::wstring tc_in, const std::wstring tc_out, const std::wstring file_name, const bool narrow_aspect_ratio, const core::parameters& params) override
 			{
 				Abort();
 				caspar::core::video_format_desc new_format_desc = channel->get_video_format_desc();
 				if (new_format_desc.time_scale != format_desc_.time_scale || new_format_desc.duration != format_desc_.duration)
 				{
-					CASPAR_LOG(debug) << print() << L" Video format has changed. Reopening deck control for new time scale";
+					CASPAR_LOG(trace) << print() << L" Video format has changed. Reopening deck control for new time scale";
 					deck_control_->Close(false);
 					open_deck_control(new_format_desc);
 				}
@@ -253,17 +244,20 @@ namespace caspar {
 				tc_out_ = bcd_to_frame(encode_timecode(tc_out));
 				channel_ = channel;
 				
-				consumer_ = ffmpeg::create_capture_consumer(file_name, params, tc_in_, tc_out_, this);
-				start_capture();
+				consumer_ = ffmpeg::create_capture_consumer(file_name, params, tc_in_, tc_out_, narrow_aspect_ratio, this);
+				if (FAILED(deck_control_->StartCapture(FALSE, tc_to_bcd(tc_in_), tc_to_bcd(tc_out_), &last_deck_error_)))
+				{
+					CASPAR_LOG(error) << print() << L" Could not start capture";
+					clean_recorder();
+				}
 			}
 
-			virtual void Capture(std::shared_ptr<core::video_channel>& channel, const unsigned int frame_limit, const std::wstring file_name, const core::parameters& params) override
+			virtual void Capture(std::shared_ptr<core::video_channel>& channel, const unsigned int frame_limit, const std::wstring file_name, const bool narrow_aspect_ratio, const core::parameters& params) override
 			{
-				auto consumer = ffmpeg::create_manual_record_consumer(file_name, params, frame_limit, this);
 				channel_ = channel;
-				consumer_ = consumer;
+				consumer_ = ffmpeg::create_manual_record_consumer(file_name, params, frame_limit, narrow_aspect_ratio, this);
 				executor_.begin_invoke([=] {
-					channel->output()->add(consumer);
+					channel->output()->add(consumer_);
 				});
 				record_state_ = record_state::manual_recording;
 			}
@@ -275,8 +269,21 @@ namespace caspar {
 				if (!frames_left)
 				{
 					clean_recorder();
-					*monitor_subject_ << core::monitor::message("/control") % std::string("capture_complete");
+					executor_.begin_invoke([&]() {
+						*monitor_subject_ << core::monitor::message("/control") % std::string("capture_complete");
+					});					
 				}
+			}
+
+			virtual bool FinishCapture() override
+			{
+				clean_recorder();
+				if (record_state_ > record_state::idle)
+					deck_control_->Stop(&last_deck_error_);
+				executor_.begin_invoke([&]() {
+					*monitor_subject_ << core::monitor::message("/control") % std::string("capture_complete");
+				});
+				return true;
 			}
 
 			virtual bool Abort() override
@@ -320,7 +327,7 @@ namespace caspar {
 
 			STDMETHOD(TimecodeUpdate(BMDTimecodeBCD currentTimecode))
 			{
-				*monitor_subject_ << core::monitor::message("/tc") % decode_timecode(bcd_to_frame(currentTimecode));
+				*monitor_subject_ << core::monitor::message("/tc") % decode_timecode(currentTimecode);
 				return S_OK;
 			}
 
