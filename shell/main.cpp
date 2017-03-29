@@ -316,9 +316,9 @@ int main(int argc, wchar_t* argv[])
 						else if(wcmd.substr(0, 1) == L"5")
 							wcmd = L"PLAY 1-0 BARS";
 						else if (wcmd.substr(0, 1) == L"6")
-							wcmd = L"CAPTURE 2 recorder 1 IN 2:10:10:0 OUT 2:10:20:0 FILE record.mp4";
+							wcmd = L"CAPTURE 2 recorder 1 IN 2:10:10:0 OUT 2:10:20:0 FILE  record.mp4";
 						else if (wcmd.substr(0, 1) == L"7")
-							wcmd = L"CAPTURE 2 recorder 1 LIMIT 125 FILE limit.mov acodec ac3 vcodec libx264 vrate 8192";
+							wcmd = L"CAPTURE 2 recorder 1 LIMIT 125 FILE limit.mov ACODEC ac3 VCODEC libx264 VRATE 8192";
 						else if (wcmd.substr(0, 1) == L"8")
 							wcmd = L"recorder call 1 LIMIT 125";
 						else if(upper_cmd.substr(0, 1) == L"X")
