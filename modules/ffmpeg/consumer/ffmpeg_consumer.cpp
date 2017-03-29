@@ -234,6 +234,7 @@ namespace caspar {
 				if ((video_st_ && (video_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY))
 					|| (!key_only_ && (audio_st_ && (audio_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY))))
 					flush_encoders();
+				avio_flush(format_context_->pb);
 				LOG_ON_ERROR2(av_write_trailer(format_context_), "[ffmpeg_consumer]");
 				cleanup();
 
@@ -565,11 +566,10 @@ namespace caspar {
 				return static_cast<std::int64_t>(result);
 			}
 
-			void encode_audio_frame(core::read_frame& frame)
+			void encode_audio_buffer(bool is_last_frame)
 			{
 				AVCodecContext * enc = audio_st_->codec;
-				resample_audio(frame, enc);
-				size_t input_audio_size = enc->frame_size == 0 ?
+				size_t input_audio_size = enc->frame_size == 0 || is_last_frame ?
 					audio_bufers_[0].size() :
 					enc->frame_size * av_get_bytes_per_sample(enc->sample_fmt) * enc->channels;
 				int frame_size = input_audio_size / (av_get_bytes_per_sample(enc->sample_fmt) * enc->channels);
@@ -605,6 +605,12 @@ namespace caspar {
 				}
 			}
 
+			void encode_audio_frame(core::read_frame& frame)
+			{
+				resample_audio(frame, audio_st_->codec);
+				encode_audio_buffer(false);
+			}
+
 			void send(const safe_ptr<core::read_frame>& frame)
 			{
 				encode_executor_.begin_invoke([=] {
@@ -635,6 +641,7 @@ namespace caspar {
 
 			void flush_encoders()
 			{
+				encode_audio_buffer(true); // encode remaining buffer data
 				bool audio_full = false;
 				bool video_full = false;
 				bool need_flush_audio = !key_only_ && audio_st_ && (audio_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY) != 0;
@@ -643,7 +650,7 @@ namespace caspar {
 				{
 					audio_full |= !need_flush_audio || flush_stream(false);
 					video_full |= !need_flush_video || flush_stream(true);
-				} while (!audio_full || !video_full);
+				} while (!(audio_full && video_full));
 			}
 
 
@@ -667,7 +674,7 @@ namespace caspar {
 				if (pkt->dts != AV_NOPTS_VALUE)
 					pkt->dts = av_rescale_q(pkt->dts, stream->codec->time_base, stream->time_base);
 
-				if (stream->codec->coded_frame->key_frame)
+				if (video && stream->codec->coded_frame->key_frame)
 					pkt->flags |= AV_PKT_FLAG_KEY;
 
 				pkt->stream_index = stream->index;
