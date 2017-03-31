@@ -188,7 +188,7 @@ public:
 
 		muxer_.reset(new frame_muxer(format_desc_.fps, frame_factory, thumbnail_mode_, audio_channel_layout_, filter_str_));
 		seek(start);
-		for (int n = 0; n < 16 && frame_buffer_.size() < 4; ++n)
+		for (int n = 0; n < 32 && frame_buffer_.size() < 4; ++n)
 			try_decode_frame(thumbnail_mode ? core::frame_producer::DEINTERLACE_HINT : alpha_mode ? core::frame_producer::ALPHA_HINT : core::frame_producer::NO_HINT);
 	}
 
@@ -209,7 +209,7 @@ public:
 		frame_timer_.restart();
 		auto disable_logging = temporary_disable_logging_for_thread(thumbnail_mode_);
 				
-		for(int n = 0; n < 16 && frame_buffer_.size() < 4; ++n)
+		for(int n = 0; n < 32 && frame_buffer_.size() < 4; ++n)
 			try_decode_frame(hints);
 		
 		graph_->set_value("frame-time", frame_timer_.elapsed()*format_desc_.fps*0.5);

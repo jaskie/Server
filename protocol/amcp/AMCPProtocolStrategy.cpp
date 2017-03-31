@@ -55,10 +55,12 @@ inline std::shared_ptr<core::video_channel> GetChannelSafe(unsigned int index, c
 
 AMCPProtocolStrategy::AMCPProtocolStrategy(
 		const std::vector<safe_ptr<core::video_channel>>& channels,
+		const std::vector<safe_ptr<core::recorder>>& recorders,
 		const std::shared_ptr<core::thumbnail_generator>& thumb_gen,
 		const safe_ptr<core::media_info_repository>& media_info_repo,
 		boost::promise<bool>& shutdown_server_now)
 	: channels_(channels)
+	, recorders_(recorders)
 	, thumb_gen_(thumb_gen)
 	, media_info_repo_(media_info_repo)
 	, shutdown_server_now_(shutdown_server_now)
@@ -201,6 +203,7 @@ AMCPCommandPtr AMCPProtocolStrategy::InterpretCommandString(const std::wstring& 
 			else
 			{
 				pCommand->SetChannels(channels_);
+				pCommand->SetRecorders(recorders_);
 				pCommand->SetThumbGenerator(thumb_gen_);
 				pCommand->SetMediaInfoRepo(media_info_repo_);
 				pCommand->SetShutdownServerNow(shutdown_server_now_);
@@ -329,8 +332,10 @@ AMCPCommandPtr AMCPProtocolStrategy::CommandFactory(const std::wstring& str)
 	else if(s == TEXT("LOG"))			return std::make_shared<LogCommand>();
 	else if(s == TEXT("CG"))			return std::make_shared<CGCommand>();
 	else if(s == TEXT("DATA"))			return std::make_shared<DataCommand>();
+	else if(s == TEXT("CAPTURE"))		return std::make_shared<CaptureCommand>();
+	else if(s == TEXT("RECORDER"))		return std::make_shared<RecorderCommand>();
 	else if(s == TEXT("CINF"))			return std::make_shared<CinfCommand>();
-	else if(s == TEXT("INFO"))			return std::make_shared<InfoCommand>(channels_);
+	else if(s == TEXT("INFO"))			return std::make_shared<InfoCommand>(channels_, recorders_);
 	else if(s == TEXT("CLS"))			return std::make_shared<ClsCommand>();
 	else if(s == TEXT("TLS"))			return std::make_shared<TlsCommand>();
 	else if(s == TEXT("VERSION"))		return std::make_shared<VersionCommand>();

@@ -76,10 +76,10 @@ static void* fast_memcpy_aligned_impl(void* dest, const void* source, size_t cou
 			dec ebx;      
 		jnz cpy;  
 	}   
-#else
-
-#endif
 	return dest;
+#else
+	return memcpy(dest, source, count);
+#endif
 }
 
 static void* fast_memcpy_unaligned_impl(void* dest, const void* source, size_t count)
@@ -89,7 +89,7 @@ static void* fast_memcpy_unaligned_impl(void* dest, const void* source, size_t c
 
 	if(count == 0)
 		return dest;
-
+#ifdef _M_IX86
 	__asm   
 	{      
 		mov esi, source;          
@@ -125,6 +125,9 @@ static void* fast_memcpy_unaligned_impl(void* dest, const void* source, size_t c
 		jnz cpy;  
 	}   
 	return dest;
+#else
+	return memcpy(dest, source, count);
+#endif
 }
 
 static void* fast_memcpy_small_aligned(char* dest8, const char* source8, size_t count)

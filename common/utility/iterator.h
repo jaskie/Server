@@ -78,14 +78,14 @@ private:
 class constant_step_finder
 {
 	std::ptrdiff_t step_;
-	size_t num_steps_;
-	mutable size_t steps_made_;
+	uint32_t num_steps_;
+	mutable uint32_t steps_made_;
 public:
 	constant_step_finder()
 	{
 	}
 
-	constant_step_finder(std::ptrdiff_t step, size_t num_steps)
+	constant_step_finder(std::ptrdiff_t step, uint32_t num_steps)
 		: step_(step)
 		, num_steps_(num_steps)
 		, steps_made_(0)

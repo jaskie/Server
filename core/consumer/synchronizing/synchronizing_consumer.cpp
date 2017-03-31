@@ -100,7 +100,7 @@ public:
 		return get_delegate().has_synchronization_clock();
 	}
 
-	virtual size_t buffer_depth() const override
+	virtual uint32_t buffer_depth() const override
 	{
 		return get_delegate().buffer_depth();
 	}
@@ -127,7 +127,7 @@ const std::vector<int>& diag_colors()
 class buffering_consumer_adapter : public delegating_frame_consumer
 {
 	std::queue<safe_ptr<read_frame>>	buffer_;
-	tbb::atomic<size_t>					buffered_;
+	tbb::atomic<uint32_t>					buffered_;
 	tbb::atomic<int64_t>				duplicate_next_;
 public:
 	buffering_consumer_adapter(const safe_ptr<frame_consumer>& consumer)
@@ -172,7 +172,7 @@ public:
 		duplicate_next_ += to_duplicate;
 	}
 
-	size_t num_buffered() const
+	uint32_t num_buffered() const
 	{
 		return buffered_ - 1;
 	}
@@ -200,7 +200,7 @@ struct synchronizing_consumer::implementation
 {
 private:
 	std::vector<safe_ptr<buffering_consumer_adapter>>	consumers_;
-	size_t												buffer_depth_;
+	uint32_t												buffer_depth_;
 	bool												has_synchronization_clock_;
 	std::vector<boost::unique_future<bool>>				results_;
 	boost::promise<bool>								promise_;
@@ -217,7 +217,7 @@ public:
 
 		current_diff_ = 0;
 		auto buffer_depths = consumers | transformed(std::mem_fn(&frame_consumer::buffer_depth));
-		std::vector<size_t> depths(buffer_depths.begin(), buffer_depths.end());
+		std::vector<uint32_t> depths(buffer_depths.begin(), buffer_depths.end());
 		buffer_depth_ = *boost::max_element(depths);
 		has_synchronization_clock_ = boost::count_if(consumers, std::mem_fn(&frame_consumer::has_synchronization_clock)) > 0;
 
@@ -310,7 +310,7 @@ public:
 	void blocking_consume_unnecessarily_buffered()
 	{
 		auto buffered = consumers_ | transformed(std::mem_fn(&buffering_consumer_adapter::num_buffered));
-		std::vector<size_t> num_buffered(buffered.begin(), buffered.end());
+		std::vector<uint32_t> num_buffered(buffered.begin(), buffered.end());
 		auto min_buffered = *boost::min_element(num_buffered);
 
 		if (min_buffered)
@@ -333,7 +333,7 @@ public:
 
 	void initialize(const video_format_desc& format_desc, int channel_index)
 	{
-		for (size_t i = 0; i < consumers_.size(); ++i)
+		for (uint32_t i = 0; i < consumers_.size(); ++i)
 		{
 			auto& consumer = consumers_.at(i);
 			consumer->initialize(format_desc, channel_index); 
@@ -380,7 +380,7 @@ public:
 		return has_synchronization_clock_;
 	}
 
-	size_t buffer_depth() const
+	uint32_t buffer_depth() const
 	{
 		return buffer_depth_;
 	}
@@ -426,7 +426,7 @@ bool synchronizing_consumer::has_synchronization_clock() const
 	return impl_->has_synchronization_clock();
 }
 
-size_t synchronizing_consumer::buffer_depth() const
+uint32_t synchronizing_consumer::buffer_depth() const
 {
 	return impl_->buffer_depth();
 }

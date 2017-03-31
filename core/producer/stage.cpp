@@ -496,8 +496,8 @@ void stage::stop(int index){impl_->stop(index);}
 void stage::clear(int index){impl_->clear(index);}
 void stage::clear(){impl_->clear();}
 void stage::swap_layers(const safe_ptr<stage>& other){impl_->swap_layers(*other);}
-void stage::swap_layer(int index, size_t other_index){impl_->swap_layer(index, other_index);}
-void stage::swap_layer(int index, size_t other_index, const safe_ptr<stage>& other){impl_->swap_layer(index, other_index, *other);}
+void stage::swap_layer(int index, uint32_t other_index){impl_->swap_layer(index, other_index);}
+void stage::swap_layer(int index, uint32_t other_index, const safe_ptr<stage>& other){impl_->swap_layer(index, other_index, *other);}
 void stage::add_layer_consumer(void* token, int layer, const std::shared_ptr<write_frame_consumer>& layer_consumer){impl_->add_layer_consumer(token, layer, layer_consumer);}
 void stage::remove_layer_consumer(void* token, int layer){impl_->remove_layer_consumer(token, layer);}
 boost::unique_future<safe_ptr<frame_producer>> stage::foreground(int index) {return impl_->foreground(index);}

@@ -71,9 +71,9 @@ safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params)
 class cadence_guard : public frame_consumer
 {
 	safe_ptr<frame_consumer>		consumer_;
-	std::vector<size_t>				audio_cadence_;
+	std::vector<uint32_t>				audio_cadence_;
 	video_format_desc				format_desc_;
-	boost::circular_buffer<size_t>	sync_buffer_;
+	boost::circular_buffer<uint32_t>	sync_buffer_;
 public:
 	cadence_guard(const safe_ptr<frame_consumer>& consumer)
 		: consumer_(consumer)
@@ -83,7 +83,7 @@ public:
 	virtual void initialize(const video_format_desc& format_desc, int channel_index) override
 	{
 		audio_cadence_	= format_desc.audio_cadence;
-		sync_buffer_	= boost::circular_buffer<size_t>(format_desc.audio_cadence.size());
+		sync_buffer_	= boost::circular_buffer<uint32_t>(format_desc.audio_cadence.size());
 		format_desc_	= format_desc;
 		consumer_->initialize(format_desc, channel_index);
 	}
@@ -100,7 +100,7 @@ public:
 
 		boost::unique_future<bool> result = caspar::wrap_as_future(true);
 		
-		if(boost::range::equal(sync_buffer_, audio_cadence_) && audio_cadence_.front() * frame->num_channels() == static_cast<size_t>(frame->audio_data().size()))
+		if(boost::range::equal(sync_buffer_, audio_cadence_) && audio_cadence_.front() * frame->num_channels() == static_cast<uint32_t>(frame->audio_data().size()))
 		{	
 			// Audio sent so far is in sync, now we can send the next chunk.
 			result = consumer_->send(frame);
@@ -109,7 +109,7 @@ public:
 		else
 			CASPAR_LOG(trace) << print() << L" Syncing audio.";
 
-		sync_buffer_.push_back(static_cast<size_t>(frame->audio_data().size() / frame->num_channels()));
+		sync_buffer_.push_back(static_cast<uint32_t>(frame->audio_data().size() / frame->num_channels()));
 		
 		return std::move(result);
 	}
@@ -129,7 +129,7 @@ public:
 		return consumer_->has_synchronization_clock();
 	}
 
-	virtual size_t buffer_depth() const override
+	virtual uint32_t buffer_depth() const override
 	{
 		return consumer_->buffer_depth();
 	}
@@ -154,7 +154,7 @@ const safe_ptr<frame_consumer>& frame_consumer::empty()
 		virtual int64_t presentation_frame_age_millis() const { return 0; }
 		virtual std::wstring print() const override {return L"empty";}
 		virtual bool has_synchronization_clock() const override {return false;}
-		virtual size_t buffer_depth() const override {return 0;};
+		virtual uint32_t buffer_depth() const override {return 0;};
 		virtual int index() const{return -1;}
 		virtual boost::property_tree::wptree info() const override
 		{

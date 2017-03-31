@@ -31,6 +31,7 @@
 #include <tbb/atomic.h>
 #include <tbb/parallel_for.h>
 #include <tbb/tbb_thread.h>
+#include <boost/thread.hpp>
 
 #if defined(_MSC_VER)
 #pragma warning (push)
@@ -84,15 +85,15 @@ int thread_execute2(AVCodecContext* s, int (*func)(AVCodecContext* c2, void* arg
     return 0;  
 }
 
-void thread_init(AVCodecContext* s, bool execute2enable, bool encoding)
+void thread_init(AVCodecContext* s, bool execute2enable, bool encoding, bool frame, bool slice)
 {
-    s->thread_type = FF_THREAD_SLICE || FF_THREAD_FRAME;
     s->execute			  = thread_execute;
 	if (execute2enable)
 		s->execute2			  = thread_execute2;
-	if (!encoding)
-		s->slice_count		  = MAX_THREADS;
-	s->thread_count		  = MAX_THREADS; // We are using a task-scheduler, so use as many "threads/tasks" as possible. 
+	if (!encoding && slice)
+		s->slice_count		  = std::min(tbb::tbb_thread::hardware_concurrency(), MAX_THREADS);
+	if (frame)
+		s->thread_count		  = std::min(tbb::tbb_thread::hardware_concurrency(), MAX_THREADS); // We are using a task-scheduler, so use as many "threads/tasks" as possible. 
 
 	CASPAR_LOG(info) << "Initialized ffmpeg tbb context.";
 }
@@ -106,7 +107,7 @@ int tbb_avcodec_open(AVCodecContext* avctx, AVCodec* codec, AVDictionary** optio
 	  ((codec->capabilities & CODEC_CAP_SLICE_THREADS) && (avctx->thread_type & FF_THREAD_SLICE)
 	  ||  (codec->capabilities & CODEC_CAP_FRAME_THREADS)) && (avctx->thread_type & FF_THREAD_FRAME)) 
 	{
-		thread_init(avctx, codec->id != AV_CODEC_ID_PRORES, encoding); // do not enable execute2 for prores codec as it cause crash
+		thread_init(avctx, codec->id != AV_CODEC_ID_PRORES, encoding, (avctx->thread_type & FF_THREAD_FRAME) != 0 , (avctx->thread_type & FF_THREAD_SLICE) != 0); // do not enable execute2 for prores codec as it cause crash
 	}	
 	avctx->refcounted_frames = 0;
 	return avcodec_open2(avctx, codec, options); 

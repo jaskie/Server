@@ -49,11 +49,7 @@ namespace caspar { namespace decklink {
 
 void init()
 {
-	struct co_init
-	{
-		co_init(){::CoInitialize(nullptr);}
-		~co_init(){::CoUninitialize();}
-	} init;
+	com_initializer init;
 	
 	CComPtr<IDeckLinkIterator> pDecklinkIterator;
 	if(FAILED(pDecklinkIterator.CoCreateInstance(CLSID_CDeckLinkIterator)))		
@@ -68,11 +64,7 @@ std::wstring get_version()
 {
 	std::wstring version = L"Not found";
 	
-	struct co_init
-	{
-		co_init(){::CoInitialize(nullptr);}
-		~co_init(){::CoUninitialize();}
-	} init;
+	com_initializer init;
 
 	try
 	{
@@ -89,11 +81,7 @@ std::vector<std::wstring> get_device_list()
 {
 	std::vector<std::wstring> devices;
 	
-	struct co_init
-	{
-		co_init(){::CoInitialize(nullptr);}
-		~co_init(){::CoUninitialize();}
-	} init;
+	com_initializer init;
 
 	try
 	{

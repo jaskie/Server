@@ -83,7 +83,7 @@ ogl_device::~ogl_device()
 	});
 }
 
-safe_ptr<device_buffer> ogl_device::allocate_device_buffer(size_t width, size_t height, size_t stride)
+safe_ptr<device_buffer> ogl_device::allocate_device_buffer(uint32_t width, uint32_t height, uint32_t stride)
 {
 	std::shared_ptr<device_buffer> buffer;
 	try
@@ -111,7 +111,7 @@ safe_ptr<device_buffer> ogl_device::allocate_device_buffer(size_t width, size_t 
 	return make_safe_ptr(buffer);
 }
 				
-safe_ptr<device_buffer> ogl_device::create_device_buffer(size_t width, size_t height, size_t stride)
+safe_ptr<device_buffer> ogl_device::create_device_buffer(uint32_t width, uint32_t height, uint32_t stride)
 {
 	CASPAR_VERIFY(stride > 0 && stride < 5);
 	CASPAR_VERIFY(width > 0 && height > 0);
@@ -128,7 +128,7 @@ safe_ptr<device_buffer> ogl_device::create_device_buffer(size_t width, size_t he
 	});
 }
 
-safe_ptr<host_buffer> ogl_device::allocate_host_buffer(size_t size, usage_t usage)
+safe_ptr<host_buffer> ogl_device::allocate_host_buffer(uint32_t size, usage_t usage)
 {
 	std::shared_ptr<host_buffer> buffer;
 
@@ -166,7 +166,7 @@ safe_ptr<host_buffer> ogl_device::allocate_host_buffer(size_t size, usage_t usag
 	return make_safe_ptr(buffer);
 }
 	
-safe_ptr<host_buffer> ogl_device::create_host_buffer(size_t size, usage_t usage)
+safe_ptr<host_buffer> ogl_device::create_host_buffer(uint32_t size, usage_t usage)
 {
 	CASPAR_VERIFY(usage == write_only || usage == read_only);
 	CASPAR_VERIFY(size > 0);
@@ -301,7 +301,7 @@ void ogl_device::disable(GLenum cap)
 	}
 }
 
-void ogl_device::viewport(size_t x, size_t y, size_t width, size_t height)
+void ogl_device::viewport(uint32_t x, uint32_t y, uint32_t width, uint32_t height)
 {
 	if(x != viewport_[0] || y != viewport_[1] || width != viewport_[2] || height != viewport_[3])
 	{		
@@ -313,7 +313,7 @@ void ogl_device::viewport(size_t x, size_t y, size_t width, size_t height)
 	}
 }
 
-void ogl_device::scissor(size_t x, size_t y, size_t width, size_t height)
+void ogl_device::scissor(uint32_t x, uint32_t y, uint32_t width, uint32_t height)
 {
 	if(x != scissor_[0] || y != scissor_[1] || width != scissor_[2] || height != scissor_[3])
 	{		

@@ -39,7 +39,7 @@
 
 namespace caspar {
 
-std::string to_base64(const char* data, size_t length)
+std::string to_base64(const char* data, uint32_t length)
 {
 	using namespace boost::archive::iterators;
 

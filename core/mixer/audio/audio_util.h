@@ -155,7 +155,7 @@ public:
 
 	int num_samples() const
 	{
-		return std::distance(begin_, end_) / num_channels();
+		return static_cast<int>(std::distance(begin_, end_) / num_channels());
 	}
 
 	const channel_layout& channel_layout() const
@@ -190,7 +190,7 @@ public:
 
 		auto index = it - channel_layout_.channel_names.begin();
 
-		return channel(index);
+		return channel(static_cast<int>(index));
 	}
 };
 

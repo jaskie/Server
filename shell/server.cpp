@@ -33,6 +33,7 @@
 #include <core/mixer/audio/audio_util.h>
 #include <core/mixer/mixer.h>
 #include <core/video_channel.h>
+#include <core/recorder.h>
 #include <core/producer/stage.h>
 #include <core/consumer/output.h>
 #include <core/consumer/synchronizing/synchronizing_consumer.h>
@@ -58,6 +59,7 @@
 #include <modules/ogl/consumer/ogl_consumer.h>
 #include <modules/ffmpeg/consumer/ffmpeg_consumer.h>
 #include <modules/decklink/producer/decklink_producer.h>
+#include <modules/decklink/recorder/decklink_recorder.h>
 
 #include <modules/ndi/ndi.h>
 
@@ -117,6 +119,7 @@ struct server::implementation : boost::noncopyable
 	osc::client									osc_client_;
 	std::vector<std::shared_ptr<void>>			predefined_osc_subscriptions_;
 	std::vector<safe_ptr<video_channel>>		channels_;
+	std::vector<safe_ptr<recorder>>				recorders_;
 	safe_ptr<media_info_repository>				media_info_repo_;
 	boost::thread								initial_media_info_thread_;
 	tbb::atomic<bool>							running_;
@@ -159,6 +162,9 @@ struct server::implementation : boost::noncopyable
 		setup_channels(env::properties());
 		CASPAR_LOG(info) << L"Initialized channels.";
 
+		setup_recorders(env::properties());
+		CASPAR_LOG(info) << L"Initialized recorders.";
+
 		setup_thumbnail_generation(env::properties());
 
 		setup_controllers(env::properties());
@@ -180,6 +186,7 @@ struct server::implementation : boost::noncopyable
 		async_servers_.clear();
 		destroy_producers_synchronously();
 		channels_.clear();
+		recorders_.clear();
 		ffmpeg::uninit();
 	}
 
@@ -297,7 +304,8 @@ struct server::implementation : boost::noncopyable
 			if (xml_producer.is_initialized())
 			{
 				auto device_index = xml_producer.get().get(L"device", 1);
-				producer = decklink::create_producer(channel->mixer(), channel->get_video_format_desc(), channel->get_channel_layot(), device_index);
+				auto timecode_source = xml_producer.get().get(L"timecode-source", L"serial");
+				producer = decklink::create_producer(channel->mixer(), channel->get_video_format_desc(), channel->get_channel_layot(), device_index, timecode_source);
 				channel->stage()->load(layer, producer);
 				channel->stage()->play(layer);
 				return;
@@ -404,10 +412,36 @@ struct server::implementation : boost::noncopyable
 		CASPAR_LOG(info) << L"Initialized thumbnail generator.";
 	}
 
+	void setup_recorders(const boost::property_tree::wptree& pt)
+	{
+		using boost::property_tree::wptree;
+		auto xml_recorders = pt.get_child_optional(L"configuration.recorders");
+		if (xml_recorders.is_initialized())
+			BOOST_FOREACH(auto& xml_recorder, xml_recorders.get())
+			{
+				try
+				{
+					auto recorder_type = xml_recorder.first;
+					if (recorder_type == L"decklink")
+					{
+						auto recorder = decklink::create_recorder(recorders_.size() + 1, xml_recorder.second);
+						recorders_.push_back(recorder);
+						recorder->monitor_output().attach_parent(monitor_subject_);
+					}
+					else
+						CASPAR_LOG(warning) << "Invalid recorder type: " << recorder_type;
+				}
+				catch (...)
+				{
+					CASPAR_LOG_CURRENT_EXCEPTION();
+				}
+			}
+	}
+
 	safe_ptr<IO::IProtocolStrategy> create_protocol(const std::wstring& name) const
 	{
 		if(boost::iequals(name, L"AMCP"))
-			return make_safe<amcp::AMCPProtocolStrategy>(channels_, thumbnail_generator_, media_info_repo_, shutdown_server_now_);
+			return make_safe<amcp::AMCPProtocolStrategy>(channels_, recorders_, thumbnail_generator_, media_info_repo_, shutdown_server_now_);
 		else if(boost::iequals(name, L"CII"))
 			return make_safe<cii::CIIProtocolStrategy>(channels_);
 		else if(boost::iequals(name, L"CLOCK"))
@@ -445,6 +479,11 @@ server::server(boost::promise<bool>& shutdown_server_now) : impl_(new implementa
 const std::vector<safe_ptr<video_channel>> server::get_channels() const
 {
 	return impl_->channels_;
+}
+
+const std::vector<safe_ptr<recorder>> server::get_recorders() const
+{
+	return impl_->recorders_;
 }
 
 std::shared_ptr<thumbnail_generator> server::get_thumbnail_generator() const

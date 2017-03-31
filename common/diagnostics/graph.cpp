@@ -211,7 +211,7 @@ class line : public drawable
 	tbb::atomic<bool>	tick_tag_;
 	tbb::atomic<int>	color_;
 public:
-	line(size_t res = 1200)
+	line(uint32_t res = 1200)
 		: line_data_(res)
 	{
 		tick_data_	= -1.0f;
@@ -252,14 +252,14 @@ public:
 		glBegin(GL_LINE_STRIP);
 		auto c = color(color_);
 		glColor4f(std::get<0>(c), std::get<1>(c), std::get<2>(c), 0.8f);		
-		for(size_t n = 0; n < line_data_.size(); ++n)		
+		for(uint32_t n = 0; n < line_data_.size(); ++n)		
 			if(line_data_[n].first > -0.5)
 				glVertex3d(x+n*dx, std::max(0.05, std::min(0.95, (1.0f-line_data_[n].first)*0.8 + 0.1f)), 0.0);		
 		glEnd();
 				
 		glEnable(GL_LINE_STIPPLE);
 		glLineStipple(3, 0xAAAA);
-		for(size_t n = 0; n < line_data_.size(); ++n)	
+		for(uint32_t n = 0; n < line_data_.size(); ++n)	
 		{
 			if(line_data_[n].second)
 			{
@@ -321,9 +321,9 @@ struct graph::impl : public drawable
 private:
 	void render(sf::RenderTarget& target)
 	{
-		const size_t text_size = 15;
-		const size_t text_margin = 2;
-		const size_t text_offset = (text_size+text_margin*2)*2;
+		const uint32_t text_size = 15;
+		const uint32_t text_margin = 2;
+		const uint32_t text_offset = (text_size+text_margin*2)*2;
 
 		std::wstring text_str;
 		bool auto_reset;

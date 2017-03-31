@@ -1,6 +1,6 @@
 TVP's fork of CasparCG
 ======================
-This is fork of 2.06 Stable master branch with following fixes which are not included in main distribution:
+This is fork of 2.06 Stable master branch with following fixes and enhacements which are not included in main distribution:
 1. Long-GOP files are now precisely seeked. Improved H.264 decoding performance.
 2. When interlaced image is paused (assuming that displayed fields comes from different moments in time), there is no image trembling (only first field is displayed).
 3. Server process can't be closed with Ctrl-C.
@@ -9,8 +9,8 @@ This is fork of 2.06 Stable master branch with following fixes which are not inc
 6. Decklink producer auto-detects input signal format on supported cards and scale it to channel format (works only with the same framerate formats).
 7. Added new transition type: SQUEEZE (both background and foreground layers).
 8. Added transition pause at half of its duration of specified length.
-9. Allows creating channel with no consumer, but with decklink input (a recorder channel)
-10. FFmpeg consumer (file recorder) can record a channel to MXF (IMX 50Mbps as default) and play it during recording. It's also possible to .mov files if FRAGMENT_MOOV_ATOM is specified after filename. In both cases length of recorded file is undetermined.
+9. Allows creating a input channel with no initial consumer, but with decklink input open (to record it with ADD FILE, CAPTURE or instantly play with ROUTE command).
+11. Added deck control, with new CAPTURE and RECORDER commands (see wiki).
 
 --------------------------------------
 |        Original readme below       |

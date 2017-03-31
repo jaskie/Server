@@ -1708,6 +1708,65 @@ bool DataCommand::DoExecuteList()
 	return true;
 }
 
+bool CaptureCommand::DoExecute()
+{
+	auto channel = GetChannel();
+	int recorder_index = _parameters.get(L"RECORDER", std::numeric_limits<int>().max()) - 1;
+	auto recorders = GetRecorders();
+	auto recorder = recorder_index < recorders.size() ? std::shared_ptr<core::recorder>(recorders[recorder_index]) : nullptr;
+	if (recorder)
+	{
+		std::wstring tcIn = _parameters.get(L"IN", L"00:00:00:00");
+		std::wstring tcOut = _parameters.get(L"OUT", L"00:00:00:00");
+		std::wstring filename = _parameters.get(L"FILE", L"");
+		bool narrow_aspect_ratio = _parameters.get(L"NARROW", L"FALSE") == L"TRUE";
+		unsigned int frames_limit = _parameters.get(L"LIMIT", std::numeric_limits<unsigned int>().max());
+		if (frames_limit == std::numeric_limits<unsigned int>().max())
+			recorder->Capture(channel, tcIn, tcOut, filename, narrow_aspect_ratio, _parameters);
+		else
+			recorder->Capture(channel, frames_limit, filename, narrow_aspect_ratio, _parameters);
+		return true;
+	}
+	return false;
+}
+
+bool RecorderCommand::DoExecute()
+{
+	auto recorders = GetRecorders();
+	int recorder_index  = _parameters.get(L"PLAY", std::numeric_limits<int>().max())-1;
+	if (recorder_index < recorders.size())
+		return recorders[recorder_index]->Play();
+	recorder_index = _parameters.get(L"STOP", std::numeric_limits<int>().max()) - 1;
+	if (recorder_index < recorders.size())
+		return recorders[recorder_index]->Stop();
+	recorder_index = _parameters.get(L"ABORT", std::numeric_limits<int>().max()) - 1;
+	if (recorder_index < recorders.size())
+		return recorders[recorder_index]->Abort();
+	recorder_index = _parameters.get(L"FF", std::numeric_limits<int>().max()) - 1;
+	if (recorder_index < recorders.size())
+		return recorders[recorder_index]->FastForward();
+	recorder_index = _parameters.get(L"REWIND", std::numeric_limits<int>().max()) - 1;
+	if (recorder_index < recorders.size())
+		return recorders[recorder_index]->Rewind();
+	recorder_index = _parameters.get(L"FINISH", std::numeric_limits<int>().max()) - 1;
+	if (recorder_index < recorders.size())
+		return recorders[recorder_index]->FinishCapture();
+	recorder_index = _parameters.get(L"GOTO", std::numeric_limits<int>().max()) - 1;
+	if (recorder_index < recorders.size())
+	{
+		std::wstring tc = _parameters.get(L"TC", L"");
+		return recorders[recorder_index]->GoToTimecode(tc);
+	}
+	recorder_index = _parameters.get(L"CALL", std::numeric_limits<int>().max()) - 1;
+	if (recorder_index < recorders.size())
+	{
+		unsigned int limit = _parameters.get(L"LIMIT", std::numeric_limits<unsigned int>().min());
+		recorders[recorder_index]->SetFrameLimit(limit);
+		return true;
+	}
+	return false;
+}
+
 bool ThumbnailCommand::DoExecute()
 {
 	std::wstring command = _parameters[0];
@@ -1942,6 +2001,18 @@ bool InfoCommand::DoExecute()
 				info.add_child(L"channels.channel", channel->info())
 					.add(L"index", ++index);
 			
+			boost::property_tree::write_xml(replyString, info, w);
+		}
+		else if (_parameters.size() >= 1 && _parameters[0] == L"RECORDERS")
+		{
+			replyString << L"201 INFO RECORDERS OK\r\n";
+			boost::property_tree::wptree info;
+
+			int index = 0;
+			info.add(L"recorders", L"");
+			BOOST_FOREACH(auto rec, recorders_)
+				info.add_child(L"recorders.recorder", rec->info())
+				.add(L"index", ++index);
 			boost::property_tree::write_xml(replyString, info, w);
 		}
 		else if(_parameters.size() >= 2 && _parameters[1] == L"DELAY")

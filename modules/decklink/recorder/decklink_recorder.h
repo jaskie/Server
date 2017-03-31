@@ -1,7 +1,5 @@
 /*
-* Copyright 2013 Sveriges Television AB http://casparcg.com/
-*
-* This file is part of CasparCG (www.casparcg.com).
+* This file is part of TVP's fork of CasparCG (www.casparcg.com).
 *
 * CasparCG is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -16,17 +14,26 @@
 * You should have received a copy of the GNU General Public License
 * along with CasparCG. If not, see <http://www.gnu.org/licenses/>.
 *
-* Author: Helge Norberg, helge.norberg@svt.se
 */
 
 #pragma once
+
+#include <common/memory/safe_ptr.h>
+
+
+#include <boost/property_tree/ptree.hpp>
 
 #include <string>
 #include <vector>
 
 namespace caspar {
 
-std::string to_base64(const char* data, unsigned int length);
-std::vector<unsigned char> from_base64(const std::string& data);
+	namespace core {
+		class recorder;
+		class video_channel;
+	}
 
+	namespace decklink {
+		safe_ptr<core::recorder> create_recorder(int id, const boost::property_tree::wptree& ptree);
+	}
 }

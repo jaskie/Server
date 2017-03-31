@@ -36,6 +36,13 @@
 #include <string>
 
 namespace caspar { namespace decklink {
+
+	struct com_initializer
+	{
+		com_initializer() { ::CoInitialize(nullptr); }
+		~com_initializer() { ::CoUninitialize(); }
+	};
+
 	
 static BMDDisplayMode get_decklink_video_format(core::video_format::type fmt) 
 {
@@ -111,6 +118,24 @@ static core::video_format::type get_caspar_video_format(BMDDisplayMode fmt)
 	}
 }
 
+static int bcd2frame(BMDTimecodeBCD bcd, byte fps) 
+{
+	byte hour   = (bcd >> 24 & 0xF) + (bcd >> 28 & 0xF) * 10;
+	byte min    = (bcd >> 16 & 0xF) + (bcd >> 20 & 0xF) * 10;
+	byte sec    = (bcd >>  8 & 0xF) + (bcd >> 12 & 0xF) * 10;
+	byte frames = (bcd       & 0xF) + (bcd >>  4 & 0xF) * 10;
+	return ((((static_cast<int>(hour) * 60) + min) * 60) + sec) * fps + frames;
+}
+
+static BMDTimecodeBCD frame2bcd(int frames, byte fps)
+{
+	unsigned int frame = frames   %  fps;
+	unsigned int sec   = (frames  /  fps) % 60;
+	unsigned int min   = (frames  / (fps * 60)) % 60;
+	unsigned int hour  = (frames  / (fps * 60 * 60));
+	return (frame % 10) | ((frame / 10) << 4) | ((sec % 10) << 8) | ((sec / 10) << 12) | ((min % 10) << 16) | ((min / 10) << 20) | ((hour % 10) << 24) | ((hour / 10) << 28);
+}
+
 template<typename T, typename F>
 CComPtr<IDeckLinkDisplayMode> get_display_mode(const T& device, BMDDisplayMode format, BMDPixelFormat pix_fmt, F flag)
 {
@@ -175,6 +200,14 @@ static CComPtr<IDeckLink> get_device(size_t device_index)
 		
 	return decklink;
 }
+
+static CComPtr<IDeckLinkDeckControl> get_deck_control(const CComPtr<IDeckLink>& decklink)
+{
+	CComPtr<IDeckLinkDeckControl> result;
+	decklink->QueryInterface(IID_IDeckLinkDeckControl, (void**)&result);
+	return result;
+}
+
 
 template <typename T>
 static std::wstring get_model_name(const T& device)

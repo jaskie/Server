@@ -44,7 +44,7 @@ void parameters::clear()
 
 void parameters::to_upper()
 {
-	for(size_t n = 0; n < params_.size(); ++n)
+	for(uint32_t n = 0; n < params_.size(); ++n)
 	{
 		params_[n] = boost::to_upper_copy(params_[n]);
 	}
@@ -113,12 +113,12 @@ std::wstring parameters::get_original_string() const
 	return str;
 }
 
-const std::wstring& parameters::at_original(size_t i) const
+const std::wstring& parameters::at_original(uint32_t i) const
 {
 	return params_original_[i];
 }
 
-void parameters::set(size_t index, std::wstring const& value)
+void parameters::set(uint32_t index, std::wstring const& value)
 {
 	if (index < params_.size())
 	{

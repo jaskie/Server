@@ -57,12 +57,14 @@ public:
 
 	virtual void accept(frame_visitor& visitor) override;
 	virtual int64_t get_and_record_age_millis() override;
+	virtual int get_timecode() override;
+	void set_timecode(int timecode);
 
 	// write _frame
 
 	void swap(write_frame& other);
 			
-	boost::iterator_range<uint8_t*> image_data(size_t plane_index = 0);	
+	boost::iterator_range<uint8_t*> image_data(uint32_t plane_index = 0);	
 	audio_buffer& audio_data();
 	
 	void commit(uint32_t plane_index);

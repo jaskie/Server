@@ -44,7 +44,7 @@ public:
 	virtual std::wstring print() const override;
 	virtual boost::property_tree::wptree info() const override;
 	virtual bool has_synchronization_clock() const override;
-	virtual size_t buffer_depth() const override;
+	virtual uint32_t buffer_depth() const override;
 	virtual int index() const override;
 private:
 	struct implementation;

@@ -22,9 +22,6 @@
 #pragma once
 
 #include <common/memory/safe_ptr.h>
-
-#include <core/video_format.h>
-
 #include <vector>
 
 namespace caspar { 

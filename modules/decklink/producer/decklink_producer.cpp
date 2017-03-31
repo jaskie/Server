@@ -86,6 +86,7 @@ class decklink_producer : boost::noncopyable, public IDeckLinkInputCallback
 	safe_ptr<diagnostics::graph>								graph_;
 	boost::timer												tick_timer_;
 	boost::timer												frame_timer_;
+	core::video_format_desc										format_desc_;
 
 	CComPtr<IDeckLink>											decklink_;
 	CComQIPtr<IDeckLinkInput>									input_;
@@ -96,7 +97,6 @@ class decklink_producer : boost::noncopyable, public IDeckLinkInputCallback
 	const size_t												device_index_;
 	const std::wstring											filter_;
 	
-	core::video_format_desc										format_desc_;
 	std::vector<size_t>											audio_cadence_;
 	boost::circular_buffer<size_t>								sync_buffer_;
 	ffmpeg::frame_muxer											muxer_;
@@ -109,6 +109,9 @@ class decklink_producer : boost::noncopyable, public IDeckLinkInputCallback
 	std::exception_ptr											exception_;	
 	int															num_input_channels_;
 	core::channel_layout										audio_channel_layout_;
+	const BMDTimecodeFormat										timecode_source_;
+	BMDTimeValue												frame_duration_;
+	BMDTimeScale												time_scale_;
 
 public:
 	decklink_producer(
@@ -117,7 +120,9 @@ public:
 			size_t device_index,
 			const safe_ptr<core::frame_factory>& frame_factory,
 			const std::wstring& filter,
-			std::size_t buffer_depth)
+			std::size_t buffer_depth,
+			const BMDTimecodeFormat timecode_source
+		)
 		: decklink_(get_device(device_index))
 		, input_(decklink_)
 		, attributes_(decklink_)
@@ -130,6 +135,10 @@ public:
 		, sync_buffer_(format_desc.audio_cadence.size())
 		, frame_factory_(frame_factory)
 		, audio_channel_layout_(audio_channel_layout)
+		, timecode_source_(timecode_source)
+		, current_display_mode_(get_display_mode(input_, format_desc_.format, bmdFormat8BitYUV, bmdVideoInputFlagDefault))
+		, frame_duration_(format_desc_.duration)
+		, time_scale_(format_desc_.time_scale)
 	{		
 		hints_ = 0;
 		frame_buffer_.set_capacity(buffer_depth);
@@ -141,7 +150,6 @@ public:
 		else
 			num_input_channels_ = 16;
 
-		current_display_mode_ = get_display_mode(input_, format_desc_.format, bmdFormat8BitYUV, bmdVideoInputFlagDefault);
 
 		graph_->set_color("tick-time", diagnostics::color(0.0f, 0.6f, 0.9f));	
 		graph_->set_color("late-frame", diagnostics::color(0.6f, 0.3f, 0.3f));
@@ -184,6 +192,7 @@ public:
 			BOOST_THROW_EXCEPTION(caspar_exception() 
 									<< msg_info(narrow(print()) + " Failed to start input stream.")
 									<< boost::errinfo_api_function("StartStreams"));
+
 	}
 
 	void close_input()
@@ -205,8 +214,9 @@ public:
 		close_input();
 		open_input(newDisplayMode->GetDisplayMode(), bmdVideoInputEnableFormatDetection);
 		current_display_mode_ = newDisplayMode;
+		newDisplayMode->GetFrameRate(&frame_duration_, &time_scale_);
 		BSTR displayModeString = NULL; 
-		if (!FAILED(newDisplayMode->GetName(&displayModeString)) && displayModeString != NULL)
+		if (SUCCEEDED(newDisplayMode->GetName(&displayModeString)) && displayModeString != NULL)
 		{
 			std::wstring modeName(displayModeString, SysStringLen(displayModeString));
 			SysFreeString(displayModeString);
@@ -246,7 +256,11 @@ public:
 			auto fieldDominance = current_display_mode_->GetFieldDominance();
 			av_frame->interlaced_frame	= fieldDominance == bmdLowerFieldFirst || fieldDominance == bmdUpperFieldFirst;
 			av_frame->top_field_first	= fieldDominance == bmdUpperFieldFirst;
-				
+			IDeckLinkTimecode * decklink_timecode_bcd = NULL;
+			int frame_timecode = std::numeric_limits<int>().max();
+			if (SUCCEEDED(video->GetTimecode(timecode_source_, &decklink_timecode_bcd)) && decklink_timecode_bcd)
+				frame_timecode = bcd2frame(decklink_timecode_bcd->GetBCD(), static_cast<byte>(time_scale_/frame_duration_));
+			
 			std::shared_ptr<core::audio_buffer> audio_buffer;
 
 			// It is assumed that audio is always equal or ahead of video.
@@ -292,7 +306,7 @@ public:
 			}
 
 			muxer_.push(audio_buffer);
-			muxer_.push(av_frame, hints_);	
+			muxer_.push(av_frame, hints_, frame_timecode);
 											
 			boost::range::rotate(audio_cadence_, std::begin(audio_cadence_)+1);
 			
@@ -360,22 +374,27 @@ class decklink_producer_proxy : public core::frame_producer
 {		
 	safe_ptr<core::basic_frame>		last_frame_;
 	com_context<decklink_producer>	context_;
-	const uint32_t					length_;
 public:
 
 	explicit decklink_producer_proxy(
-			const safe_ptr<core::frame_factory>& frame_factory,
-			const core::video_format_desc& format_desc,
-			const core::channel_layout& audio_channel_layout,
-			size_t device_index,
-			const std::wstring& filter_str,
-			uint32_t length,
-			std::size_t buffer_depth)
+		const safe_ptr<core::frame_factory>& frame_factory,
+		const core::video_format_desc& format_desc,
+		const core::channel_layout& audio_channel_layout,
+		size_t device_index,
+		const std::wstring& filter_str,
+		uint32_t length,
+		std::size_t buffer_depth,
+		const std::wstring timecode_source_str
+	)
 		: context_(L"decklink_producer[" + boost::lexical_cast<std::wstring>(device_index) + L"]")
 		, last_frame_(core::basic_frame::empty())
-		, length_(length)
 	{
-		context_.reset([&]{return new decklink_producer(format_desc, audio_channel_layout, device_index, frame_factory, filter_str, buffer_depth);}); 
+		BMDTimecodeFormat timecode_source = bmdTimecodeRP188Any;
+		if (timecode_source_str == L"serial")
+			timecode_source = bmdTimecodeSerial;
+		else if (timecode_source_str == L"vitc")
+			timecode_source = bmdTimecodeVITC;
+		context_.reset([&]{return new decklink_producer(format_desc, audio_channel_layout, device_index, frame_factory, filter_str, buffer_depth, timecode_source);});
 	}
 	
 	// frame_producer
@@ -396,7 +415,7 @@ public:
 	
 	virtual uint32_t nb_frames() const override
 	{
-		return length_;
+		return std::numeric_limits<uint32_t>().max();
 	}
 	
 	std::wstring print() const override
@@ -443,10 +462,10 @@ safe_ptr<core::frame_producer> create_producer(
 			
 	return create_producer_print_proxy(
 		   create_producer_destroy_proxy(
-			make_safe<decklink_producer_proxy>(frame_factory, format_desc, audio_layout, device_index, filter_str, length, buffer_depth)));
+			make_safe<decklink_producer_proxy>(frame_factory, format_desc, audio_layout, device_index, filter_str, length, buffer_depth, L"")));
 }
 
-safe_ptr<core::frame_producer> create_producer(const safe_ptr<core::frame_factory>& frame_factory, const core::video_format_desc format_desc, const core::channel_layout channel_layout, int device_index)
+safe_ptr<core::frame_producer> create_producer(const safe_ptr<core::frame_factory>& frame_factory, const core::video_format_desc format_desc, const core::channel_layout channel_layout, int device_index, const std::wstring timecode_source)
 {
 	return make_safe<decklink_producer_proxy>(
 		frame_factory,
@@ -455,7 +474,9 @@ safe_ptr<core::frame_producer> create_producer(const safe_ptr<core::frame_factor
 		device_index, 
 		L"", 
 		std::numeric_limits<uint32_t>::max(),
-		2);
+		3,
+		timecode_source
+		);
 }
 
 }}

@@ -23,6 +23,7 @@
 
 #include "../util/protocolstrategy.h"
 #include <core/video_channel.h>
+#include <core/recorder.h>
 #include <core/thumbnail_generator.h>
 #include <core/producer/media_info/media_info_repository.h>
 
@@ -51,6 +52,7 @@ class AMCPProtocolStrategy : public IO::IProtocolStrategy, boost::noncopyable
 public:
 	AMCPProtocolStrategy(
 			const std::vector<safe_ptr<core::video_channel>>& channels,
+			const std::vector<safe_ptr<core::recorder>>& recorders,
 			const std::shared_ptr<core::thumbnail_generator>& thumb_gen,
 			const safe_ptr<core::media_info_repository>& media_info_repo,
 			boost::promise<bool>& shutdown_server_now);
@@ -73,6 +75,7 @@ private:
 	bool QueueCommand(AMCPCommandPtr);
 
 	std::vector<safe_ptr<core::video_channel>> channels_;
+	std::vector<safe_ptr<core::recorder>> recorders_;
 	std::shared_ptr<core::thumbnail_generator> thumb_gen_;
 	safe_ptr<core::media_info_repository> media_info_repo_;
 	boost::promise<bool>& shutdown_server_now_;

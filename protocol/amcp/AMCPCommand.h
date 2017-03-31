@@ -26,6 +26,7 @@
 #include <core/consumer/frame_consumer.h>
 #include <core/parameters/parameters.h>
 #include <core/video_channel.h>
+#include <core/recorder.h>
 #include <core/thumbnail_generator.h>
 
 #include <boost/algorithm/string.hpp>
@@ -61,6 +62,9 @@ namespace caspar { namespace protocol { namespace amcp {
 		void SetChannels(const std::vector<safe_ptr<core::video_channel>>& channels){channels_ = channels;}
 		const std::vector<safe_ptr<core::video_channel>>& GetChannels() { return channels_; }
 
+		void SetRecorders(const std::vector<safe_ptr<core::recorder>>& recorders) { recorders_ = recorders; }
+		const std::vector<safe_ptr<core::recorder>>& GetRecorders() { return recorders_; }
+
 		void SetThumbGenerator(const std::shared_ptr<core::thumbnail_generator>& thumb_gen) {thumb_gen_ = thumb_gen;}
 		std::shared_ptr<core::thumbnail_generator> GetThumbGenerator() { return thumb_gen_; }
 
@@ -91,6 +95,7 @@ namespace caspar { namespace protocol { namespace amcp {
 		IO::ClientInfoPtr pClientInfo_;
 		std::shared_ptr<core::video_channel> pChannel_;
 		std::vector<safe_ptr<core::video_channel>> channels_;
+		std::vector<safe_ptr<core::recorder>> recorders_;
 		std::shared_ptr<core::thumbnail_generator> thumb_gen_;
 		std::shared_ptr<core::media_info_repository> media_info_repo_;
 		boost::promise<bool>* shutdown_server_now_;

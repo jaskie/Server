@@ -71,9 +71,9 @@ public:
 
 	std::wstring get_original(std::wstring const& key, std::wstring const& default_value = L"") const;
 
-	const std::wstring& at_original(size_t i) const;
+	const std::wstring& at_original(uint32_t i) const;
 
-	void set(size_t index, std::wstring const& value);
+	void set(uint32_t index, std::wstring const& value);
 
 	const std::vector<std::wstring>& get_original() const
 	{
@@ -121,13 +121,13 @@ public:
 	}
 
 	// Compatibility method
-	std::wstring const& operator [] (size_t i) const
+	std::wstring const& operator [] (uint32_t i) const
 	{
 		return params_[i];
 	}
 /*
 	// Compatibility method
-	std::wstring& operator [] (size_t i) {
+	std::wstring& operator [] (uint32_t i) {
 		return params_[i];
 	}
 */
