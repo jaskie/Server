@@ -136,7 +136,7 @@ public:
 
 	virtual int index() const override
 	{
-		return 100;
+		return IMAGE_CONSUMER_INDEX;
 	}
 };
 

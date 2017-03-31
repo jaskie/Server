@@ -62,6 +62,7 @@
 #include <modules/decklink/recorder/decklink_recorder.h>
 
 #include <modules/ndi/ndi.h>
+#include <modules/ndi/consumer/ndi_consumer.h>
 
 #include <protocol/amcp/AMCPProtocolStrategy.h>
 #include <protocol/cii/CIIProtocolStrategy.h>
@@ -270,16 +271,18 @@ struct server::implementation : boost::noncopyable
 
 				if (name == L"screen")
 					on_consumer(ogl::create_consumer(xml_consumer.second));
-				else if (name == L"bluefish")					
-					on_consumer(bluefish::create_consumer(xml_consumer.second));					
-				else if (name == L"decklink")					
-					on_consumer(decklink::create_consumer(xml_consumer.second));				
+				else if (name == L"bluefish")
+					on_consumer(bluefish::create_consumer(xml_consumer.second));
+				else if (name == L"decklink")
+					on_consumer(decklink::create_consumer(xml_consumer.second));
 				else if (name == L"blocking-decklink")
-					on_consumer(decklink::create_blocking_consumer(xml_consumer.second));				
-				else if (/*name == L"file" || */name == L"stream")					
-					on_consumer(ffmpeg::create_consumer(xml_consumer.second));						
+					on_consumer(decklink::create_blocking_consumer(xml_consumer.second));
+				else if (/*name == L"file" || */name == L"stream")
+					on_consumer(ffmpeg::create_consumer(xml_consumer.second));
 				else if (name == L"system-audio")
 					on_consumer(oal::create_consumer());
+				else if (name == L"ndi")
+					on_consumer(ndi::create_consumer(xml_consumer.second));
 				else if (name == L"synchronizing")
 					on_consumer(make_safe<core::synchronizing_consumer>(
 							create_consumers<core::frame_consumer>(

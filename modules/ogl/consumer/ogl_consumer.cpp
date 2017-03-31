@@ -522,7 +522,7 @@ public:
 
 	virtual int index() const override
 	{
-		return 600 + config_.screen_index;
+		return OGL_CONSUMER_BASE_INDEX + config_.screen_index;
 	}
 };	
 

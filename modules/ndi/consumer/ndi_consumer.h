@@ -19,35 +19,28 @@
 * Author: Jerzy Jaœkiewicz, jurek@tvp.pl based on Robert Nagy, ronag89@gmail.com work
 */
 
-#include "ndi.h" 
+#pragma once
 
-#include <core/parameters/parameters.h>
-#include <core/producer/frame_producer.h>
-#include <core/consumer/frame_consumer.h>
+#include <common/memory/safe_ptr.h>
 
-#include <common/utility/string.h>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/filesystem.hpp>
 
-#include <Processing.NDI.Lib.h>
-
-
+#include <string>
+#include <vector>
 
 namespace caspar {
+
+	namespace core {
+		struct frame_consumer;
+		class parameters;
+		class read_frame;
+		struct video_format;
+		struct video_format_desc;
+	}
+
 	namespace ndi {
-
-		void init()
-		{
-			core::register_consumer_factory([](const core::parameters& params) {return create_consumer(params); });
-			if (!NDIlib_initialize())
-			{	// Cannot run NDI. Most likely because the CPU is not sufficient (see SDK documentation).
-				// you can check this directly with a call to NDIlib_is_supported_CPU()
-				printf("Cannot run NDI.");
-			}
-		}
-
-		std::wstring get_version()
-		{
-			return L"0.9";
-		}
-
+		safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params);
+		safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptree& ptree);
 	}
 }

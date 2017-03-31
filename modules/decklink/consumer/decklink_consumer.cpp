@@ -459,7 +459,7 @@ public:
 
 	virtual int index() const override
 	{
-		return 300 + config_.device_index;
+		return DECKLINK_CONSUMER_BASE_INDEX + config_.device_index;
 	}
 
 	virtual int64_t presentation_frame_age_millis() const
