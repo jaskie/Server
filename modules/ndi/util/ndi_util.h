@@ -19,40 +19,21 @@
 * Author: Jerzy Jaœkiewicz, jurek@tvp.pl based on Robert Nagy, ronag89@gmail.com work
 */
 
-#include "ndi.h" 
 
-#include <core/parameters/parameters.h>
-#include <core/producer/frame_producer.h>
-#include <core/consumer/frame_consumer.h>
-
-#include <common/utility/string.h>
+#pragma once
 
 #include <Processing.NDI.Lib.h>
-
-
+#include <common/exception/exceptions.h>
 
 namespace caspar {
-	namespace ndi {
 
-		void init()
-		{
-			if (!NDIlib_initialize())
-			{	// Cannot run NDI. Most likely because the CPU is not sufficient (see SDK documentation).
-				// you can check this directly with a call to NDIlib_is_supported_CPU()
-				printf("Cannot run NDI.");
-				return;
-			}
-			core::register_consumer_factory([](const core::parameters& params)
-			{
-				return create_consumer(params);
-			});
-
-		}
-
-		std::wstring get_version()
-		{
-			return L"0.9";
-		}
-
-	}
+namespace core {
+	struct video_format_desc;
+	struct channel_layout;
 }
+
+namespace ndi {
+	std::shared_ptr<NDIlib_video_frame_t> create_video_frame(core::video_format_desc format);
+	std::shared_ptr<NDIlib_audio_frame_t> create_audio_frame(core::channel_layout layout);
+
+} }

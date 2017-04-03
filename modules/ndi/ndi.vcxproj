@@ -440,10 +440,12 @@
   <ItemGroup>
     <ClCompile Include="consumer\ndi_consumer.cpp" />
     <ClCompile Include="ndi.cpp" />
+    <ClCompile Include="util\ndi_util.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="consumer\ndi_consumer.h" />
     <ClInclude Include="ndi.h" />
+    <ClInclude Include="util\ndi_util.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
