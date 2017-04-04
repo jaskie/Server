@@ -53,22 +53,18 @@
 namespace caspar {
 	namespace ndi {
 
-		int crc16(const std::wstring& str)
+		int crc16(const std::string& str)
 		{
 			boost::crc_16_type result;
 			result.process_bytes(str.data(), str.length());
 			return result.checksum();
 		}
 
-#pragma warning(push)
-#pragma warning(disable: 4189)
-		NDIlib_send_instance_t create_ndi_send(const std::wstring ndi_name)
+		NDIlib_send_instance_t create_ndi_send(const std::string ndi_name, const std::string groups)
 		{
-			auto n = narrow(ndi_name);
-			NDIlib_send_create_t NDI_send_create_desc = {n.c_str() , NULL, true, false };
+			NDIlib_send_create_t NDI_send_create_desc = { ndi_name.c_str(), groups.c_str(), true, false };
 			return NDIlib_send_create(&NDI_send_create_desc);
 		}
-#pragma warning(pop)
 
 		struct ndi_consumer : public core::frame_consumer
 		{
@@ -84,10 +80,10 @@ namespace caspar {
 
 			// frame_consumer
 
-			ndi_consumer(const std::wstring& ndi_name)
-				: ndi_name_(ndi_name)
+			ndi_consumer(const std::string& ndi_name, const std::string groups)
+				: ndi_name_(widen(ndi_name))
 				, index_(NDI_CONSUMER_BASE_INDEX + crc16(ndi_name))
-				, p_ndi_send_(create_ndi_send(ndi_name))
+				, p_ndi_send_(create_ndi_send(ndi_name, groups))
 				, executor_(print())
 			{
 				executor_.set_capacity(8);
@@ -144,6 +140,7 @@ namespace caspar {
 			{
 				boost::property_tree::wptree info;
 				info.add(L"type", L"ndi-consumer");
+				info.add(L"name", ndi_name_);
 				return info;
 			}
 
@@ -165,18 +162,18 @@ namespace caspar {
 			if (params.size() < 1 || params[0] != L"NDI")
 				return core::frame_consumer::empty();
 
-			std::wstring ndi_name;
-
+			std::string ndi_name("default");
 			if (params.size() > 1)
-				ndi_name = params.at(1);
-
-			return make_safe<ndi_consumer>(ndi_name);
+				ndi_name = narrow(params.at(1));
+			std::string groups = narrow(params.get(L"GROUPS", L""));
+			return make_safe<ndi_consumer>(ndi_name, groups);
 		}
 
 		safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptree& ptree)
 		{
-			auto ndi_name = ptree.get<std::wstring>(L"ndi-name");
-			return make_safe<ndi_consumer>(ndi_name);
+			auto ndi_name = narrow(ptree.get(L"name", L"default"));
+			auto groups = narrow(ptree.get(L"groups", L""));
+			return make_safe<ndi_consumer>(ndi_name, groups);
 		}
 
 	}
