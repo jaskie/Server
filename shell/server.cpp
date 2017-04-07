@@ -60,7 +60,8 @@
 #include <modules/ffmpeg/consumer/ffmpeg_consumer.h>
 #include <modules/decklink/producer/decklink_producer.h>
 #include <modules/decklink/recorder/decklink_recorder.h>
-
+#include <modules/newtek/newtek.h>
+#include <modules/newtek/consumer/newtek_ivga_consumer.h>
 #include <modules/ndi/ndi.h>
 #include <modules/ndi/consumer/ndi_consumer.h>
 
@@ -156,6 +157,9 @@ struct server::implementation : boost::noncopyable
 
 		image::init();		  
 		CASPAR_LOG(info) << L"Initialized image module.";
+
+		newtek::init();
+		CASPAR_LOG(info) << L"Initialized newtek module.";
 
 		ndi::init();
 		CASPAR_LOG(info) << L"Initialized ndi module.";
@@ -281,6 +285,8 @@ struct server::implementation : boost::noncopyable
 					on_consumer(ffmpeg::create_consumer(xml_consumer.second));
 				else if (name == L"system-audio")
 					on_consumer(oal::create_consumer());
+				else if (name == L"newtek-ivga")
+					on_consumer(newtek::create_ivga_consumer(xml_consumer.second));
 				else if (name == L"ndi")
 					on_consumer(ndi::create_consumer(xml_consumer.second));
 				else if (name == L"synchronizing")

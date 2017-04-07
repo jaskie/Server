@@ -52,6 +52,7 @@
 #include <modules/flash/flash.h>
 #include <modules/ffmpeg/ffmpeg.h>
 #include <modules/image/image.h>
+#include <modules/newtek/util/air_send.h>
 #include <modules/ndi/ndi.h>
 
 #include <common/env.h>
@@ -153,6 +154,7 @@ void print_info()
 		CASPAR_LOG(info) << L" - " << device;	
 	
 	CASPAR_LOG(info) << L"NDI "				<< caspar::ndi::get_version();
+	CASPAR_LOG(info) << L"NewTek iVGA " << (caspar::newtek::airsend::is_available() ? L"available" : L"unavailable (" + caspar::newtek::airsend::dll_name() + L")");
 	CASPAR_LOG(info) << L"FreeImage "		<< caspar::image::get_version();
 	CASPAR_LOG(info) << L"FFMPEG-avcodec "  << caspar::ffmpeg::get_avcodec_version();
 	CASPAR_LOG(info) << L"FFMPEG-avformat " << caspar::ffmpeg::get_avformat_version();

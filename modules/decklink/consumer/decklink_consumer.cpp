@@ -60,7 +60,7 @@ struct decklink_consumer : public IDeckLinkVideoOutputCallback, public IDeckLink
 	CComQIPtr<IDeckLinkOutput>			output_;
 	CComQIPtr<IDeckLinkKeyer>			keyer_;
 	CComQIPtr<IDeckLinkAttributes>		attributes_;
-	CComQIPtr<IDeckLinkConfiguration>	configuration_;
+	CComQIPtr<IDeckLinkConfiguration_v10_2>	configuration_;
 
 	tbb::spin_mutex						exception_mutex_;
 	std::exception_ptr					exception_;

@@ -63,7 +63,7 @@ struct blocking_decklink_consumer : boost::noncopyable
 	CComQIPtr<IDeckLinkOutput>				output_;
 	CComQIPtr<IDeckLinkKeyer>				keyer_;
 	CComQIPtr<IDeckLinkAttributes>			attributes_;
-	CComQIPtr<IDeckLinkConfiguration>		configuration_;
+	CComQIPtr<IDeckLinkConfiguration_v10_2>		configuration_;
 
 	const std::wstring						model_name_;
 	const core::video_format_desc			format_desc_;
