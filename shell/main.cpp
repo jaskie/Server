@@ -318,7 +318,7 @@ int main(int argc, wchar_t* argv[])
 						else if(wcmd.substr(0, 1) == L"4")
 							wcmd = L"PLAY 1-0 RECORDING";
 						else if(wcmd.substr(0, 1) == L"5")
-							wcmd = L"PLAY 1-0 BARS";
+							wcmd = L"PLAY 1-0 SYNCHRO";
 						else if (wcmd.substr(0, 1) == L"6")
 							wcmd = L"CAPTURE 2 recorder 1 IN 2:10:10:0 OUT 2:10:20:0 FILE  record.mp4";
 						else if (wcmd.substr(0, 1) == L"7")
