@@ -30,7 +30,7 @@
 #include <core/video_channel.h>
 #include <core/consumer/output.h>
 #include <core/monitor/monitor.h>
-#include <common/concurrency/executor.h>
+#include <common/concurrency/com_context.h>
 #include <ffmpeg/consumer/ffmpeg_consumer.h>
 
 #include <boost/algorithm/string.hpp>
@@ -114,7 +114,6 @@ namespace caspar {
 				manual_recording,
 				vcr_recording
 			}										record_state_;
-			com_initializer							init_;
 			int										index_;
 			const int								device_index_;
 			const unsigned int						preroll_;
@@ -136,7 +135,7 @@ namespace caspar {
 
 			tbb::atomic<int>						current_timecode_;
 			safe_ptr<core::monitor::subject>		monitor_subject_;
-			executor								executor_;
+			com_context<decklink_recorder>			executor_;
 
 			void clean_recorder()
 			{
@@ -192,15 +191,13 @@ namespace caspar {
 
 			std::wstring print() const
 			{
-				return L"[decklink-recorder] [" + get_model_name(decklink_) + L":" + boost::lexical_cast<std::wstring>(index_) + L"]";
+				return L"[decklink-recorder] [" + boost::lexical_cast<std::wstring>(index_) + L"]";
 			}
 
 
 		public:
 			decklink_recorder(int index, int device_index, unsigned int preroll, int offset)
 				: index_(index)
-				, decklink_(get_device(device_index))
-				, deck_control_(get_deck_control(decklink_))
 				, consumer_(core::frame_consumer::empty())
 				, last_deck_error_(bmdDeckControlNoError)
 				, device_index_(device_index)
@@ -211,12 +208,16 @@ namespace caspar {
 			{
 				current_timecode_ = 0;
 				executor_.set_capacity(1);
-				if (FAILED(deck_control_->SetCallback(this)))
-					CASPAR_LOG(error) << print() << L" Could not setup callback";
-				if (FAILED(deck_control_->SetPreroll(preroll)))
-					CASPAR_LOG(warning) << print() << L" Could not set deck preroll time";
-				open_deck_control(caspar::core::video_format_desc::get(caspar::core::video_format::pal));
-				CASPAR_LOG(debug) << print() << L" Initialized";
+				executor_.begin_invoke([this] {
+					decklink_ = get_device(device_index_);
+					deck_control_ = get_deck_control(decklink_);
+					open_deck_control(caspar::core::video_format_desc::get(caspar::core::video_format::pal));
+					if (FAILED(deck_control_->SetCallback(this)))
+						CASPAR_LOG(error) << print() << L" Could not setup callback";
+					if (FAILED(deck_control_->SetPreroll(preroll_)))
+						CASPAR_LOG(warning) << print() << L" Could not set deck preroll time";
+					CASPAR_LOG(debug) << print() << L" Initialized";
+				});
 			}
 			
 			~decklink_recorder()
