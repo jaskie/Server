@@ -56,16 +56,16 @@ std::shared_ptr<NDIlib_video_frame_t> create_video_frame(core::video_format_desc
 	});
 }
 
-NDIlib_audio_frame_t * create_weak_audio_frame(core::channel_layout layout) 
+NDIlib_audio_frame_interleaved_16s_t * create_weak_audio_frame(core::channel_layout layout)
 {
-	return new NDIlib_audio_frame_t();		 
+	return new NDIlib_audio_frame_interleaved_16s_t();
 }
 
-std::shared_ptr<NDIlib_audio_frame_t> create_audio_frame(core::channel_layout layout)
+std::shared_ptr<NDIlib_audio_frame_interleaved_16s_t> create_audio_frame(core::channel_layout layout)
 {
-	return std::shared_ptr<NDIlib_audio_frame_t>(
+	return std::shared_ptr<NDIlib_audio_frame_interleaved_16s_t>(
 		create_weak_audio_frame(layout),
-		[](NDIlib_audio_frame_t* f)
+		[](NDIlib_audio_frame_interleaved_16s_t* f)
 		{
 			delete(f);
 		}

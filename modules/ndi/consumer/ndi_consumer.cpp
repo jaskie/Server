@@ -60,17 +60,21 @@ namespace caspar {
 			return result.checksum();
 		}
 
-		NDIlib_send_instance_t create_ndi_send(const std::string ndi_name, const std::string groups)
+		NDIlib_send_instance_t create_ndi_send(const NDIlib_v2* ndi_lib, const std::string ndi_name, const std::string groups)
 		{
+			if (!ndi_lib)
+				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(" NDI library not available"));
 			NDIlib_send_create_t NDI_send_create_desc = { ndi_name.c_str(), groups.c_str(), true, false };
-			return NDIlib_send_create(&NDI_send_create_desc);
+			return ndi_lib->NDIlib_send_create(&NDI_send_create_desc);
 		}
 
 		struct ndi_consumer : public core::frame_consumer
 		{
 			core::video_format_desc				format_desc_;
+			core::channel_layout				channel_layout_;
 			std::wstring						ndi_name_;
 			const int							index_;
+			const NDIlib_v2*					p_ndi_lib_;
 			const NDIlib_send_instance_t		p_ndi_send_;
 			executor							executor_;
 			safe_ptr<diagnostics::graph>		graph_;
@@ -80,10 +84,12 @@ namespace caspar {
 
 			// frame_consumer
 
-			ndi_consumer(const std::string& ndi_name, const std::string groups)
-				: ndi_name_(widen(ndi_name))
+			ndi_consumer(core::channel_layout channel_layout, const std::string& ndi_name, const std::string groups)
+				: channel_layout_(channel_layout)
+				, ndi_name_(widen(ndi_name))
 				, index_(NDI_CONSUMER_BASE_INDEX + crc16(ndi_name))
-				, p_ndi_send_(create_ndi_send(ndi_name, groups))
+				, p_ndi_lib_(NDIlib_v2_load())
+				, p_ndi_send_(create_ndi_send(p_ndi_lib_, ndi_name, groups))
 				, executor_(print())
 			{
 				executor_.set_capacity(8);
@@ -94,8 +100,12 @@ namespace caspar {
 
 			~ndi_consumer()
 			{
-				if (p_ndi_send_)
-					NDIlib_send_destroy(p_ndi_send_);
+				if (p_ndi_lib_) 
+				{
+					if (p_ndi_send_)
+						p_ndi_lib_->NDIlib_send_destroy(p_ndi_send_);
+					p_ndi_lib_->NDIlib_destroy();
+				}
 				CASPAR_LOG(info) << print() << L" Successfully Uninitialized.";
 			}
 
@@ -117,18 +127,63 @@ namespace caspar {
 			virtual boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame) override
 			{
 				return executor_.begin_invoke([this, frame]() -> bool {
-					std::shared_ptr<NDIlib_video_frame_t> video_frame = create_video_frame(format_desc_);
-					if (!frame->image_data().empty())
-						fast_memcpy(video_frame->p_data, frame->image_data().begin(), frame->image_size());
-					else
-						fast_memclr(video_frame->p_data, format_desc_.width * format_desc_.height * 4);
-					NDIlib_send_send_video(p_ndi_send_, video_frame.get());
-					auto audio_frame = create_audio_frame(core::channel_layout::stereo());
-
+					send_video(frame);
+					send_audio(frame);
 					graph_->set_value("tick-time", static_cast<float>(frame_timer_.elapsed()*format_desc_.fps*0.5));
 					frame_timer_.restart();
 					return true;
 				});
+			}
+
+			void send_video(const safe_ptr<core::read_frame>& frame)
+			{
+				std::shared_ptr<NDIlib_video_frame_t> video_frame = create_video_frame(format_desc_);
+				if (!frame->image_data().empty())
+					fast_memcpy(video_frame->p_data, frame->image_data().begin(), frame->image_size());
+				else
+					fast_memclr(video_frame->p_data, format_desc_.width * format_desc_.height * 4);
+				p_ndi_lib_->NDIlib_send_send_video(p_ndi_send_, video_frame.get());
+			}
+
+			void send_audio(const safe_ptr<core::read_frame>& frame)
+			{
+				auto audio_frame = create_audio_frame(core::channel_layout::stereo());
+				std::vector<int16_t, tbb::cache_aligned_allocator<int16_t>> audio_buffer;
+
+				if (core::needs_rearranging(
+					frame->multichannel_view(),
+					channel_layout_,
+					channel_layout_.num_channels))
+				{
+					core::audio_buffer downmixed;
+
+					downmixed.resize(
+						frame->multichannel_view().num_samples()
+						* channel_layout_.num_channels,
+						0);
+
+					auto dest_view = core::make_multichannel_view<int32_t>(
+						downmixed.begin(), downmixed.end(), channel_layout_);
+
+					core::rearrange_or_rearrange_and_mix(
+						frame->multichannel_view(),
+						dest_view,
+						core::default_mix_config_repository());
+
+					audio_buffer = core::audio_32_to_16(downmixed);
+				}
+				else
+				{
+					audio_buffer = core::audio_32_to_16(frame->audio_data());
+				}
+
+				audio_frame->no_channels = channel_layout_.num_channels;
+				audio_frame->sample_rate = 48000;
+				audio_frame->no_samples = audio_buffer.size() / channel_layout_.num_channels;
+				audio_frame->timecode = 0LL;
+				audio_frame->p_data = audio_buffer.data();
+				audio_frame->reference_level = 0;
+				p_ndi_lib_->NDIlib_util_send_send_audio_interleaved_16s(p_ndi_send_, audio_frame.get());
 			}
 
 			virtual std::wstring print() const override
@@ -157,7 +212,7 @@ namespace caspar {
 		};
 
 
-		safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params)
+		safe_ptr<core::frame_consumer> create_ndi_consumer(const core::parameters& params)
 		{
 			if (params.size() < 1 || params[0] != L"NDI")
 				return core::frame_consumer::empty();
@@ -166,14 +221,21 @@ namespace caspar {
 			if (params.size() > 1)
 				ndi_name = narrow(params.at(1));
 			std::string groups = narrow(params.get(L"GROUPS", L""));
-			return make_safe<ndi_consumer>(ndi_name, groups);
+			auto channel_layout = core::default_channel_layout_repository()
+				.get_by_name(
+					params.get(L"CHANNEL_LAYOUT", L"STEREO"));
+			return make_safe<ndi_consumer>(channel_layout, ndi_name, groups);
 		}
 
-		safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptree& ptree)
+		safe_ptr<core::frame_consumer> create_ndi_consumer(const boost::property_tree::wptree& ptree)
 		{
 			auto ndi_name = narrow(ptree.get(L"name", L"default"));
 			auto groups = narrow(ptree.get(L"groups", L""));
-			return make_safe<ndi_consumer>(ndi_name, groups);
+			auto channel_layout =
+				core::default_channel_layout_repository()
+				.get_by_name(
+					boost::to_upper_copy(ptree.get(L"channel-layout", L"STEREO")));
+			return make_safe<ndi_consumer>(channel_layout, ndi_name, groups);
 		}
 
 	}

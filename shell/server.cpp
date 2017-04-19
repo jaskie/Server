@@ -288,7 +288,7 @@ struct server::implementation : boost::noncopyable
 				else if (name == L"newtek-ivga")
 					on_consumer(newtek::create_ivga_consumer(xml_consumer.second));
 				else if (name == L"ndi")
-					on_consumer(ndi::create_consumer(xml_consumer.second));
+					on_consumer(ndi::create_ndi_consumer(xml_consumer.second));
 				else if (name == L"synchronizing")
 					on_consumer(make_safe<core::synchronizing_consumer>(
 							create_consumers<core::frame_consumer>(

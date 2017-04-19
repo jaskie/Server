@@ -24,11 +24,12 @@
 #include <core/parameters/parameters.h>
 #include <core/producer/frame_producer.h>
 #include <core/consumer/frame_consumer.h>
+#include "consumer/ndi_consumer.h"
 
 #include <common/utility/string.h>
 
 #include <Processing.NDI.Lib.h>
-
+#include <windows.h>
 
 
 namespace caspar {
@@ -36,22 +37,23 @@ namespace caspar {
 
 		void init()
 		{
-			if (!NDIlib_initialize())
+			const NDIlib_v2* p_NDILib = NDIlib_v2_load();
+			if (!p_NDILib || !p_NDILib->NDIlib_initialize())
 			{	// Cannot run NDI. Most likely because the CPU is not sufficient (see SDK documentation).
 				// you can check this directly with a call to NDIlib_is_supported_CPU()
 				printf("Cannot run NDI.");
 				return;
 			}
+			p_NDILib->NDIlib_destroy();
 			core::register_consumer_factory([](const core::parameters& params)
 			{
-				return create_consumer(params);
+				return create_ndi_consumer(params);
 			});
-
 		}
 
 		std::wstring get_version()
 		{
-			return L"0.9";
+			return L"0.1";
 		}
 
 	}
