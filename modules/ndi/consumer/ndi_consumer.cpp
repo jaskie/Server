@@ -19,8 +19,9 @@
 * Author: Jerzy Jaœkiewicz, jurek@tvp.pl based on Robert Nagy, ronag89@gmail.com work
 */
 
-#include"ndi_consumer.h"
+#include "ndi_consumer.h"
 #include "../util/ndi_util.h"
+#include "../ndi.h"
 
 #include <common/exception/win32_exception.h>
 #include <common/exception/exceptions.h>
@@ -48,10 +49,27 @@
 #include <boost/crc.hpp>
 #pragma warning(pop)
 
+#if defined(_MSC_VER)
+#pragma warning (push)
+#pragma warning (disable : 4244)
+#endif
+extern "C"
+{
+#include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
+#include <libavcodec/avcodec.h>
+#include <libavutil/imgutils.h>
+}
+#if defined(_MSC_VER)
+#pragma warning (pop)
+#endif
+
 #include <Processing.NDI.Lib.h>
 
 namespace caspar {
 	namespace ndi {
+
+		typedef std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>	byte_vector;
 
 		int crc16(const std::string& str)
 		{
@@ -68,6 +86,35 @@ namespace caspar {
 			return ndi_lib->NDIlib_send_create(&NDI_send_create_desc);
 		}
 
+		SwsContext* create_sws(const core::video_format_desc format_desc, const int width, const int height)
+		{
+			return sws_getContext(format_desc.width, format_desc.height, AV_PIX_FMT_BGRA, width, height, AV_PIX_FMT_UYVY422, SWS_BICUBIC, nullptr, nullptr, NULL);
+		}
+
+		SwrContext* create_swr(const core::video_format_desc format_desc, const core::channel_layout out_layout, const int input_channel_count)
+		{
+			const auto ALL_63_CHANNELS = 0x7FFFFFFFFFFFFFFFULL;
+			auto to_shift = 63 - input_channel_count;
+			auto in_channel_layout = ALL_63_CHANNELS >> to_shift;
+			to_shift = 63 - out_layout.num_channels;
+			auto out_channel_layout = ALL_63_CHANNELS >> to_shift;
+			auto swr = swr_alloc_set_opts(nullptr,
+				out_channel_layout,
+				AV_SAMPLE_FMT_FLT,
+				format_desc.audio_sample_rate,
+				in_channel_layout,
+				AV_SAMPLE_FMT_S32,
+				format_desc.audio_sample_rate,
+				0, nullptr);
+			if (!swr)
+				BOOST_THROW_EXCEPTION(caspar_exception()
+					<< msg_info("Cannot alloc audio resampler"));
+			if (swr_init(swr) < 0)
+				BOOST_THROW_EXCEPTION(caspar_exception()
+					<< msg_info("Cannot initialize audio resampler"));
+			return swr;
+		}
+
 		struct ndi_consumer : public core::frame_consumer
 		{
 			core::video_format_desc				format_desc_;
@@ -77,20 +124,30 @@ namespace caspar {
 			const NDIlib_v2*					p_ndi_lib_;
 			const NDIlib_send_instance_t		p_ndi_send_;
 			executor							executor_;
+			SwrContext *						swr_;
+			SwsContext *						sws_;
 			safe_ptr<diagnostics::graph>		graph_;
+			const double						scale_;
+			int									width_;
+			int									height_;
 			boost::timer						frame_timer_;
 
 		public:
 
 			// frame_consumer
 
-			ndi_consumer(core::channel_layout channel_layout, const std::string& ndi_name, const std::string groups)
+			ndi_consumer(core::channel_layout channel_layout, const std::string& ndi_name, const std::string groups, const double scale)
 				: channel_layout_(channel_layout)
 				, ndi_name_(widen(ndi_name))
 				, index_(NDI_CONSUMER_BASE_INDEX + crc16(ndi_name))
-				, p_ndi_lib_(NDIlib_v2_load())
+				, p_ndi_lib_(load_ndi())
 				, p_ndi_send_(create_ndi_send(p_ndi_lib_, ndi_name, groups))
 				, executor_(print())
+				, sws_(nullptr)
+				, swr_(nullptr)
+				, scale_(scale)
+				, width_(0)
+				, height_(0)
 			{
 				executor_.set_capacity(8);
 				graph_->set_color("tick-time", diagnostics::color(0.5f, 1.0f, 0.2f));
@@ -100,18 +157,19 @@ namespace caspar {
 
 			~ndi_consumer()
 			{
-				if (p_ndi_lib_) 
-				{
-					if (p_ndi_send_)
-						p_ndi_lib_->NDIlib_send_destroy(p_ndi_send_);
-					p_ndi_lib_->NDIlib_destroy();
-				}
+				if (p_ndi_send_)
+					p_ndi_lib_->NDIlib_send_destroy(p_ndi_send_);
+				if (swr_)
+					swr_free(&swr_);
+				sws_freeContext(sws_); //if it's null, it does nothing
 				CASPAR_LOG(info) << print() << L" Successfully Uninitialized.";
 			}
 
 			virtual void initialize(const core::video_format_desc& format_desc, int) override
 			{
 				format_desc_ = format_desc;
+				width_ = static_cast<int>(format_desc.width * scale_);
+				height_ = static_cast<int>(format_desc.height * scale_);
 			}
 
 			virtual int64_t presentation_frame_age_millis() const override
@@ -137,9 +195,16 @@ namespace caspar {
 
 			void send_video(const safe_ptr<core::read_frame>& frame)
 			{
-				std::shared_ptr<NDIlib_video_frame_t> video_frame = create_video_frame(format_desc_);
+				if (!sws_)
+					sws_ = create_sws(format_desc_, width_, height_);
+				std::shared_ptr<NDIlib_video_frame_t> video_frame = create_video_frame(format_desc_, width_, height_);
 				if (!frame->image_data().empty())
-					fast_memcpy(video_frame->p_data, frame->image_data().begin(), frame->image_size());
+				{
+					std::shared_ptr<AVFrame> in_frame(av_frame_alloc(), [](AVFrame* frame) { av_frame_free(&frame); });
+					auto in_picture = reinterpret_cast<AVPicture*>(in_frame.get());
+					avpicture_fill(in_picture, const_cast<uint8_t*>(frame->image_data().begin()), AV_PIX_FMT_BGRA, format_desc_.width, format_desc_.height);
+					sws_scale(sws_, in_frame->data, in_frame->linesize, 0, format_desc_.height, &video_frame->p_data, &video_frame->line_stride_in_bytes);
+				}
 				else
 					fast_memclr(video_frame->p_data, format_desc_.width * format_desc_.height * 4);
 				p_ndi_lib_->NDIlib_send_send_video(p_ndi_send_, video_frame.get());
@@ -147,43 +212,17 @@ namespace caspar {
 
 			void send_audio(const safe_ptr<core::read_frame>& frame)
 			{
-				auto audio_frame = create_audio_frame(core::channel_layout::stereo());
-				std::vector<int16_t, tbb::cache_aligned_allocator<int16_t>> audio_buffer;
+				if (!swr_)
+					swr_ = create_swr(format_desc_, channel_layout_, frame->num_channels());
 
-				if (core::needs_rearranging(
-					frame->multichannel_view(),
-					channel_layout_,
-					channel_layout_.num_channels))
-				{
-					core::audio_buffer downmixed;
-
-					downmixed.resize(
-						frame->multichannel_view().num_samples()
-						* channel_layout_.num_channels,
-						0);
-
-					auto dest_view = core::make_multichannel_view<int32_t>(
-						downmixed.begin(), downmixed.end(), channel_layout_);
-
-					core::rearrange_or_rearrange_and_mix(
-						frame->multichannel_view(),
-						dest_view,
-						core::default_mix_config_repository());
-
-					audio_buffer = core::audio_32_to_16(downmixed);
-				}
-				else
-				{
-					audio_buffer = core::audio_32_to_16(frame->audio_data());
-				}
-
-				audio_frame->no_channels = channel_layout_.num_channels;
-				audio_frame->sample_rate = 48000;
-				audio_frame->no_samples = audio_buffer.size() / channel_layout_.num_channels;
-				audio_frame->timecode = 0LL;
-				audio_frame->p_data = audio_buffer.data();
-				audio_frame->reference_level = 0;
-				p_ndi_lib_->NDIlib_util_send_send_audio_interleaved_16s(p_ndi_send_, audio_frame.get());
+				auto audio_frame = create_audio_frame(channel_layout_, frame->multichannel_view().num_samples(), format_desc_.audio_sample_rate);
+				const uint8_t* in[] = { reinterpret_cast<const uint8_t*>(frame->audio_data().begin()) };
+				int converted_sample_count = swr_convert(swr_,
+					reinterpret_cast<uint8_t**>(&audio_frame->p_data), audio_frame->no_samples,
+					in, frame->multichannel_view().num_samples());
+				if (converted_sample_count != audio_frame->no_samples)
+					CASPAR_LOG(warning) << print() << L" Not all samples were converted (" << converted_sample_count << L" of " << audio_frame->no_samples << L").";
+				p_ndi_lib_->NDIlib_util_send_send_audio_interleaved_32f(p_ndi_send_, audio_frame.get());
 			}
 
 			virtual std::wstring print() const override
@@ -221,21 +260,23 @@ namespace caspar {
 			if (params.size() > 1)
 				ndi_name = narrow(params.at(1));
 			std::string groups = narrow(params.get(L"GROUPS", L""));
+			auto scale = params.get(L"SCALE", 1.0);
 			auto channel_layout = core::default_channel_layout_repository()
 				.get_by_name(
 					params.get(L"CHANNEL_LAYOUT", L"STEREO"));
-			return make_safe<ndi_consumer>(channel_layout, ndi_name, groups);
+			return make_safe<ndi_consumer>(channel_layout, ndi_name, groups, scale);
 		}
 
 		safe_ptr<core::frame_consumer> create_ndi_consumer(const boost::property_tree::wptree& ptree)
 		{
 			auto ndi_name = narrow(ptree.get(L"name", L"default"));
 			auto groups = narrow(ptree.get(L"groups", L""));
+			auto scale = ptree.get(L"scale", 1.0);
 			auto channel_layout =
 				core::default_channel_layout_repository()
 				.get_by_name(
 					boost::to_upper_copy(ptree.get(L"channel-layout", L"STEREO")));
-			return make_safe<ndi_consumer>(channel_layout, ndi_name, groups);
+			return make_safe<ndi_consumer>(channel_layout, ndi_name, groups, scale);
 		}
 
 	}

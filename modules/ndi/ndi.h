@@ -22,14 +22,10 @@
 #pragma once
 
 #include <string>
-#include "stdafx.h"
 
 namespace caspar {
 	namespace ndi {
-
 		void init();
-
 		std::wstring get_version();
-
 	}
 }
