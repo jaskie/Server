@@ -706,7 +706,7 @@ namespace caspar {
 				: separate_key_(separate_key)
 				, output_format_(format)
 				, options_(options)
-				, index_(100000 + crc16(boost::to_lower_copy(format.file_name)))
+				, index_(FFMPEG_CONSUMER_BASE_INDEX + crc16(boost::to_lower_copy(format.file_name)))
 				, tc_in_(tc_in)
 				, tc_out_(tc_out)
 				, recorder_(recorder)

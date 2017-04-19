@@ -63,7 +63,7 @@ struct blocking_decklink_consumer : boost::noncopyable
 	CComQIPtr<IDeckLinkOutput>				output_;
 	CComQIPtr<IDeckLinkKeyer>				keyer_;
 	CComQIPtr<IDeckLinkAttributes>			attributes_;
-	CComQIPtr<IDeckLinkConfiguration>		configuration_;
+	CComQIPtr<IDeckLinkConfiguration_v10_2>		configuration_;
 
 	const std::wstring						model_name_;
 	const core::video_format_desc			format_desc_;
@@ -419,7 +419,7 @@ public:
 
 	virtual int index() const override
 	{
-		return 350 + config_.device_index;
+		return BLOKING_DECKLINK_CONSUMER_BASE_INDEX + config_.device_index;
 	}
 
 	virtual int64_t presentation_frame_age_millis() const

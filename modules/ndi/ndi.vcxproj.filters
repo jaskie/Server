@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClInclude Include="ndi.h" />
+    <ClInclude Include="consumer\ndi_consumer.h">
+      <Filter>consumer</Filter>
+    </ClInclude>
+    <ClInclude Include="util\ndi_util.h">
+      <Filter>util</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ndi.cpp" />
+    <ClCompile Include="consumer\ndi_consumer.cpp">
+      <Filter>consumer</Filter>
+    </ClCompile>
+    <ClCompile Include="util\ndi_util.cpp">
+      <Filter>util</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="consumer">
+      <UniqueIdentifier>{fa2ce358-1831-4db4-80f9-510059f18de6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="util">
+      <UniqueIdentifier>{bbd5a3b9-00cc-47bc-b46b-efde3d720088}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

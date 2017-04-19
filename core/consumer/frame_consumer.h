@@ -31,11 +31,21 @@
 #include <string>
 #include <vector>
 
+#define FFMPEG_CONSUMER_BASE_INDEX (0x1<16)
+#define NDI_CONSUMER_BASE_INDEX	(0x2<16)
+#define IMAGE_CONSUMER_INDEX 100
+#define DECKLINK_CONSUMER_BASE_INDEX 300
+#define BLOKING_DECKLINK_CONSUMER_BASE_INDEX 350
+#define BLUEFISH_CONSUMER_BASE_INDEX 400
+#define OAL_CONSUMER_INDEX 500
+#define OGL_CONSUMER_BASE_INDEX 600
+
 namespace caspar { namespace core {
 	
 class read_frame;
 class parameters;
 struct video_format_desc;
+
 
 struct frame_consumer : boost::noncopyable
 {

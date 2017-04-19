@@ -58,9 +58,12 @@
 #include <modules/decklink/consumer/blocking_decklink_consumer.h>
 #include <modules/ogl/consumer/ogl_consumer.h>
 #include <modules/ffmpeg/consumer/ffmpeg_consumer.h>
-
 #include <modules/decklink/producer/decklink_producer.h>
 #include <modules/decklink/recorder/decklink_recorder.h>
+#include <modules/newtek/newtek.h>
+#include <modules/newtek/consumer/newtek_ivga_consumer.h>
+#include <modules/ndi/ndi.h>
+#include <modules/ndi/consumer/ndi_consumer.h>
 
 #include <protocol/amcp/AMCPProtocolStrategy.h>
 #include <protocol/cii/CIIProtocolStrategy.h>
@@ -154,6 +157,12 @@ struct server::implementation : boost::noncopyable
 
 		image::init();		  
 		CASPAR_LOG(info) << L"Initialized image module.";
+
+		newtek::init();
+		CASPAR_LOG(info) << L"Initialized newtek module.";
+
+		ndi::init();
+		CASPAR_LOG(info) << L"Initialized ndi module.";
 
 		setup_channels(env::properties());
 		CASPAR_LOG(info) << L"Initialized channels.";
@@ -266,16 +275,20 @@ struct server::implementation : boost::noncopyable
 
 				if (name == L"screen")
 					on_consumer(ogl::create_consumer(xml_consumer.second));
-				else if (name == L"bluefish")					
-					on_consumer(bluefish::create_consumer(xml_consumer.second));					
-				else if (name == L"decklink")					
-					on_consumer(decklink::create_consumer(xml_consumer.second));				
+				else if (name == L"bluefish")
+					on_consumer(bluefish::create_consumer(xml_consumer.second));
+				else if (name == L"decklink")
+					on_consumer(decklink::create_consumer(xml_consumer.second));
 				else if (name == L"blocking-decklink")
-					on_consumer(decklink::create_blocking_consumer(xml_consumer.second));				
-				else if (/*name == L"file" || */name == L"stream")					
-					on_consumer(ffmpeg::create_consumer(xml_consumer.second));						
+					on_consumer(decklink::create_blocking_consumer(xml_consumer.second));
+				else if (/*name == L"file" || */name == L"stream")
+					on_consumer(ffmpeg::create_consumer(xml_consumer.second));
 				else if (name == L"system-audio")
 					on_consumer(oal::create_consumer());
+				else if (name == L"newtek-ivga")
+					on_consumer(newtek::create_ivga_consumer(xml_consumer.second));
+				else if (name == L"ndi")
+					on_consumer(ndi::create_ndi_consumer(xml_consumer.second));
 				else if (name == L"synchronizing")
 					on_consumer(make_safe<core::synchronizing_consumer>(
 							create_consumers<core::frame_consumer>(

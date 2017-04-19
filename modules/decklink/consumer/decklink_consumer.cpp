@@ -53,28 +53,28 @@ namespace caspar { namespace decklink {
 
 struct decklink_consumer : public IDeckLinkVideoOutputCallback, public IDeckLinkAudioOutputCallback, boost::noncopyable
 {
-	const int							channel_index_;
-	const configuration					config_;
+	const int										channel_index_;
+	const configuration								config_;
 
-	CComPtr<IDeckLink>					decklink_;
-	CComQIPtr<IDeckLinkOutput>			output_;
-	CComQIPtr<IDeckLinkKeyer>			keyer_;
-	CComQIPtr<IDeckLinkAttributes>		attributes_;
-	CComQIPtr<IDeckLinkConfiguration>	configuration_;
+	CComPtr<IDeckLink>								decklink_;
+	CComQIPtr<IDeckLinkOutput>						output_;
+	CComQIPtr<IDeckLinkKeyer>						keyer_;
+	CComQIPtr<IDeckLinkAttributes>					attributes_;
+	CComQIPtr<IDeckLinkConfiguration_v10_2>			configuration_;
 
-	tbb::spin_mutex						exception_mutex_;
-	std::exception_ptr					exception_;
+	tbb::spin_mutex									exception_mutex_;
+	std::exception_ptr								exception_;
 
-	tbb::atomic<bool>					is_running_;
+	tbb::atomic<bool>								is_running_;
 		
-	const std::wstring					model_name_;
-	const core::video_format_desc		format_desc_;
-	const size_t						buffer_size_;
+	const std::wstring								model_name_;
+	const core::video_format_desc					format_desc_;
+	const size_t									buffer_size_;
 
-	long long							video_scheduled_;
-	long long							audio_scheduled_;
+	long long										video_scheduled_;
+	long long										audio_scheduled_;
 
-	size_t								preroll_count_;
+	size_t											preroll_count_;
 		
 	boost::circular_buffer<std::vector<int32_t>>	audio_container_;
 
@@ -82,12 +82,12 @@ struct decklink_consumer : public IDeckLinkVideoOutputCallback, public IDeckLink
 	tbb::concurrent_bounded_queue<std::shared_ptr<core::read_frame>> audio_frame_buffer_;
 	
 	
-	safe_ptr<diagnostics::graph> graph_;
-	boost::timer tick_timer_;
-	retry_task<bool> send_completion_;
-	reference_signal_detector reference_signal_detector_;
+	safe_ptr<diagnostics::graph>					graph_;
+	boost::timer									tick_timer_;
+	retry_task<bool>								send_completion_;
+	reference_signal_detector						reference_signal_detector_;
 
-	tbb::atomic<int64_t>				current_presentation_delay_;
+	tbb::atomic<int64_t>							current_presentation_delay_;
 
 public:
 	decklink_consumer(const configuration& config, const core::video_format_desc& format_desc, int channel_index) 
@@ -323,15 +323,17 @@ public:
 			audio_container_.push_back(
 					std::vector<int32_t>(view.raw_begin(), view.raw_end()));
 		}
-
+		
+		unsigned int samples_written;
 		if(FAILED(output_->ScheduleAudioSamples(
 				audio_container_.back().data(),
 				sample_frame_count,
 				audio_scheduled_,
 				format_desc_.audio_sample_rate,
-				nullptr)))
+				&samples_written)))
 			CASPAR_LOG(error) << print() << L" Failed to schedule audio.";
-
+		if (samples_written != static_cast<unsigned int>(sample_frame_count))
+			CASPAR_LOG(warning) << print() << L" Not all available audio samples has been scheduled.";
 		audio_scheduled_ += sample_frame_count;
 	}
 			
@@ -459,7 +461,7 @@ public:
 
 	virtual int index() const override
 	{
-		return 300 + config_.device_index;
+		return DECKLINK_CONSUMER_BASE_INDEX + config_.device_index;
 	}
 
 	virtual int64_t presentation_frame_age_millis() const

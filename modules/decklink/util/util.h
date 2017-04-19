@@ -384,7 +384,7 @@ struct configuration
 };
 
 static void set_latency(
-		const CComQIPtr<IDeckLinkConfiguration>& config,
+		const CComQIPtr<IDeckLinkConfiguration_v10_2>& config,
 		configuration::latency_t latency,
 		const std::wstring& print)
 {		

@@ -448,7 +448,7 @@ public:
 	
 	virtual int index() const override
 	{
-		return 400 + device_index_;
+		return BLUEFISH_CONSUMER_BASE_INDEX + device_index_;
 	}
 
 	virtual int64_t presentation_frame_age_millis() const override

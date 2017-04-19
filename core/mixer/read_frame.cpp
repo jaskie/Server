@@ -44,7 +44,7 @@ int64_t get_current_time_millis()
 struct read_frame::implementation : boost::noncopyable
 {
 	safe_ptr<ogl_device>		ogl_;
-	uint32_t						size_;
+	uint32_t					size_;
 	safe_ptr<host_buffer>		image_data_;
 	tbb::mutex					mutex_;
 	audio_buffer				audio_data_;

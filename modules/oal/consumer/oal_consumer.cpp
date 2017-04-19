@@ -209,7 +209,7 @@ public:
 
 	virtual int index() const override
 	{
-		return 500;
+		return OAL_CONSUMER_INDEX;
 	}
 };
 
