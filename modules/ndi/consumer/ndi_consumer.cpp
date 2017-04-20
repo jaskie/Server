@@ -242,7 +242,7 @@ namespace caspar {
 
 			virtual std::wstring print() const override
 			{
-				return L"NewTek NDI™[" + ndi_name_ + L"]";
+				return L"NewTek NDI[" + ndi_name_ + L"]";
 			}
 
 			virtual boost::property_tree::wptree info() const override

@@ -156,19 +156,19 @@ namespace caspar {
 			byte_vector								key_picture_buf_;
 			byte_vector								picture_buf_;
 
-			int64_t									out_frame_number_;
+			tbb::atomic<int64_t>					out_frame_number_;
 			int64_t									out_audio_sample_number_;
 
 			bool									key_only_;
 			bool									audio_is_planar;
 			tbb::atomic<int64_t>					current_encoding_delay_;
+			boost::timer							frame_timer_;
 
 		public:
 			ffmpeg_consumer(const std::string& filename, const core::video_format_desc& format_desc, bool key_only, output_format format, const std::string options)
 				: filename_(filename)
 				, format_desc_(format_desc)
 				, encode_executor_(print())
-				, out_frame_number_(0)
 				, out_audio_sample_number_(0)
 				, output_format_(format)
 				, key_only_(key_only)
@@ -180,6 +180,7 @@ namespace caspar {
 				, video_st_(nullptr)
 			{
 				current_encoding_delay_ = 0;
+				out_frame_number_ = 0;
 				ready_ = false;
 				// TODO: Ask stakeholders about case where file already exists.
 				boost::filesystem2::remove(filename); // Delete the file if it exists
@@ -263,7 +264,7 @@ namespace caspar {
 
 			std::wstring print() const
 			{
-				return L"ffmpeg_consumer[" + widen(filename_) + L"]";
+				return L"ffmpeg_consumer[" + widen(filename_) + L"]:" + boost::lexical_cast<std::wstring>(out_frame_number_);
 			}
 
 			AVStream* add_video_stream()
@@ -614,14 +615,15 @@ namespace caspar {
 			void send(const safe_ptr<core::read_frame>& frame)
 			{
 				encode_executor_.begin_invoke([=] {
-					boost::timer frame_timer;
+					frame_timer_.restart();
 
 					encode_video_frame(*frame);
 
 					if (!key_only_)
 						encode_audio_frame(*frame);
 
-					graph_->set_value("frame-time", frame_timer.elapsed()*format_desc_.fps*0.5);
+					graph_->set_value("frame-time", frame_timer_.elapsed()*format_desc_.fps*0.5);
+					graph_->set_text(print());
 					current_encoding_delay_ = frame->get_age_millis();
 				});
 			}

@@ -254,6 +254,7 @@ namespace caspar {
 
 			virtual void Capture(std::shared_ptr<core::video_channel>& channel, const unsigned int frame_limit, const std::wstring file_name, const bool narrow_aspect_ratio, const core::parameters& params) override
 			{
+				Abort();
 				channel_ = channel;
 				consumer_ = ffmpeg::create_manual_record_consumer(file_name, params, frame_limit, narrow_aspect_ratio, this);
 				executor_.begin_invoke([=] {
