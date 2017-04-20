@@ -129,6 +129,9 @@ namespace caspar {
 			int									width_;
 			int									height_;
 			boost::timer						frame_timer_;
+			boost::timer						tick_timer_;
+			boost::timer						send_timer_;
+			boost::timer						scale_timer_;
 
 		public:
 
@@ -147,9 +150,12 @@ namespace caspar {
 				, width_(0)
 				, height_(0)
 			{
-				executor_.set_capacity(8);
-				graph_->set_color("tick-time", diagnostics::color(0.5f, 1.0f, 0.2f));
+				executor_.set_capacity(1);
 				graph_->set_text(print());
+				graph_->set_color("frame-time", diagnostics::color(0.5f, 1.0f, 0.2f));
+				graph_->set_color("send-time", diagnostics::color(0.9f, 0.6f, 0.2f));
+				graph_->set_color("scale-time", diagnostics::color(0.9f, 0.0f, 0.9f));
+				graph_->set_color("tick-time", diagnostics::color(0.0f, 0.6f, 0.9f));
 				diagnostics::register_graph(graph_);
 			}
 
@@ -183,16 +189,21 @@ namespace caspar {
 			virtual boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame) override
 			{
 				return executor_.begin_invoke([this, frame]() -> bool {
+					graph_->set_value("tick-time", tick_timer_.elapsed() * format_desc_.fps * 0.5);
+					tick_timer_.restart();
+					frame_timer_.restart();
 					send_video(frame);
 					send_audio(frame);
-					graph_->set_value("tick-time", static_cast<float>(frame_timer_.elapsed()*format_desc_.fps*0.5));
-					frame_timer_.restart();
+					graph_->set_value("frame-time", frame_timer_.elapsed() * format_desc_.fps * 0.5);
 					return true;
 				});
 			}
 
 			void send_video(const safe_ptr<core::read_frame>& frame)
 			{
+				scale_timer_.restart();
+
+				//scale and convert colorspace of the frame
 				if (!sws_)
 					sws_ = create_sws(format_desc_, width_, height_);
 				std::shared_ptr<NDIlib_video_frame_t> video_frame = create_video_frame(format_desc_, width_, height_);
@@ -204,8 +215,14 @@ namespace caspar {
 					sws_scale(sws_, in_frame->data, in_frame->linesize, 0, format_desc_.height, &video_frame->p_data, &video_frame->line_stride_in_bytes);
 				}
 				else
-					fast_memclr(video_frame->p_data, format_desc_.width * format_desc_.height * 4);
+					fast_memclr(video_frame->p_data, format_desc_.width * format_desc_.height * sizeof(float));
+				graph_->set_value("scale-time", scale_timer_.elapsed() * format_desc_.fps * 0.5);
+				send_timer_.restart();
+
+				// send video to NDI
 				p_ndi_lib_->NDIlib_send_send_video(p_ndi_send_, video_frame.get());
+				
+				graph_->set_value("send-time", send_timer_.elapsed() * format_desc_.fps * 0.5);
 			}
 
 			void send_audio(const safe_ptr<core::read_frame>& frame)

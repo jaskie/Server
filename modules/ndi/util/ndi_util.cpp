@@ -63,7 +63,7 @@ std::shared_ptr<NDIlib_video_frame_t> create_video_frame(const core::video_forma
 {
 	return std::shared_ptr<NDIlib_video_frame_t>(create_weak_video_frame(format, width, height), [](NDIlib_video_frame_t* f)
 	{
-		if (f)
+		if (f->p_data)
 			delete(f->p_data);
 		delete(f);
 	});
@@ -79,7 +79,6 @@ NDIlib_audio_frame_interleaved_32f_t * create_weak_audio_frame(core::channel_lay
 		f->sample_rate = sample_rate;
 		f->p_data = (float*)malloc(nb_samples * layout.num_channels * sizeof(float));
 		f->timecode = 0LL;
-		//f->channel_stride_in_bytes = nb_samples * sizeof(float);
 	}
 	return f;
 }
@@ -90,7 +89,7 @@ std::shared_ptr<NDIlib_audio_frame_interleaved_32f_t> create_audio_frame(core::c
 		create_weak_audio_frame(layout, nb_samples, sample_rate),
 		[](NDIlib_audio_frame_interleaved_32f_t* f)
 	{
-		if (f)
+		if (f->p_data)
 			delete(f->p_data);
 		delete(f);
 	}
