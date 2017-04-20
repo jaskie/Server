@@ -25,6 +25,17 @@
 #include <common/log/log.h>
 #include <core/video_format.h>
 #include <core/mixer/audio/audio_util.h>
+#if defined(_MSC_VER)
+#pragma warning (push)
+#pragma warning (disable : 4244)
+#endif
+extern "C"
+{
+#include <libavutil/imgutils.h>
+}
+#if defined(_MSC_VER)
+#pragma warning (pop)
+#endif
 #include <windows.h>
 
 namespace caspar { namespace ndi {
@@ -42,7 +53,7 @@ NDIlib_video_frame_t * create_weak_video_frame(const core::video_format_desc for
 		frame->picture_aspect_ratio = static_cast<float>(format.square_width) / static_cast<float>(format.square_height);
 		frame->frame_format_type = (format.field_mode == caspar::core::field_mode::progressive) ? NDIlib_frame_format_type_progressive : NDIlib_frame_format_type_interleaved;
 		frame->timecode = NDIlib_send_timecode_synthesize;
-		frame->p_data = (uint8_t*)malloc(width * height * 2);
+		frame->p_data = (uint8_t*)malloc(av_image_get_buffer_size(AV_PIX_FMT_UYVY422, width, height, 32));
 		frame->line_stride_in_bytes = width * 2;
 	}
 	return frame;

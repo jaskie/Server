@@ -69,8 +69,6 @@ extern "C"
 namespace caspar {
 	namespace ndi {
 
-		typedef std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>	byte_vector;
-
 		int crc16(const std::string& str)
 		{
 			boost::crc_16_type result;
