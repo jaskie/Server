@@ -104,40 +104,40 @@ namespace caspar {
 			return (boost::format( "%02d:%02d:%02d:%02d" ) % hour % min % sec % frames).str();
 		}
 
+		enum record_state
+		{
+			idle,
+			manual_recording,
+			vcr_recording
+		};
+
 
 		class decklink_recorder : public core::recorder, IDeckLinkDeckControlStatusCallback
 		{
 		private:
-			enum record_state
-			{
-				idle,
-				manual_recording,
-				vcr_recording
-			}										record_state_;
-			com_initializer							init_;
+			record_state							record_state_;
 			int										index_;
 			const int								device_index_;
 			const unsigned int						preroll_;
 			int										offset_;
-			CComPtr<IDeckLink>						decklink_;
-			CComPtr<IDeckLinkDeckControl>			deck_control_;
 			BMDDeckControlError						last_deck_error_;
 			caspar::core::video_format_desc			format_desc_;
-			tbb::atomic<bool>						deck_connected_;
+			bool									deck_connected_;
 
 			//fields of the current operation
 			std::shared_ptr<core::video_channel>	channel_;
 			std::wstring							file_name_;
 			safe_ptr<core::frame_consumer>			consumer_;
+			CComPtr<IDeckLinkDeckControl>			deck_control_;
 			
 			// timecodes are converted from BCD to unsigned integers
-			tbb::atomic<int>						tc_in_;
-			tbb::atomic<int>						tc_out_;
-
-			tbb::atomic<int>						current_timecode_;
+			int										tc_in_;
+			int										tc_out_;
+			int										current_timecode_;
 			safe_ptr<core::monitor::subject>		monitor_subject_;
 			executor								executor_;
 
+			// all private methods have to be executed in com thread
 			void clean_recorder()
 			{
 				record_state_ = record_state::idle;
@@ -146,9 +146,7 @@ namespace caspar {
 				if (channel && consumer != core::frame_consumer::empty())
 				{
 					consumer_ = core::frame_consumer::empty();
-					executor_.begin_invoke([=]() {
-						channel->output()->remove(consumer);
-					});
+					channel->output()->remove(consumer);
 				}
 				channel_.reset();
 				file_name_ = L"";
@@ -175,53 +173,59 @@ namespace caspar {
 					CASPAR_LOG(error) << print() << L" Could not open deck control";
 				format_desc_ = format;
 			}
-
+			
 			void begin_vcr_recording()
 			{
 				auto channel = channel_;
 				auto consumer = consumer_;
 				if (channel && consumer != core::frame_consumer::empty())
 				{
-					executor_.begin_invoke([=]
-					{
-						channel->output()->add(consumer);
-					});
+					channel->output()->add(consumer);
 					record_state_ = record_state::vcr_recording;
 				}
 			}
 
 			std::wstring print() const
 			{
-				return L"[decklink-recorder] [" + get_model_name(decklink_) + L":" + boost::lexical_cast<std::wstring>(index_) + L"]";
+				return L"[decklink-recorder] [" + boost::lexical_cast<std::wstring>(device_index_) + L"]";
 			}
 
 
 		public:
 			decklink_recorder(int index, int device_index, unsigned int preroll, int offset)
 				: index_(index)
-				, decklink_(get_device(device_index))
-				, deck_control_(get_deck_control(decklink_))
 				, consumer_(core::frame_consumer::empty())
 				, last_deck_error_(bmdDeckControlNoError)
 				, device_index_(device_index)
 				, preroll_(preroll)
 				, offset_(offset)
+				, tc_in_(0)
+				, tc_out_(0)
+				, current_timecode_(0)
 				, monitor_subject_(make_safe<core::monitor::subject>("/recorder/" + boost::lexical_cast<std::string>(index)))
 				, executor_(print())
 			{
-				current_timecode_ = 0;
 				executor_.set_capacity(1);
-				if (FAILED(deck_control_->SetCallback(this)))
-					CASPAR_LOG(error) << print() << L" Could not setup callback";
-				if (FAILED(deck_control_->SetPreroll(preroll)))
-					CASPAR_LOG(warning) << print() << L" Could not set deck preroll time";
-				open_deck_control(caspar::core::video_format_desc::get(caspar::core::video_format::pal));
-				CASPAR_LOG(debug) << print() << L" Initialized";
+				executor_.begin_invoke([this]
+				{
+					::CoInitialize(nullptr);
+					deck_control_ = get_deck_control(get_device(device_index_));
+					if (FAILED(deck_control_->SetCallback(this)))
+						CASPAR_LOG(error) << print() << L" Could not setup callback";
+					if (FAILED(deck_control_->SetPreroll(preroll_)))
+						CASPAR_LOG(warning) << print() << L" Could not set deck preroll time";
+					open_deck_control(caspar::core::video_format_desc::get(caspar::core::video_format::pal));
+					CASPAR_LOG(debug) << print() << L" Initialized";
+				});
 			}
 			
 			~decklink_recorder()
 			{
-				deck_control_->Close(FALSE);
+				executor_.begin_invoke([this]
+				{
+					deck_control_->Close(FALSE);
+					::CoUninitialize();
+				});
 			}
 
 			virtual int index() const override {
@@ -232,92 +236,119 @@ namespace caspar {
 			virtual void Capture(std::shared_ptr<core::video_channel>& channel, const std::wstring tc_in, const std::wstring tc_out, const std::wstring file_name, const bool narrow_aspect_ratio, const core::parameters& params) override
 			{
 				Abort();
-				caspar::core::video_format_desc new_format_desc = channel->get_video_format_desc();
-				if (new_format_desc.time_scale != format_desc_.time_scale || new_format_desc.duration != format_desc_.duration)
+				executor_.begin_invoke([this, channel, tc_in, tc_out, file_name, params, narrow_aspect_ratio]
 				{
-					CASPAR_LOG(trace) << print() << L" Video format has changed. Reopening deck control for new time scale";
-					deck_control_->Close(false);
-					open_deck_control(new_format_desc);
-				}
 
-				tc_in_ = bcd_to_frame(encode_timecode(tc_in));
-				tc_out_ = bcd_to_frame(encode_timecode(tc_out));
-				channel_ = channel;
-				
-				consumer_ = ffmpeg::create_capture_consumer(file_name, params, tc_in_, tc_out_, narrow_aspect_ratio, this);
-				if (FAILED(deck_control_->StartCapture(FALSE, tc_to_bcd(tc_in_), tc_to_bcd(tc_out_), &last_deck_error_)))
-				{
-					CASPAR_LOG(error) << print() << L" Could not start capture";
-					clean_recorder();
-				}
+					caspar::core::video_format_desc new_format_desc = channel->get_video_format_desc();
+					if (new_format_desc.time_scale != format_desc_.time_scale || new_format_desc.duration != format_desc_.duration)
+					{
+						CASPAR_LOG(trace) << print() << L" Video format has changed. Reopening deck control for new time scale";
+						deck_control_->Close(false);
+						open_deck_control(new_format_desc);
+					}
+
+					tc_in_ = bcd_to_frame(encode_timecode(tc_in));
+					tc_out_ = bcd_to_frame(encode_timecode(tc_out));
+					channel_ = channel;
+
+					consumer_ = ffmpeg::create_capture_consumer(file_name, params, tc_in_, tc_out_, narrow_aspect_ratio, this);
+					if (FAILED(deck_control_->StartCapture(FALSE, tc_to_bcd(tc_in_), tc_to_bcd(tc_out_), &last_deck_error_)))
+					{
+						CASPAR_LOG(error) << print() << L" Could not start capture";
+						clean_recorder();
+					}
+				});
 			}
 
 			virtual void Capture(std::shared_ptr<core::video_channel>& channel, const unsigned int frame_limit, const std::wstring file_name, const bool narrow_aspect_ratio, const core::parameters& params) override
 			{
 				Abort();
-				channel_ = channel;
-				consumer_ = ffmpeg::create_manual_record_consumer(file_name, params, frame_limit, narrow_aspect_ratio, this);
-				executor_.begin_invoke([=] {
+				executor_.begin_invoke([this, channel, file_name, params, frame_limit, narrow_aspect_ratio]
+				{
+					channel_ = channel;
+					consumer_ = ffmpeg::create_manual_record_consumer(file_name, params, frame_limit, narrow_aspect_ratio, this);
 					channel->output()->add(consumer_);
+					record_state_ = record_state::manual_recording;
 				});
-				record_state_ = record_state::manual_recording;
 			}
 
 			// Method called back from ffmpeg_consumer only
 			void frame_captured(const unsigned int frames_left) override
 			{
-				*monitor_subject_ << core::monitor::message("/frames_left") % static_cast<int>(frames_left);
-				if (!frames_left)
+				executor_.begin_invoke([this, frames_left]
 				{
-					clean_recorder();
-					executor_.begin_invoke([&]() {
+					*monitor_subject_ << core::monitor::message("/frames_left") % static_cast<int>(frames_left);
+					if (!frames_left)
+					{
+						clean_recorder();
 						*monitor_subject_ << core::monitor::message("/control") % std::string("capture_complete");
-					});					
-				}
+					}
+				});
 			}
 
 			virtual bool FinishCapture() override
 			{
-				clean_recorder();
-				if (record_state_ > record_state::idle)
-					deck_control_->Stop(&last_deck_error_);
-				executor_.begin_invoke([&]() {
-					*monitor_subject_ << core::monitor::message("/control") % std::string("capture_complete");
-				});
-				return true;
+				return executor_.begin_invoke([this] () -> bool
+				{
+					clean_recorder();
+					if (record_state_ > record_state::idle)
+					{
+						deck_control_->Stop(&last_deck_error_);
+						*monitor_subject_ << core::monitor::message("/control") % std::string("capture_complete");
+					}
+					return true;
+				}).get();
 			}
 
 			virtual bool Abort() override
 			{
-				if (record_state_ > record_state::idle)
-					deck_control_->Stop(&last_deck_error_);
-				clean_recorder();
-				return (SUCCEEDED(deck_control_->Abort()));
+				return executor_.begin_invoke([this] () -> bool
+				{
+					if (record_state_ > record_state::idle)
+						deck_control_->Stop(&last_deck_error_);
+					clean_recorder();
+					return (SUCCEEDED(deck_control_->Abort()));
+				}).get();
 			}
 
 			virtual bool Play() override
 			{
-				return (SUCCEEDED(deck_control_->Play(&last_deck_error_)));
+				return executor_.begin_invoke([this] () -> bool
+				{
+					return (SUCCEEDED(deck_control_->Play(&last_deck_error_)));
+				}).get();
 			}
 			
 			virtual bool Stop() override
 			{
-				return (SUCCEEDED(deck_control_->Stop(&last_deck_error_)));
+				return executor_.begin_invoke([this] () -> bool
+				{
+					return (SUCCEEDED(deck_control_->Stop(&last_deck_error_)));
+				}).get();
 			}
 			
 			virtual bool FastForward() override
 			{
-				return (SUCCEEDED(deck_control_->FastForward(FALSE, &last_deck_error_)));
+				return executor_.begin_invoke([this] () -> bool
+				{
+					return (SUCCEEDED(deck_control_->FastForward(FALSE, &last_deck_error_)));
+				}).get();
 			}
 			
 			virtual bool Rewind() override
 			{
-				return (SUCCEEDED(deck_control_->Rewind(FALSE, &last_deck_error_)));
+				return executor_.begin_invoke([this] () -> bool
+				{
+					return (SUCCEEDED(deck_control_->Rewind(FALSE, &last_deck_error_)));
+				}).get();
 			}
 
 			virtual bool GoToTimecode(const std::wstring tc) override
 			{
-				return (SUCCEEDED(deck_control_->GoToTimecode(tc_to_bcd(encode_timecode(tc)), &last_deck_error_)));
+				return executor_.begin_invoke([this, tc] () -> bool
+				{
+					return (SUCCEEDED(deck_control_->GoToTimecode(tc_to_bcd(encode_timecode(tc)), &last_deck_error_)));
+				}).get();
 			}
 
 #pragma region IDeckLinkDeckControlStatusCallback
@@ -422,22 +453,27 @@ namespace caspar {
 
 			int GetTimecode() override
 			{
-				BMDTimecodeBCD timecode_bcd;
-				if (deck_control_ && SUCCEEDED(deck_control_->GetTimecodeBCD(&timecode_bcd, &last_deck_error_)))
+				return executor_.begin_invoke([this] () -> int
 				{
-					auto format_desc = format_desc_;
-					current_timecode_ = bcd_to_frame(timecode_bcd) - offset_;
-					return current_timecode_;
-				}
-				else
-					return ++current_timecode_; //assuming 1 call per frame
+					BMDTimecodeBCD timecode_bcd;
+					if (SUCCEEDED(deck_control_->GetTimecodeBCD(&timecode_bcd, &last_deck_error_)))
+					{
+						auto format_desc = format_desc_;
+						current_timecode_ = bcd_to_frame(timecode_bcd) - offset_;
+						return current_timecode_;
+					}
+					else
+						return ++current_timecode_; //assuming 1 call per frame
+				}).get();
 			}
 
 			virtual void SetFrameLimit(unsigned int frame_limit) override
 			{
-				auto consumer = consumer_;
-				if (consumer != core::frame_consumer::empty())
-					ffmpeg::set_time_limit(consumer, frame_limit);
+				executor_.begin_invoke([this, frame_limit]
+				{
+					if (consumer_ != core::frame_consumer::empty())
+						ffmpeg::set_time_limit(consumer_, frame_limit);
+				});
 			}
 
 			virtual boost::property_tree::wptree info() override
