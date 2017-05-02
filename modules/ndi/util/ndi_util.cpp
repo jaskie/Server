@@ -108,9 +108,13 @@ NDIlib_v2* load_ndi()
 	h_lib = ::LoadLibraryA(ndi_lib.c_str());
 	if (!h_lib)
 	{
-		std::string ndi_runtime_v2(::getenv("NDI_RUNTIME_DIR_V2"));
-		ndi_lib = ndi_runtime_v2 + '\\' + ndi_lib;
-		h_lib = ::LoadLibraryA(ndi_lib.c_str());
+		char* env_path = ::getenv("NDI_RUNTIME_DIR_V2");
+		if (env_path)
+		{
+			std::string ndi_runtime_v2(env_path);
+			ndi_lib = ndi_runtime_v2 + '\\' + ndi_lib;
+			h_lib = ::LoadLibraryA(ndi_lib.c_str());
+		}
 	}
 	NDIlib_v2* (*ndi_lib_load)(void) = NULL;
 	if (h_lib)
