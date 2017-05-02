@@ -347,7 +347,7 @@ namespace caspar {
 			{
 				return executor_.begin_invoke([this, tc] () -> bool
 				{
-					return (SUCCEEDED(deck_control_->GoToTimecode(tc_to_bcd(encode_timecode(tc)), &last_deck_error_)));
+					return (SUCCEEDED(deck_control_->GoToTimecode(encode_timecode(tc), &last_deck_error_)));
 				}).get();
 			}
 
