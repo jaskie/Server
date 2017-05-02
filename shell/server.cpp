@@ -190,8 +190,8 @@ struct server::implementation : boost::noncopyable
 		primary_amcp_server_.reset();
 		async_servers_.clear();
 		destroy_producers_synchronously();
-		channels_.clear();
 		recorders_.clear();
+		channels_.clear();
 		ffmpeg::uninit();
 	}
 

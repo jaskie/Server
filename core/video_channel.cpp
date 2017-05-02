@@ -80,6 +80,11 @@ public:
 		CASPAR_LOG(info) << print() << " Successfully Initialized.";
 	}
 
+	~implementation()
+	{
+		CASPAR_LOG(info) << print() << " successfully unitialized.";
+	}
+
 	void set_video_format_desc(const video_format_desc& format_desc)
 	{
 		if(format_desc.format == core::video_format::invalid)

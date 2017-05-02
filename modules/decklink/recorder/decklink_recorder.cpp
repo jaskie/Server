@@ -121,23 +121,22 @@ namespace caspar {
 			const unsigned int						preroll_;
 			int										offset_;
 			BMDDeckControlError						last_deck_error_;
-			caspar::core::video_format_desc			format_desc_;
-			bool									deck_connected_;
+			CComPtr<IDeckLinkDeckControl>			deck_control_;
+			executor								executor_;
 
 			//fields of the current operation
 			std::shared_ptr<core::video_channel>	channel_;
 			std::wstring							file_name_;
 			safe_ptr<core::frame_consumer>			consumer_;
-			CComPtr<IDeckLinkDeckControl>			deck_control_;
-			
+			caspar::core::video_format_desc			format_desc_;
+			bool									deck_connected_;
+
 			// timecodes are converted from BCD to unsigned integers
 			int										tc_in_;
 			int										tc_out_;
 			int										current_timecode_;
 			safe_ptr<core::monitor::subject>		monitor_subject_;
-			executor								executor_;
 
-			// all private methods have to be executed in com thread
 			void clean_recorder()
 			{
 				record_state_ = record_state::idle;
@@ -209,13 +208,16 @@ namespace caspar {
 				executor_.begin_invoke([this]
 				{
 					::CoInitialize(nullptr);
-					deck_control_ = get_deck_control(get_device(device_index_));
+					auto device = get_device(device_index_);
+					deck_control_ = get_deck_control(device);
 					if (FAILED(deck_control_->SetCallback(this)))
-						CASPAR_LOG(error) << print() << L" Could not setup callback";
+						CASPAR_LOG(error) << print() << L" Could not setup callback.";
 					if (FAILED(deck_control_->SetPreroll(preroll_)))
-						CASPAR_LOG(warning) << print() << L" Could not set deck preroll time";
+						CASPAR_LOG(warning) << print() << L" Could not set deck preroll time.";
 					open_deck_control(caspar::core::video_format_desc::get(caspar::core::video_format::pal));
-					CASPAR_LOG(debug) << print() << L" Initialized";
+					BSTR modelName;
+					device->GetModelName(&modelName);
+					CASPAR_LOG(info) << print() << L" on " << modelName << L" successfully initialized.";
 				});
 			}
 			
@@ -223,8 +225,8 @@ namespace caspar {
 			{
 				executor_.begin_invoke([this]
 				{
-					deck_control_->Close(FALSE);
 					::CoUninitialize();
+					CASPAR_LOG(info) << print() << L" successfully uninitialized.";
 				});
 			}
 
@@ -242,7 +244,7 @@ namespace caspar {
 					caspar::core::video_format_desc new_format_desc = channel->get_video_format_desc();
 					if (new_format_desc.time_scale != format_desc_.time_scale || new_format_desc.duration != format_desc_.duration)
 					{
-						CASPAR_LOG(trace) << print() << L" Video format has changed. Reopening deck control for new time scale";
+						CASPAR_LOG(trace) << print() << L" Video format has changed. Reopening deck control for new time scale.";
 						deck_control_->Close(false);
 						open_deck_control(new_format_desc);
 					}
@@ -254,7 +256,7 @@ namespace caspar {
 					consumer_ = ffmpeg::create_capture_consumer(file_name, params, tc_in_, tc_out_, narrow_aspect_ratio, this);
 					if (FAILED(deck_control_->StartCapture(FALSE, tc_to_bcd(tc_in_), tc_to_bcd(tc_out_), &last_deck_error_)))
 					{
-						CASPAR_LOG(error) << print() << L" Could not start capture";
+						CASPAR_LOG(error) << print() << L" Could not start capture.";
 						clean_recorder();
 					}
 				});
@@ -435,13 +437,13 @@ namespace caspar {
 				{
 					deck_connected_ = true;
 					*monitor_subject_ << core::monitor::message("/connected") % std::string("true");
-					CASPAR_LOG(info) << print() << L" Deck connected ";
+					CASPAR_LOG(info) << print() << L" Deck connected.";
 				}
 				if (deck_connected_ && !(flags & bmdDeckControlStatusDeckConnected))
 				{
 					deck_connected_ = false;
 					*monitor_subject_ << core::monitor::message("/connected") % std::string("false");
-					CASPAR_LOG(info) << print() << L" Deck disconnected ";
+					CASPAR_LOG(info) << print() << L" Deck disconnected.";
 				}
 				if (record_state_ == record_state::vcr_recording)
 					Abort();

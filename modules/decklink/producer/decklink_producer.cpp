@@ -169,11 +169,13 @@ public:
 			BOOST_THROW_EXCEPTION(caspar_exception() 
 									<< msg_info(narrow(print()) + " Failed to set input callback.")
 									<< boost::errinfo_api_function("SetCallback"));
+		CASPAR_LOG(info) << print() << L" successfully initialized.";
 	}
 
 	~decklink_producer()
 	{
 		close_input();
+		CASPAR_LOG(info) << print() << L" successfully uninitialized.";
 	}
 
 	void open_input(BMDDisplayMode displayMode, BMDVideoInputFlags bmdVideoInputFlags)
@@ -359,9 +361,9 @@ public:
 		{
 			std::wstring modeName(displayModeString, SysStringLen(displayModeString));
 			SysFreeString(displayModeString);
-			return model_name_ + L" [" + boost::lexical_cast<std::wstring>(device_index_) + L"|" + modeName + L"]";
+			return model_name_ + L"[decklink_producer] [" + boost::lexical_cast<std::wstring>(device_index_) + L"|" + modeName + L"]";
 		}
-		return model_name_ + L" [" + boost::lexical_cast<std::wstring>(device_index_) + L"]";
+		return model_name_ + L"[decklink_producer] [" + boost::lexical_cast<std::wstring>(device_index_) + L"]";
 	}
 
 	core::monitor::subject& monitor_output()

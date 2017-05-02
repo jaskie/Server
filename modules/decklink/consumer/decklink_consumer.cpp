@@ -157,6 +157,7 @@ public:
 				output_->DisableAudioOutput();
 			output_->DisableVideoOutput();
 		}
+		CASPAR_LOG(info) << print() << L" successfully uninitialized.";
 	}
 	
 	void enable_audio()
@@ -388,7 +389,7 @@ public:
 	
 	std::wstring print() const
 	{
-		return model_name_ + L" [" + boost::lexical_cast<std::wstring>(channel_index_) + L"-" +
+		return model_name_ + L"[decklink_consumer] [" + boost::lexical_cast<std::wstring>(channel_index_) + L"-" +
 			boost::lexical_cast<std::wstring>(config_.device_index) + L"|" +  format_desc_.name + L"]";
 	}
 };
@@ -407,16 +408,6 @@ public:
 	{
 	}
 
-	~decklink_consumer_proxy()
-	{
-		if(context_)
-		{
-			auto str = print();
-			context_.reset();
-			CASPAR_LOG(info) << str << L" Successfully Uninitialized.";	
-		}
-	}
-
 	// frame_consumer
 	
 	virtual void initialize(const core::video_format_desc& format_desc, int channel_index) override
@@ -425,7 +416,7 @@ public:
 		audio_cadence_ = format_desc.audio_cadence;		
 		format_desc_ = format_desc;
 
-		CASPAR_LOG(info) << print() << L" Successfully Initialized.";	
+		CASPAR_LOG(info) << print() << L" successfully initialized.";	
 	}
 	
 	virtual boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame) override
