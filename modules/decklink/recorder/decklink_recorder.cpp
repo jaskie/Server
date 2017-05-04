@@ -292,12 +292,12 @@ namespace caspar {
 			{
 				return executor_.begin_invoke([this] () -> bool
 				{
-					clean_recorder();
 					if (record_state_ > record_state::idle)
 					{
 						deck_control_->Stop(&last_deck_error_);
 						*monitor_subject_ << core::monitor::message("/control") % std::string("capture_complete");
 					}
+					clean_recorder();
 					return true;
 				}).get();
 			}
