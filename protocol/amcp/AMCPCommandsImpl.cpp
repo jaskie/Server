@@ -1725,46 +1725,67 @@ bool CaptureCommand::DoExecute()
 			recorder->Capture(channel, tcIn, tcOut, filename, narrow_aspect_ratio, _parameters);
 		else
 			recorder->Capture(channel, frames_limit, filename, narrow_aspect_ratio, _parameters);
+		SetReplyString(TEXT("201 CAPTURE OK\r\n"));
 		return true;
 	}
+	SetReplyString(TEXT("402 CAPTURE ERROR\r\n"));
 	return false;
 }
 
 bool RecorderCommand::DoExecute()
 {
 	auto recorders = GetRecorders();
-	int recorder_index  = _parameters.get(L"PLAY", std::numeric_limits<int>().max())-1;
+	int recorder_index = _parameters.get(L"PLAY", std::numeric_limits<int>().max()) - 1;
+	bool success = false;
 	if (recorder_index < recorders.size())
-		return recorders[recorder_index]->Play();
-	recorder_index = _parameters.get(L"STOP", std::numeric_limits<int>().max()) - 1;
-	if (recorder_index < recorders.size())
-		return recorders[recorder_index]->Stop();
-	recorder_index = _parameters.get(L"ABORT", std::numeric_limits<int>().max()) - 1;
-	if (recorder_index < recorders.size())
-		return recorders[recorder_index]->Abort();
-	recorder_index = _parameters.get(L"FF", std::numeric_limits<int>().max()) - 1;
-	if (recorder_index < recorders.size())
-		return recorders[recorder_index]->FastForward();
-	recorder_index = _parameters.get(L"REWIND", std::numeric_limits<int>().max()) - 1;
-	if (recorder_index < recorders.size())
-		return recorders[recorder_index]->Rewind();
-	recorder_index = _parameters.get(L"FINISH", std::numeric_limits<int>().max()) - 1;
-	if (recorder_index < recorders.size())
-		return recorders[recorder_index]->FinishCapture();
-	recorder_index = _parameters.get(L"GOTO", std::numeric_limits<int>().max()) - 1;
-	if (recorder_index < recorders.size())
+		success = recorders[recorder_index]->Play();
+	else
 	{
-		std::wstring tc = _parameters.get(L"TC", L"");
-		return recorders[recorder_index]->GoToTimecode(tc);
+		recorder_index = _parameters.get(L"STOP", std::numeric_limits<int>().max()) - 1;
+		if (recorder_index < recorders.size())
+			success = recorders[recorder_index]->Stop();
+		else {
+			recorder_index = _parameters.get(L"ABORT", std::numeric_limits<int>().max()) - 1;
+			if (recorder_index < recorders.size())
+				success = recorders[recorder_index]->Abort();
+			else {
+				recorder_index = _parameters.get(L"FF", std::numeric_limits<int>().max()) - 1;
+				if (recorder_index < recorders.size())
+					success = recorders[recorder_index]->FastForward();
+				else {
+					recorder_index = _parameters.get(L"REWIND", std::numeric_limits<int>().max()) - 1;
+					if (recorder_index < recorders.size())
+						success = recorders[recorder_index]->Rewind();
+					else {
+						recorder_index = _parameters.get(L"FINISH", std::numeric_limits<int>().max()) - 1;
+						if (recorder_index < recorders.size())
+							success = recorders[recorder_index]->FinishCapture();
+						else {
+							recorder_index = _parameters.get(L"GOTO", std::numeric_limits<int>().max()) - 1;
+							if (recorder_index < recorders.size())
+							{
+								std::wstring tc = _parameters.get(L"TC", L"");
+								success = recorders[recorder_index]->GoToTimecode(tc);
+							}
+							else {
+								recorder_index = _parameters.get(L"CALL", std::numeric_limits<int>().max()) - 1;
+								if (recorder_index < recorders.size())
+								{
+									unsigned int limit = _parameters.get(L"LIMIT", std::numeric_limits<unsigned int>().min());
+									recorders[recorder_index]->SetFrameLimit(limit);
+									success = true;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 	}
-	recorder_index = _parameters.get(L"CALL", std::numeric_limits<int>().max()) - 1;
-	if (recorder_index < recorders.size())
-	{
-		unsigned int limit = _parameters.get(L"LIMIT", std::numeric_limits<unsigned int>().min());
-		recorders[recorder_index]->SetFrameLimit(limit);
-		return true;
-	}
-	return false;
+	SetReplyString(success ? 
+		TEXT("201 RECORDER OK\r\n"):
+		TEXT("402 RECORDER ERROR\r\n"));
+	return success;
 }
 
 bool ThumbnailCommand::DoExecute()
