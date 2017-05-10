@@ -320,11 +320,13 @@ int main(int argc, wchar_t* argv[])
 						else if(wcmd.substr(0, 1) == L"5")
 							wcmd = L"PLAY 1-0 SYNCHRO";
 						else if (wcmd.substr(0, 1) == L"6")
-							wcmd = L"CAPTURE 2 recorder 1 IN 2:10:10:0 OUT 2:10:20:0 FILE  record.mp4";
+							wcmd = L"CAPTURE 2 recorder 1 IN 0:31:0:0 OUT 0:31:20:0 FILE record.mp4";
 						else if (wcmd.substr(0, 1) == L"7")
 							wcmd = L"CAPTURE 2 recorder 1 LIMIT 1250 FILE limit1.mov";
 						else if (wcmd.substr(0, 1) == L"8")
-							wcmd = L"CAPTURE 2 recorder 1 LIMIT 1250 FILE limit2.mov";
+							wcmd = L"CAPTURE 2 recorder 2 LIMIT 1250 FILE limit2.mov";
+						else if (wcmd.substr(0, 1) == L"0")
+							wcmd = L"RECORDER FINISH 1";
 						else if(upper_cmd.substr(0, 1) == L"X")
 						{
 							int num = 0;

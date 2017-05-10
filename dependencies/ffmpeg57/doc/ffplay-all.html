@@ -1,6 +1,6 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
 <html>
-<!-- Created by GNU Texinfo 5.2, http://www.gnu.org/software/texinfo/ -->
+<!-- Created by GNU Texinfo 6.1, http://www.gnu.org/software/texinfo/ -->
   <head>
     <meta charset="utf-8">
     <title>
@@ -5449,7 +5449,12 @@ For example to separate the fields with newlines and indention:
 <pre class="example">ffprobe -dump_separator &quot;
                           &quot;  -i ~/videos/matrixbench_mpeg2.mpg
 </pre></div>
+
 </dd>
+<dt><samp>max_streams <var>integer</var> (<em>input</em>)</samp></dt>
+<dd><p>Specifies the maximum number of streams. This can be used to reject files that
+would require too many resources due to a large number of streams.
+</p></dd>
 </dl>
 
 
