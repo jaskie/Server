@@ -314,7 +314,7 @@ int main(int argc, wchar_t* argv[])
 						else if(wcmd.substr(0, 1) == L"2")
 							wcmd = L"ADD 2 FILE RECORDING.MP4";
 						else if(wcmd.substr(0, 1) == L"3")
-							wcmd = L"REMOVE 2 FILE RECORDING.MXF";
+							wcmd = L"REMOVE 2 FILE RECORDING.MP4";
 						else if(wcmd.substr(0, 1) == L"4")
 							wcmd = L"PLAY 1-0 RECORDING";
 						else if(wcmd.substr(0, 1) == L"5")

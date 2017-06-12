@@ -38,7 +38,6 @@
 #include <common/concurrency/future_util.h>
 #include <common/diagnostics/graph.h>
 #include <common/env.h>
-#include <common/utility/string.h>
 #include <common/memory/memshfl.h>
 
 #include <boost/algorithm/string.hpp>
@@ -52,9 +51,7 @@
 
 #include <tbb/cache_aligned_allocator.h>
 #include <tbb/parallel_invoke.h>
-#include <tbb/atomic.h>
 
-#include <boost/range/algorithm.hpp>
 #include <boost/range/algorithm_ext.hpp>
 #include <boost/lexical_cast.hpp>
 
@@ -124,19 +121,19 @@ namespace caspar {
 			}
 		};
 
-		AVDictionary ** read_parameters(std::string options) {
-			AVDictionary ** result = new AVDictionary *;
-			LOG_ON_ERROR2(av_dict_parse_string(result, options.c_str(), "=", ",", 0), L"Parameters unrecognized");
+		AVDictionary * read_parameters(std::string options) {
+			AVDictionary* result = NULL;
+			LOG_ON_ERROR2(av_dict_parse_string(&result, options.c_str(), "=", ",", 0), L"Parameters unrecognized");
 			return result;
 		}
 
 		typedef std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>	byte_vector;
-
+		
 		struct ffmpeg_consumer : boost::noncopyable
 		{
 			tbb::atomic<bool>						ready_;
 			const std::string						filename_;
-			AVDictionary **							options_;
+			AVDictionary *							options_;
 			output_format							output_format_;
 			const core::video_format_desc			format_desc_;
 
@@ -144,13 +141,12 @@ namespace caspar {
 
 			executor								encode_executor_;
 
-			AVFormatContext *						format_context_;
+			std::unique_ptr<AVFormatContext, std::function<void(AVFormatContext *)>>	format_context_;
+			std::unique_ptr<AVStream, std::function<void(AVStream  *)>>					audio_st_;
+			std::unique_ptr<AVStream, std::function<void(AVStream  *)>>					video_st_;
 
-			AVStream *								audio_st_;
-			AVStream *								video_st_;
-
-			SwrContext *							swr_;
-			SwsContext *							sws_;
+			std::unique_ptr<SwrContext, std::function<void(SwrContext *)>>				swr_;
+			std::unique_ptr<SwsContext, std::function<void(SwsContext *)>>				sws_;
 
 			byte_vector								audio_bufers_[AV_NUM_DATA_POINTERS];
 			byte_vector								key_picture_buf_;
@@ -173,18 +169,16 @@ namespace caspar {
 				, output_format_(format)
 				, key_only_(key_only)
 				, options_(read_parameters(options))
-				, sws_(nullptr)
-				, swr_(nullptr)
-				, format_context_(nullptr)
-				, audio_st_(nullptr)
-				, video_st_(nullptr)
 			{
 				current_encoding_delay_ = 0;
 				out_frame_number_ = 0;
 				ready_ = false;
 				// TODO: Ask stakeholders about case where file already exists.
-				boost::filesystem2::remove(filename); // Delete the file if it exists
-
+				try// Delete the file if it exists
+				{
+					boost::filesystem2::remove(filename);
+				}
+				catch (...) {}
 				graph_->set_color("frame-time", diagnostics::color(0.1f, 1.0f, 0.1f));
 				graph_->set_color("dropped-frame", diagnostics::color(0.3f, 0.6f, 0.3f));
 				graph_->set_text(print());
@@ -194,31 +188,45 @@ namespace caspar {
 
 				try
 				{
-					format_context_ = alloc_output_format_context(filename_, output_format_.format);
+					format_context_ = std::unique_ptr<AVFormatContext, std::function<void(AVFormatContext *)>>(alloc_output_format_context(filename_, output_format_.format) , ([](AVFormatContext * ctx)
+					{
+						if (!(ctx->oformat->flags & AVFMT_NOFILE))
+							LOG_ON_ERROR2(avio_close(ctx->pb), "[ffmpeg_consumer]"); // Close the output ffmpeg.
+						avformat_free_context(ctx);
+					}));
 
 					//  Add the audio and video streams using the default format codecs	and initialize the codecs.
+					
 
-					video_st_ = add_video_stream();
+					auto stream_deleter = [](AVStream * stream) {
+						avcodec_close(stream->codec);
+						delete stream;
+					};
+
+					video_st_ = std::unique_ptr<AVStream, std::function<void(AVStream *)>>(add_video_stream(), stream_deleter);
 					if (!key_only_)
-						audio_st_ = add_audio_stream();
+						audio_st_ = std::unique_ptr<AVStream, std::function<void(AVStream *)>>(add_audio_stream(), stream_deleter);
 
 					av_dict_set(&video_st_->metadata, "timecode", output_format_.file_timecode.c_str(), AV_DICT_DONT_OVERWRITE);
 
-					av_dump_format(format_context_, 0, filename_.c_str(), 1);
-
+					av_dump_format(format_context_.get(), 0, filename_.c_str(), 1);
 					// Open the output
 					if (!(format_context_->oformat->flags & AVFMT_NOFILE))
 						avio_open(&format_context_->pb, filename_.c_str(), AVIO_FLAG_WRITE | AVIO_FLAG_NONBLOCK);
-					THROW_ON_ERROR2(avformat_write_header(format_context_, options_), "[ffmpeg_consumer]");
+					THROW_ON_ERROR2(avformat_write_header(format_context_.get(), &options_), "[ffmpeg_consumer]");
 					char * unused_options;
 					if (options_
-						&& av_dict_count(*options_) > 0
-						&& av_dict_get_string(*options_, &unused_options, '=', ',') >= 0)
+						&& av_dict_count(options_) > 0
+						&& av_dict_get_string(options_, &unused_options, '=', ',') >= 0)
+					{
 						CASPAR_LOG(warning) << print() << L" Unrecognized FFMpeg options: " << widen(std::string(unused_options));
+						if (unused_options)
+							delete(unused_options);
+						av_dict_free(&options_);
+					}
 				}
 				catch (...)
 				{
-					cleanup();
 					boost::filesystem2::remove(filename_); // Delete the file if exists and consumer not fully initialized
 					throw;
 				}
@@ -231,35 +239,16 @@ namespace caspar {
 				ready_ = false;
 				encode_executor_.stop();
 				encode_executor_.join();
-
 				if ((video_st_ && (video_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY))
 					|| (!key_only_ && (audio_st_ && (audio_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY))))
 					flush_encoders();
 				avio_flush(format_context_->pb);
-				LOG_ON_ERROR2(av_write_trailer(format_context_), "[ffmpeg_consumer]");
-				cleanup();
+				LOG_ON_ERROR2(av_write_trailer(format_context_.get()), "[ffmpeg_consumer]");
+
+				if (options_)
+					av_dict_free(&options_);
 
 				CASPAR_LOG(info) << print() << L" Successfully Uninitialized.";
-			}
-
-			void cleanup()
-			{
-				if (video_st_)
-					avcodec_close(video_st_->codec);
-				if (audio_st_)
-					avcodec_close(audio_st_->codec);
-				if (swr_)
-					swr_free(&swr_);
-				sws_freeContext(sws_); //if it's null, it does nothing
-
-				if (format_context_)
-				{
-					if (!(format_context_->oformat->flags & AVFMT_NOFILE))
-						LOG_ON_ERROR2(avio_close(format_context_->pb), "[ffmpeg_consumer]"); // Close the output ffmpeg.
-					avformat_free_context(format_context_);
-				}
-				if (options_)
-					av_dict_free(options_);
 			}
 
 			std::wstring print() const
@@ -276,7 +265,7 @@ namespace caspar {
 				if (!encoder)
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Codec not found."));
 
-				AVStream * st = avformat_new_stream(format_context_, encoder);
+				AVStream * st = avformat_new_stream(format_context_.get(), encoder);
 				if (!st)
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not allocate video-stream.") << boost::errinfo_api_function("av_new_stream"));
 
@@ -378,11 +367,11 @@ namespace caspar {
 					c->flags |= CODEC_FLAG_GLOBAL_HEADER;
 				c->sample_aspect_ratio = sample_aspect_ratio;
 
-				if (tbb_avcodec_open(c, encoder, options_, true) < 0)
+				if (tbb_avcodec_open(c, encoder, &options_, true) < 0)
 				{
 					CASPAR_LOG(debug) << print() << L" Multithreaded avcodec_open2 failed";
 					c->thread_count = 1;
-					THROW_ON_ERROR2(avcodec_open2(c, encoder, options_), "[ffmpeg_consumer]");
+					THROW_ON_ERROR2(avcodec_open2(c, encoder, &options_), "[ffmpeg_consumer]");
 				}
 				return st;
 			}
@@ -396,7 +385,7 @@ namespace caspar {
 				if (!encoder)
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("codec not found") << boost::errinfo_api_function("avcodec_find_encoder"));
 
-				auto st = avformat_new_stream(format_context_, encoder);
+				auto st = avformat_new_stream(format_context_.get(), encoder);
 				if (!st)
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not allocate audio-stream") << boost::errinfo_api_function("av_new_stream"));
 				st->id = 1;
@@ -436,7 +425,7 @@ namespace caspar {
 
 				audio_is_planar = av_sample_fmt_is_planar(c->sample_fmt) != 0;
 
-				THROW_ON_ERROR2(tbb_avcodec_open(c, encoder, options_, true), "[ffmpeg_consumer]");
+				THROW_ON_ERROR2(tbb_avcodec_open(c, encoder, &options_, true), "[ffmpeg_consumer]");
 
 				return st;
 			}
@@ -445,11 +434,13 @@ namespace caspar {
 			{
 				if (!sws_)
 				{
-					sws_ = sws_getContext(format_desc_.width, format_desc_.height, AV_PIX_FMT_BGRA, c->width, c->height, c->pix_fmt, SWS_BICUBIC, nullptr, nullptr, NULL);
-					if (sws_ == nullptr)
+					sws_ = std::unique_ptr<SwsContext, std::function<void(SwsContext *)>>(
+						sws_getContext(format_desc_.width, format_desc_.height, AV_PIX_FMT_BGRA, c->width, c->height, c->pix_fmt, SWS_BICUBIC, nullptr, nullptr, NULL),
+						[](SwsContext * ctx) { sws_freeContext(ctx); });
+					if (!sws_)
 						BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Cannot initialize the conversion context"));
 				}
-				std::shared_ptr<AVFrame> in_frame(av_frame_alloc(), [](AVFrame* frame) { av_frame_free(&frame); });
+				std::unique_ptr<AVFrame, std::function<void(AVFrame *)>> in_frame(av_frame_alloc(), [](AVFrame *frame) { av_frame_free(&frame); });
 				auto in_picture = reinterpret_cast<AVPicture*>(in_frame.get());
 
 				if (key_only_)
@@ -469,7 +460,7 @@ namespace caspar {
 				picture_buf_.resize(av_image_get_buffer_size(c->pix_fmt, c->width, c->height, 16));
 				av_image_fill_arrays(out_frame->data, out_frame->linesize, picture_buf_.data(), c->pix_fmt, c->width, c->height, 16);
 
-				sws_scale(sws_, in_frame->data, in_frame->linesize, 0, format_desc_.height, out_frame->data, out_frame->linesize);
+				sws_scale(sws_.get(), in_frame->data, in_frame->linesize, 0, format_desc_.height, out_frame->data, out_frame->linesize);
 				out_frame->width = format_desc_.width;
 				out_frame->height = format_desc_.height;
 				out_frame->format = c->pix_fmt;
@@ -486,8 +477,7 @@ namespace caspar {
 				av_frame->top_field_first = format_desc_.field_mode == core::field_mode::upper;
 				av_frame->pts = out_frame_number_++;
 
-				std::shared_ptr<AVPacket> pkt(av_packet_alloc(), [](AVPacket *p) { av_packet_free(&p); });
-
+				std::unique_ptr<AVPacket, std::function<void(AVPacket *)>> pkt(av_packet_alloc(), [](AVPacket *p) { av_packet_free(&p); });
 				av_init_packet(pkt.get());
 				int got_packet;
 
@@ -505,7 +495,7 @@ namespace caspar {
 					pkt->flags |= AV_PKT_FLAG_KEY;
 
 				pkt->stream_index = video_st_->index;
-				THROW_ON_ERROR2(av_interleaved_write_frame(format_context_, pkt.get()), "[video_encoder]");
+				THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), pkt.get()), "[video_encoder]");
 			}
 
 			void resample_audio(core::read_frame& frame, AVCodecContext* ctx)
@@ -514,18 +504,20 @@ namespace caspar {
 				{
 					uint64_t out_channel_layout = av_get_default_channel_layout(ctx->channels);
 					uint64_t in_channel_layout = create_channel_layout_bitmask(frame.num_channels());
-					swr_ = swr_alloc_set_opts(nullptr,
-						out_channel_layout,
-						ctx->sample_fmt,
-						ctx->sample_rate,
-						in_channel_layout,
-						AV_SAMPLE_FMT_S32,
-						format_desc_.audio_sample_rate,
-						0, nullptr);
+					swr_ = std::unique_ptr<SwrContext, std::function<void(SwrContext *)>>(
+						swr_alloc_set_opts(nullptr,
+							out_channel_layout,
+							ctx->sample_fmt,
+							ctx->sample_rate,
+							in_channel_layout,
+							AV_SAMPLE_FMT_S32,
+							format_desc_.audio_sample_rate,
+							0, nullptr),
+						[](SwrContext * ctx) {swr_free(&ctx); });
 					if (!swr_)
 						BOOST_THROW_EXCEPTION(caspar_exception()
 							<< msg_info("Cannot alloc audio resampler"));
-					THROW_ON_ERROR2(swr_init(swr_), "[audio_encoder]");
+					THROW_ON_ERROR2(swr_init(swr_.get()), "[audio_encoder]");
 				}
 				byte_vector out_buffers[AV_NUM_DATA_POINTERS];
 				const int in_samples_count = frame.audio_data().size() / frame.num_channels();
@@ -541,7 +533,7 @@ namespace caspar {
 				for (char i = 0; i < AV_NUM_DATA_POINTERS; i++)
 					out[i] = out_buffers[i].data();
 
-				int converted_sample_count = swr_convert(swr_,
+				int converted_sample_count = swr_convert(swr_.get(),
 					out, out_samples_count,
 					in, in_samples_count);
 				if (audio_is_planar)
@@ -573,11 +565,13 @@ namespace caspar {
 				size_t input_audio_size = enc->frame_size == 0 || is_last_frame ?
 					audio_bufers_[0].size() :
 					enc->frame_size * av_get_bytes_per_sample(enc->sample_fmt) * enc->channels;
+				if (!input_audio_size)
+					return;
 				int frame_size = input_audio_size / (av_get_bytes_per_sample(enc->sample_fmt) * enc->channels);
 				while (audio_bufers_[0].size() >= input_audio_size)
 				{
-					std::shared_ptr<AVPacket> pkt(av_packet_alloc(), [](AVPacket *p) { av_packet_free(&p); });
-					std::shared_ptr<AVFrame> in_frame(av_frame_alloc(), [](AVFrame* frame) {av_frame_free(&frame); });
+					std::unique_ptr<AVPacket, std::function<void(AVPacket *)>> pkt(av_packet_alloc(), [](AVPacket *p) { av_packet_free(&p); });
+					std::unique_ptr<AVFrame, std::function<void(AVFrame *)>> in_frame(av_frame_alloc(), [](AVFrame *frame) { av_frame_free(&frame); });
 					in_frame->nb_samples = frame_size;
 					in_frame->pts = out_audio_sample_number_;
 					out_audio_sample_number_ += frame_size;
@@ -602,7 +596,7 @@ namespace caspar {
 					if (pkt->dts != AV_NOPTS_VALUE)
 						pkt->dts = av_rescale_q(pkt->dts, enc->time_base, audio_st_->time_base);
 					pkt->stream_index = audio_st_->index;
-					THROW_ON_ERROR2(av_interleaved_write_frame(format_context_, pkt.get()), "[audio_encoder]");
+					THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), pkt.get()), "[audio_encoder]");
 				}
 			}
 
@@ -661,7 +655,7 @@ namespace caspar {
 				std::shared_ptr<AVPacket> pkt(av_packet_alloc(), [](AVPacket *p) { av_packet_free(&p); });
 
 				av_init_packet(pkt.get());
-				auto stream = video ? video_st_ : audio_st_;
+				auto stream = video ? video_st_.get() : audio_st_.get();
 				int got_packet;
 				if (video)
 					THROW_ON_ERROR2(avcodec_encode_video2(stream->codec, pkt.get(), NULL, &got_packet), "[flush_video]");
@@ -680,7 +674,7 @@ namespace caspar {
 					pkt->flags |= AV_PKT_FLAG_KEY;
 
 				pkt->stream_index = stream->index;
-				THROW_ON_ERROR2(av_interleaved_write_frame(format_context_, pkt.get()), "[flush_stream]");
+				THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), pkt.get()), "[flush_stream]");
 				return false;
 			}
 
@@ -720,8 +714,6 @@ namespace caspar {
 			virtual void initialize(const core::video_format_desc& format_desc, int)
 			{
 				format_desc_ = format_desc;
-				consumer_.reset();
-				key_only_consumer_.reset();
 				consumer_.reset(new ffmpeg_consumer(
 					narrow(output_format_.file_name),
 					format_desc_,
@@ -729,13 +721,11 @@ namespace caspar {
 					output_format_,
 					options_
 				));
-
 				if (separate_key_)
 				{
 					boost::filesystem::path fill_file(output_format_.file_name);
 					auto without_extension = fill_file.stem();
 					auto key_file = narrow(env::media_folder()) + without_extension + "_A" + fill_file.extension();
-
 					key_only_consumer_.reset(new ffmpeg_consumer(
 						narrow(key_file),
 						format_desc_,
@@ -744,6 +734,8 @@ namespace caspar {
 						options_
 					));
 				}
+				else
+					key_only_consumer_.reset();
 			}
 
 			virtual int64_t presentation_frame_age_millis() const override
