@@ -331,6 +331,7 @@ namespace caspar {
 						// IMX50 encoding parameters
 						c->pix_fmt = AV_PIX_FMT_YUV422P;
 						c->bit_rate = 50 * 1000000;
+						c->height = 608;
 						c->rc_max_rate = c->bit_rate;
 						c->rc_min_rate = c->bit_rate;
 						c->rc_buffer_size = 2000000;
@@ -373,6 +374,9 @@ namespace caspar {
 					c->thread_count = 1;
 					THROW_ON_ERROR2(avcodec_open2(c, encoder, &options_), "[ffmpeg_consumer]");
 				}
+
+				picture_buf_.resize(av_image_get_buffer_size(c->pix_fmt, c->width, c->height, 16));
+
 				return st;
 			}
 
@@ -435,7 +439,7 @@ namespace caspar {
 				if (!sws_)
 				{
 					sws_ = std::unique_ptr<SwsContext, std::function<void(SwsContext *)>>(
-						sws_getContext(format_desc_.width, format_desc_.height, AV_PIX_FMT_BGRA, c->width, c->height, c->pix_fmt, SWS_BICUBIC, nullptr, nullptr, NULL),
+						sws_getContext(format_desc_.width, format_desc_.height, AV_PIX_FMT_BGRA, format_desc_.width, format_desc_.height, c->pix_fmt, 0, nullptr, nullptr, NULL),
 						[](SwsContext * ctx) { sws_freeContext(ctx); });
 					if (!sws_)
 						BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Cannot initialize the conversion context"));
@@ -448,7 +452,6 @@ namespace caspar {
 					key_picture_buf_.resize(frame.image_data().size());
 					in_picture->linesize[0] = format_desc_.width * 4; //AV_PIX_FMT_BGRA
 					in_picture->data[0] = key_picture_buf_.data();
-
 					fast_memshfl(in_picture->data[0], frame.image_data().begin(), frame.image_data().size(), 0x0F0F0F0F, 0x0B0B0B0B, 0x07070707, 0x03030303);
 				}
 				else
@@ -457,12 +460,16 @@ namespace caspar {
 				}
 
 				std::shared_ptr<AVFrame> out_frame(av_frame_alloc(), [](AVFrame* frame) { av_frame_free(&frame); });
-				picture_buf_.resize(av_image_get_buffer_size(c->pix_fmt, c->width, c->height, 16));
+				bool is_imx50_pal = output_format_.is_mxf && format_desc_.format == core::video_format::pal;
+
 				av_image_fill_arrays(out_frame->data, out_frame->linesize, picture_buf_.data(), c->pix_fmt, c->width, c->height, 16);
 
-				sws_scale(sws_.get(), in_frame->data, in_frame->linesize, 0, format_desc_.height, out_frame->data, out_frame->linesize);
-				out_frame->width = format_desc_.width;
-				out_frame->height = format_desc_.height;
+				uint8_t *out_data[AV_NUM_DATA_POINTERS];
+				for (uint32_t i = 0; i < AV_NUM_DATA_POINTERS; i++)
+					out_data[i] = reinterpret_cast<uint8_t*>( out_frame->data[i] + ((is_imx50_pal && out_frame->data[i]) ? 32 * out_frame->linesize[i] : 0));
+				sws_scale(sws_.get(), in_frame->data, in_frame->linesize, 0, format_desc_.height, out_data, out_frame->linesize);
+				out_frame->height = c->height;
+				out_frame->width = c->width;
 				out_frame->format = c->pix_fmt;
 
 				return out_frame;

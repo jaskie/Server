@@ -310,11 +310,11 @@ int main(int argc, wchar_t* argv[])
 					{
 						// This is just dummy code for testing.
 						if(wcmd.substr(0, 1) == L"1")
-							wcmd = L"PLAY 1-0 route://2";
+							wcmd = L"PLAY 1-0 ZEGAR";
 						else if(wcmd.substr(0, 1) == L"2")
-							wcmd = L"ADD 2 FILE RECORDING.MP4";
+							wcmd = L"ADD 1 FILE RECORDING.MXF";
 						else if(wcmd.substr(0, 1) == L"3")
-							wcmd = L"REMOVE 2 FILE RECORDING.MP4";
+							wcmd = L"REMOVE 1 FILE RECORDING.MXF";
 						else if(wcmd.substr(0, 1) == L"4")
 							wcmd = L"PLAY 1-0 RECORDING";
 						else if(wcmd.substr(0, 1) == L"5")
