@@ -241,7 +241,7 @@ class decklink_frame : public IDeckLinkVideoFrame
 	const bool													key_only_;
 	std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>> data_;
 public:
-	decklink_frame(const safe_ptr<core::read_frame>& frame, const core::video_format_desc& format_desc, bool key_only)
+	decklink_frame(const std::shared_ptr<core::read_frame>& frame, const core::video_format_desc& format_desc, bool key_only)
 		: frame_(frame)
 		, format_desc_(format_desc)
 		, key_only_(key_only)
@@ -249,7 +249,7 @@ public:
 		ref_count_ = 0;
 	}
 
-	decklink_frame(const safe_ptr<core::read_frame>& frame, const core::video_format_desc& format_desc, std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>&& key_data)
+	decklink_frame(const std::shared_ptr<core::read_frame>& frame, const core::video_format_desc& format_desc, std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>&& key_data)
 		: frame_(frame)
 		, format_desc_(format_desc)
 		, key_only_(true)

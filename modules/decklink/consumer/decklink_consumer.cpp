@@ -51,7 +51,7 @@
 
 namespace caspar { namespace decklink { 
 
-struct decklink_consumer : public IDeckLinkVideoOutputCallback, public IDeckLinkAudioOutputCallback, boost::noncopyable
+struct decklink_consumer : public IDeckLinkVideoOutputCallback, boost::noncopyable
 {
 	const int										channel_index_;
 	const configuration								config_;
@@ -78,9 +78,7 @@ struct decklink_consumer : public IDeckLinkVideoOutputCallback, public IDeckLink
 		
 	boost::circular_buffer<std::vector<int32_t>>	audio_container_;
 
-	tbb::concurrent_bounded_queue<std::shared_ptr<core::read_frame>> video_frame_buffer_;
-	tbb::concurrent_bounded_queue<std::shared_ptr<core::read_frame>> audio_frame_buffer_;
-	
+	tbb::concurrent_bounded_queue<std::shared_ptr<core::read_frame>> frame_buffer_;
 	
 	safe_ptr<diagnostics::graph>					graph_;
 	boost::timer									tick_timer_;
@@ -110,12 +108,7 @@ public:
 		is_running_ = true;
 		current_presentation_delay_ = 0;
 				
-		video_frame_buffer_.set_capacity(1);
-
-		// Blackmagic calls RenderAudioSamples() 50 times per second
-		// regardless of video mode so we sometimes need to give them
-		// samples from 2 frames in order to keep up
-		audio_frame_buffer_.set_capacity((format_desc.fps > 50.0) ? 2 : 1);
+		frame_buffer_.set_capacity(1);
 
 		graph_->set_color("tick-time", diagnostics::color(0.0f, 0.6f, 0.9f));	
 		graph_->set_color("late-frame", diagnostics::color(0.6f, 0.3f, 0.3f));
@@ -134,21 +127,28 @@ public:
 		set_latency(configuration_, config.latency, print());
 		set_keyer(attributes_, keyer_, config.keyer, print());
 				
-		for(size_t n = 0; n < buffer_size_; ++n)
-			schedule_next_video(make_safe<core::read_frame>());
+		if (config.embedded_audio)
+			output_->BeginAudioPreroll();
 
-		if(config.embedded_audio)		
-			output_->BeginAudioPreroll();		
-		
-		if(!config.embedded_audio)
-			start_playback();
+		for (uint32_t n = 0; n < buffer_size_; ++n)
+		{
+			if (config.embedded_audio)
+				schedule_next_audio(silent_audio());
+			schedule_next_video(make_safe<core::read_frame>());
+		}
+
+		if (config.embedded_audio)
+		{
+			schedule_next_audio(silent_audio());
+			output_->EndAudioPreroll();
+		}
+		start_playback();
 	}
 
 	~decklink_consumer()
 	{		
 		is_running_ = false;
-		video_frame_buffer_.try_push(std::make_shared<core::read_frame>());
-		audio_frame_buffer_.try_push(std::make_shared<core::read_frame>());
+		frame_buffer_.try_push(std::make_shared<core::read_frame>());
 
 		if(output_ != nullptr) 
 		{
@@ -164,10 +164,6 @@ public:
 	{
 		if(FAILED(output_->EnableAudioOutput(bmdAudioSampleRate48kHz, bmdAudioSampleType32bitInteger, config_.num_out_channels(), bmdAudioOutputStreamTimestamped)))
 				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Could not enable audio output."));
-				
-		if(FAILED(output_->SetAudioCallback(this)))
-			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Could not set audio callback."));
-
 		CASPAR_LOG(info) << print() << L" Enabled embedded-audio.";
 	}
 
@@ -186,6 +182,12 @@ public:
 	{
 		if(FAILED(output_->StartScheduledPlayback(0, format_desc_.time_scale, 1.0))) 
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Failed to schedule playback."));
+	}
+
+	core::multichannel_view<int32_t, std::_Vector_iterator<std::_Vector_val<int32_t, tbb::cache_aligned_allocator<int32_t>>>> silent_audio() const
+	{
+		core::audio_buffer silent_audio(format_desc_.audio_cadence[preroll_count_ % format_desc_.audio_cadence.size()] * config_.num_out_channels(), 0);
+		return core::make_multichannel_view<int32_t>(silent_audio.begin(), silent_audio.end(), config_.audio_layout, config_.num_out_channels());
 	}
 	
 	STDMETHOD (QueryInterface(REFIID, LPVOID*))	{return E_NOINTERFACE;}
@@ -215,71 +217,34 @@ public:
 				graph_->set_tag("late-frame");
 				video_scheduled_ += format_desc_.duration;
 				audio_scheduled_ += dframe->audio_data().size()/config_.num_out_channels();
-				//++video_scheduled_;
-				//audio_scheduled_ += format_desc_.audio_cadence[0];
-				//++audio_scheduled_;
+				CASPAR_LOG(warning) << print() << L" Frame late.";
 			}
-			else if(result == bmdOutputFrameDropped)
+			else if (result == bmdOutputFrameDropped)
+			{
 				graph_->set_tag("dropped-frame");
-			else if(result == bmdOutputFrameFlushed)
+				CASPAR_LOG(warning) << print() << L" Frame dropped.";
+			}
+			else if (result == bmdOutputFrameFlushed)
+			{
 				graph_->set_tag("flushed-frame");
+				CASPAR_LOG(warning) << print() << L" Frame flushed.";
+			}
 
 			std::shared_ptr<core::read_frame> frame;	
-			video_frame_buffer_.pop(frame);
+			frame_buffer_.pop(frame);
 			send_completion_.try_completion();
-			schedule_next_video(make_safe_ptr(frame));	
+
+			if (config_.embedded_audio)
+				schedule_next_audio(frame->multichannel_view());
+			schedule_next_video(frame);	
 			
 			unsigned int buffered;
 			output_->GetBufferedVideoFrameCount(&buffered);
 			graph_->set_value("buffered-video", static_cast<double>(buffered)/buffer_size_);
-		}
-		catch(...)
-		{
-			tbb::spin_mutex::scoped_lock lock(exception_mutex_);
-			exception_ = std::current_exception();
-			return E_FAIL;
-		}
 
-		return S_OK;
-	}
-		
-	STDMETHOD(RenderAudioSamples(BOOL preroll))
-	{
-		win32_exception::ensure_handler_installed_for_thread("decklink-RenderAudioSamples");
-
-		if(!is_running_)
-			return E_FAIL;
-		
-		try
-		{	
-			if(preroll)
-			{
-				if(preroll_count_++ >= buffer_size_)
-				{
-					output_->EndAudioPreroll();
-					start_playback();				
-				}
-				else
-				{
-					core::audio_buffer silent_audio(format_desc_.audio_cadence[preroll_count_ % format_desc_.audio_cadence.size()] * config_.num_out_channels(), 0);
-					auto view = core::make_multichannel_view<int32_t>(silent_audio.begin(), silent_audio.end(), config_.audio_layout, config_.num_out_channels());
-					schedule_next_audio(view);
-				}
-			}
-			else
-			{
-				std::shared_ptr<core::read_frame> frame;
-
-				while (audio_frame_buffer_.try_pop(frame))
-				{
-					send_completion_.try_completion();
-					schedule_next_audio(frame->multichannel_view());
-				}
-			}
-
-			unsigned int buffered;
 			output_->GetBufferedAudioSampleFrameCount(&buffered);
-			graph_->set_value("buffered-audio", static_cast<double>(buffered)/(format_desc_.audio_cadence[0] * config_.num_out_channels() * 2));
+			graph_->set_value("buffered-audio", static_cast<double>(buffered) / (format_desc_.audio_cadence[0] * config_.num_out_channels() * 2));
+
 		}
 		catch(...)
 		{
@@ -290,7 +255,7 @@ public:
 
 		return S_OK;
 	}
-
+		
 	template<typename View>
 	void schedule_next_audio(const View& view)
 	{
@@ -338,7 +303,7 @@ public:
 		audio_scheduled_ += sample_frame_count;
 	}
 			
-	void schedule_next_video(const safe_ptr<core::read_frame>& frame)
+	void schedule_next_video(const std::shared_ptr<core::read_frame>& frame)
 	{
 		CComPtr<IDeckLinkVideoFrame> frame2(new decklink_frame(frame, format_desc_, config_.key_only));
 		if(FAILED(output_->ScheduleVideoFrame(frame2, video_scheduled_, format_desc_.duration, format_desc_.time_scale)))
@@ -362,18 +327,15 @@ public:
 		if (!is_running_)
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Is not running."));
 
-		bool audio_ready = !config_.embedded_audio;
-		bool video_ready = false;
+		bool buffer_ready = false;
 
-		auto enqueue_task = [audio_ready, video_ready, frame, this]() mutable -> boost::optional<bool>
+		auto enqueue_task = [buffer_ready, frame, this]() mutable -> boost::optional<bool>
 		{
-			if (!audio_ready)
-				audio_ready = audio_frame_buffer_.try_push(frame);
 
-			if (!video_ready)
-				video_ready = video_frame_buffer_.try_push(frame);
+			if (!buffer_ready)
+				buffer_ready = frame_buffer_.try_push(frame);
 
-			if (audio_ready && video_ready)
+			if (buffer_ready)
 				return true;
 			else
 				return boost::optional<bool>();
