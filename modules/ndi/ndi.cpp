@@ -21,14 +21,10 @@
 
 #include "ndi.h" 
 #include "util/ndi_util.h"
-
-#include <core/parameters/parameters.h>
 #include <core/consumer/frame_consumer.h>
 #include "consumer/ndi_consumer.h"
 #include <common/log/log.h>
-#include <Processing.NDI.Lib.h>
 #include <common/utility/string.h>
-
 
 
 namespace caspar {

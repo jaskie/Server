@@ -341,7 +341,7 @@ struct frame_muxer::implementation : boost::noncopyable
 		else if(display_mode_ == display_mode::deinterlace_bob)
 			filter_str = append_filter(filter_str, "YADIF=1:-1");
 		else if (display_mode_ == display_mode::scale_interlaced)
-			filter_str = append_filter(filter_str, (boost::format("SCALE=w=%1%:h=%2%:interl=-1") %format_desc_.width %format_desc_.height).str());
+			filter_str = append_filter(filter_str, (boost::format("SCALE=w=%1%:h=%2%:interl=1") %format_desc_.width %format_desc_.height).str());
 
 		if(display_mode_ == display_mode::invalid)
 		{
