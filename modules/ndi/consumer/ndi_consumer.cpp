@@ -40,19 +40,18 @@
 #include <boost/thread.hpp>
 #include <boost/timer.hpp>
 
-#pragma warning(push)
-#pragma warning(disable: 4244)
-#pragma warning(disable: 4245)
-#include <boost/crc.hpp>
-#pragma warning(pop)
-
 #if defined(_MSC_VER)
 #pragma warning (push)
 #pragma warning (disable : 4244)
+#pragma warning(disable: 4245)
 #endif
+#include <boost/crc.hpp>
 extern "C"
 {
 #include <libswresample/swresample.h>
+#include <libswscale/swscale.h>
+#include <libavcodec/avcodec.h>
+#include <libavutil/imgutils.h>
 }
 #if defined(_MSC_VER)
 #pragma warning (pop)
@@ -102,31 +101,37 @@ namespace caspar {
 
 		struct ndi_consumer : public boost::noncopyable
 		{
-			const core::video_format_desc		format_desc_;
-			const core::channel_layout		    channel_layout_;
-			const std::wstring					ndi_name_;
-			const NDIlib_v2*					ndi_lib_;
-			const NDIlib_send_instance_t		ndi_send_;
-			executor							executor_;
-			SwrContext *						swr_;
-			safe_ptr<diagnostics::graph>		graph_;
-			tbb::atomic<int64_t>				current_encoding_delay_;
-			boost::timer						audio_send_timer_;
-			boost::timer						video_send_timer_;
-			boost::timer						tick_timer_;
+			const core::video_format_desc									format_desc_;
+			const core::channel_layout										channel_layout_;
+			const std::wstring												ndi_name_;
+			const bool														is_alpha_;
+			const NDIlib_v2*												ndi_lib_;
+			const NDIlib_send_instance_t									ndi_send_;
+			std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>     send_frame_buffer_;
+			executor														executor_;
+			std::unique_ptr<SwrContext, std::function<void(SwrContext*)>>	swr_;
+			std::unique_ptr<SwsContext, std::function<void(SwsContext*)>>	sws_;
+			safe_ptr<diagnostics::graph>									graph_;
+			tbb::atomic<int64_t>											current_encoding_delay_;
+			boost::timer													audio_send_timer_;
+			boost::timer													video_send_timer_;
+			boost::timer													tick_timer_;
+			boost::timer													frame_convert_timer_;
 
 		public:
 
 			// frame_consumer
 
-			ndi_consumer(const core::video_format_desc format_desc, const core::channel_layout channel_layout, const std::string& ndi_name, const std::string groups)
+			ndi_consumer(const core::video_format_desc format_desc, const core::channel_layout channel_layout, const std::string& ndi_name, const std::string groups, const bool is_alpha)
 				: channel_layout_(channel_layout)
 				, format_desc_(format_desc)
 				, ndi_name_(widen(ndi_name))
+				, is_alpha_(is_alpha)
 				, ndi_lib_(load_ndi())
 				, ndi_send_(create_ndi_send(ndi_lib_, ndi_name, groups))
 				, executor_(print())
-				, swr_(nullptr)
+				, swr_(nullptr, [](SwrContext* ctx) -> void { if (ctx) swr_free(&ctx); })
+				, sws_(nullptr, [](SwsContext* ctx) -> void{ sws_freeContext(ctx); })
 			{
 				current_encoding_delay_ = 0;
 				executor_.set_capacity(1);
@@ -134,6 +139,8 @@ namespace caspar {
 				graph_->set_color("audio-send-time", diagnostics::color(0.5f, 1.0f, 0.1f));
 				graph_->set_color("video-send-time", diagnostics::color(1.0f, 1.0f, 0.1f));
 				graph_->set_color("tick-time", diagnostics::color(0.0f, 0.6f, 0.9f));
+				if (!is_alpha)
+					graph_->set_color("frame-convert-time", diagnostics::color(0.8f, 0.6f, 0.9f));
 				diagnostics::register_graph(graph_);
 			}
 
@@ -141,24 +148,20 @@ namespace caspar {
 			{
 				if (ndi_send_)
 					ndi_lib_->NDIlib_send_destroy(ndi_send_);
-				if (swr_)
-					swr_free(&swr_);
 				CASPAR_LOG(info) << print() << L" Successfully Uninitialized.";
 			}
 						
 			boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame)
 			{
-				if (executor_.size() < executor_.capacity())
+				if (executor_.size() < executor_.capacity()) 
 					return executor_.begin_invoke([this, frame]() -> bool {
-					graph_->set_value("tick-time", tick_timer_.elapsed() * format_desc_.fps * 0.5f);
-					tick_timer_.restart();
+					send_video(frame);
 					audio_send_timer_.restart();
 					send_audio(frame);
 					graph_->set_value("audio-send-time", audio_send_timer_.elapsed() * format_desc_.fps * 0.5f);
-					video_send_timer_.restart();
-					send_video(frame);
-					graph_->set_value("video-send-time", video_send_timer_.elapsed() * format_desc_.fps * 0.5f);
 					current_encoding_delay_ = frame->get_age_millis();
+					graph_->set_value("tick-time", tick_timer_.elapsed() * format_desc_.fps * 0.5f);
+					tick_timer_.restart();
 					return true;
 				});
 				else
@@ -170,19 +173,42 @@ namespace caspar {
 
 			void send_video(const safe_ptr<core::read_frame>& frame)
 			{
-				std::unique_ptr<NDIlib_video_frame_t> video_frame(create_video_frame(format_desc_));
-				video_frame->p_data = const_cast<uint8_t*>(frame->image_data().begin());
-				ndi_lib_->NDIlib_send_send_video(ndi_send_, video_frame.get());
+				std::unique_ptr<NDIlib_video_frame_t> ndi_frame(create_video_frame(format_desc_, is_alpha_));
+				if (is_alpha_)
+				{
+					video_send_timer_.restart();
+					ndi_frame->p_data = const_cast<uint8_t*>(frame->image_data().begin());
+				}
+				else  //colorspace conversion
+				{
+					frame_convert_timer_.restart();
+					if (!sws_)
+					{
+						sws_.reset(sws_getContext(format_desc_.width, format_desc_.height, AV_PIX_FMT_BGRA, format_desc_.width, format_desc_.height, AV_PIX_FMT_UYVY422, SWS_POINT, NULL, NULL, NULL));
+						send_frame_buffer_.resize(av_image_get_buffer_size(AV_PIX_FMT_BGRA, format_desc_.width, format_desc_.height, 16));
+					}
+					uint8_t *src_data[4];
+					int src_linesize[4];
+					uint8_t *dest_data[4];
+					int dst_linesize[4];
+					av_image_fill_arrays(src_data, src_linesize, frame->image_data().begin(), AV_PIX_FMT_BGRA, format_desc_.width, format_desc_.height, 1);
+					av_image_fill_arrays(dest_data, dst_linesize, &send_frame_buffer_.front(), AV_PIX_FMT_UYVY422, format_desc_.width, format_desc_.height, 16);
+					sws_scale(sws_.get(), src_data, src_linesize, 0, format_desc_.height, dest_data, dst_linesize);
+					graph_->set_value("frame-convert-time", frame_convert_timer_.elapsed() * format_desc_.fps * 0.5f);
+					ndi_frame->p_data = &send_frame_buffer_.front();
+					video_send_timer_.restart();
+				}
+				ndi_lib_->NDIlib_send_send_video(ndi_send_, ndi_frame.get());
+				graph_->set_value("video-send-time", video_send_timer_.elapsed() * format_desc_.fps * 0.5f);
 			}
 
 			void send_audio(const safe_ptr<core::read_frame>& frame)
 			{
 				if (!swr_)
-					swr_ = create_swr(format_desc_, channel_layout_, frame->num_channels());
-
+					swr_.reset(create_swr(format_desc_, channel_layout_, frame->num_channels()));
 				auto audio_frame = create_audio_frame(channel_layout_, frame->multichannel_view().num_samples(), format_desc_.audio_sample_rate);
 				const uint8_t* in[] = { reinterpret_cast<const uint8_t*>(frame->audio_data().begin()) };
-				int converted_sample_count = swr_convert(swr_,
+				int converted_sample_count = swr_convert(swr_.get(),
 					reinterpret_cast<uint8_t**>(&audio_frame->p_data), audio_frame->no_samples,
 					in, frame->multichannel_view().num_samples());
 				if (converted_sample_count != audio_frame->no_samples)
@@ -204,19 +230,21 @@ namespace caspar {
 			const core::channel_layout				channel_layout_;
 			const std::string						ndi_name_;
 			const std::string						groups_;
+			const bool								is_alpha_;
 
 		public:
 
-			ndi_consumer_proxy(core::channel_layout channel_layout, const std::string& ndi_name, const std::string& groups)
+			ndi_consumer_proxy(core::channel_layout channel_layout, const std::string& ndi_name, const std::string& groups, bool is_alpha)
 				: index_(NDI_CONSUMER_BASE_INDEX + crc16(ndi_name))
 				, channel_layout_(channel_layout)
 				, ndi_name_(ndi_name)
 				, groups_(groups)
+				, is_alpha_(is_alpha)
 			{	}
 
 			virtual void initialize(const core::video_format_desc& format_desc, int) override
 			{
-				consumer_.reset(new ndi_consumer(format_desc, channel_layout_, ndi_name_, groups_));
+				consumer_.reset(new ndi_consumer(format_desc, channel_layout_, ndi_name_, groups_, is_alpha_));
 			}
 
 			virtual bool has_synchronization_clock() const override
@@ -271,21 +299,23 @@ namespace caspar {
 			if (params.size() > 1)
 				ndi_name = narrow(params.at(1));
 			std::string groups = narrow(params.get(L"GROUPS", L""));
+			bool is_alpha = params.get(L"ALPHA", true);
 			auto channel_layout = core::default_channel_layout_repository()
 				.get_by_name(
 					params.get(L"CHANNEL_LAYOUT", L"STEREO"));
-			return make_safe<ndi_consumer_proxy>(channel_layout, ndi_name, groups);
+			return make_safe<ndi_consumer_proxy>(channel_layout, ndi_name, groups, is_alpha);
 		}
 
 		safe_ptr<core::frame_consumer> create_ndi_consumer(const boost::property_tree::wptree& ptree)
 		{
 			auto ndi_name = narrow(ptree.get(L"name", L"default"));
 			auto groups = narrow(ptree.get(L"groups", L""));
+			bool is_alpha = ptree.get(L"alpha", true);
 			auto channel_layout =
 				core::default_channel_layout_repository()
 				.get_by_name(
 					boost::to_upper_copy(ptree.get(L"channel-layout", L"STEREO")));
-			return make_safe<ndi_consumer_proxy>(channel_layout, ndi_name, groups);
+			return make_safe<ndi_consumer_proxy>(channel_layout, ndi_name, groups, is_alpha);
 		}
 
 	}

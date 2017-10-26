@@ -40,21 +40,21 @@ extern "C"
 
 namespace caspar { namespace ndi {
 
-NDIlib_video_frame_t * create_video_frame(const core::video_format_desc format)
+NDIlib_video_frame_t * create_video_frame(const core::video_format_desc format, const bool is_alpha)
 {
 	NDIlib_video_frame_t* frame = new NDIlib_video_frame_t();
 	if (frame)
 	{
 		frame->xres = format.width;
 		frame->yres = format.height;
-		frame->FourCC = NDIlib_FourCC_type_BGRA;
+		frame->FourCC = is_alpha ? NDIlib_FourCC_type_BGRA : NDIlib_FourCC_type_UYVY;
 		frame->frame_rate_N = format.time_scale;
 		frame->frame_rate_D = format.duration;
 		frame->picture_aspect_ratio = static_cast<float>(format.square_width) / static_cast<float>(format.square_height);
 		frame->frame_format_type = (format.field_mode == caspar::core::field_mode::progressive) ? NDIlib_frame_format_type_progressive : NDIlib_frame_format_type_interleaved;
 		frame->timecode = NDIlib_send_timecode_synthesize;
 		frame->p_data = nullptr;
-		frame->line_stride_in_bytes = format.width * 4;
+		frame->line_stride_in_bytes = format.width * (is_alpha ? 4 : 2);
 	}
 	return frame;
 }

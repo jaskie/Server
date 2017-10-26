@@ -131,7 +131,6 @@ namespace caspar {
 		
 		struct ffmpeg_consumer : boost::noncopyable
 		{
-			tbb::atomic<bool>						ready_;
 			const std::string						filename_;
 			AVDictionary *							options_;
 			output_format							output_format_;
@@ -172,7 +171,6 @@ namespace caspar {
 			{
 				current_encoding_delay_ = 0;
 				out_frame_number_ = 0;
-				ready_ = false;
 				// TODO: Ask stakeholders about case where file already exists.
 				try// Delete the file if it exists
 				{
@@ -180,7 +178,7 @@ namespace caspar {
 				}
 				catch (...) {}
 				graph_->set_color("frame-time", diagnostics::color(0.1f, 1.0f, 0.1f));
-				graph_->set_color("dropped-frame", diagnostics::color(0.3f, 0.6f, 0.3f));
+				graph_->set_color("dropped-frame", diagnostics::color(1.0f, 0.1f, 0.1f));
 				graph_->set_text(print());
 				diagnostics::register_graph(graph_);
 
@@ -230,13 +228,11 @@ namespace caspar {
 					boost::filesystem2::remove(filename_); // Delete the file if exists and consumer not fully initialized
 					throw;
 				}
-				ready_ = true;
 				CASPAR_LOG(info) << print() << L" Successfully Initialized.";
 			}
 
 			~ffmpeg_consumer()
 			{
-				ready_ = false;
 				encode_executor_.stop();
 				encode_executor_.join();
 				if ((video_st_ && (video_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY))
@@ -631,7 +627,7 @@ namespace caspar {
 
 			bool ready_for_frame()
 			{
-				return ready_ && (encode_executor_.size() < encode_executor_.capacity());
+				return encode_executor_.size() < encode_executor_.capacity();
 			}
 
 			void mark_dropped()

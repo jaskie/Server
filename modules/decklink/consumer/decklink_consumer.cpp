@@ -143,6 +143,7 @@ public:
 			output_->EndAudioPreroll();
 		}
 		start_playback();
+		CASPAR_LOG(info) << print() << L" successfully initialized.";
 	}
 
 	~decklink_consumer()
@@ -361,7 +362,6 @@ struct decklink_consumer_proxy : public core::frame_consumer
 	const configuration				config_;
 	com_context<decklink_consumer>	context_;
 	std::vector<size_t>				audio_cadence_;
-	core::video_format_desc			format_desc_;
 public:
 
 	decklink_consumer_proxy(const configuration& config)
@@ -376,16 +376,12 @@ public:
 	{
 		context_.reset([&]{return new decklink_consumer(config_, format_desc, channel_index);});		
 		audio_cadence_ = format_desc.audio_cadence;		
-		format_desc_ = format_desc;
-
-		CASPAR_LOG(info) << print() << L" successfully initialized.";	
 	}
 	
 	virtual boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame) override
 	{
 		CASPAR_VERIFY(audio_cadence_.front() * frame->num_channels() == static_cast<size_t>(frame->audio_data().size()));
 		boost::range::rotate(audio_cadence_, std::begin(audio_cadence_)+1);
-
 		return context_->send(frame);
 	}
 	
