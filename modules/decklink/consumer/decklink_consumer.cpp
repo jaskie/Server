@@ -235,7 +235,7 @@ public:
 			frame_buffer_.pop(frame);
 			send_completion_.try_completion();
 
-			if (config_.embedded_audio)
+			if (config_.embedded_audio && frame->audio_data())
 				schedule_next_audio(frame->multichannel_view());
 			schedule_next_video(frame);	
 			
@@ -300,7 +300,7 @@ public:
 				&samples_written)))
 			CASPAR_LOG(error) << print() << L" Failed to schedule audio.";
 		if (samples_written != static_cast<unsigned int>(sample_frame_count))
-			CASPAR_LOG(warning) << print() << L" Not all available audio samples has been scheduled.";
+			CASPAR_LOG(warning) << print() << L" Not all available audio samples has been scheduled (" << samples_written << L" of " << sample_frame_count << L")";
 		audio_scheduled_ += sample_frame_count;
 	}
 			
