@@ -138,10 +138,8 @@ public:
 		}
 
 		if (config.embedded_audio)
-		{
-			schedule_next_audio(silent_audio());
 			output_->EndAudioPreroll();
-		}
+
 		start_playback();
 		CASPAR_LOG(info) << print() << L" successfully initialized.";
 	}
@@ -239,13 +237,21 @@ public:
 				schedule_next_audio(frame->multichannel_view());
 			schedule_next_video(frame);	
 			
-			unsigned int buffered;
-			output_->GetBufferedVideoFrameCount(&buffered);
-			graph_->set_value("buffered-video", static_cast<double>(buffered)/buffer_size_);
+			unsigned int buffered_video;
+			output_->GetBufferedVideoFrameCount(&buffered_video);
+			graph_->set_value("buffered-video", static_cast<double>(buffered_video)/buffer_size_);
+			if (buffered_video >= static_cast<unsigned int>(format_desc_.fps))
+				CASPAR_LOG(error) << print() << L" Video buffer overflow.";
+			if (buffered_video <= 1)
+				CASPAR_LOG(warning) << print() << L" Video buffer underflow. Consider increasing the buffer depth.";
 
-			output_->GetBufferedAudioSampleFrameCount(&buffered);
-			graph_->set_value("buffered-audio", static_cast<double>(buffered) / (format_desc_.audio_cadence[0] * config_.num_out_channels() * 2));
-
+			unsigned int buffered_audio;
+			output_->GetBufferedAudioSampleFrameCount(&buffered_audio);
+			graph_->set_value("buffered-audio", static_cast<double>(buffered_audio) / (format_desc_.audio_cadence[0] * config_.num_out_channels() * 2));
+			if (buffered_audio >= bmdAudioSampleRate48kHz)
+				CASPAR_LOG(error) << print() << L" Audio buffer overflow.";
+			if (buffered_audio <= format_desc_.audio_cadence[0])
+				CASPAR_LOG(warning) << print() << L" Audio buffer underflow.";
 		}
 		catch(...)
 		{

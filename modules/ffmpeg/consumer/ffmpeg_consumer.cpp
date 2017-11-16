@@ -198,7 +198,6 @@ namespace caspar {
 
 					auto stream_deleter = [](AVStream * stream) {
 						avcodec_close(stream->codec);
-						delete stream;
 					};
 
 					video_st_ = std::unique_ptr<AVStream, std::function<void(AVStream *)>>(add_video_stream(), stream_deleter);
