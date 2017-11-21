@@ -10,7 +10,8 @@ This is fork of 2.06 Stable master branch with following fixes and enhacements w
 7. Added new transition type: SQUEEZE (both background and foreground layers).
 8. Added transition pause at half of its duration of specified length.
 9. Allows creating a input channel with no initial consumer, but with decklink input open (to record it with ADD FILE, CAPTURE or instantly play with ROUTE command).
-11. Added deck control, with new CAPTURE and RECORDER commands (see wiki).
+10. Added deck control, with new CAPTURE and RECORDER commands (see wiki).
+11. Added native Newtek NDI (http://ndi.newtek.com) consumer able to stream with or without alpha channel.
 
 --------------------------------------
 |        Original readme below       |
