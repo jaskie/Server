@@ -203,11 +203,6 @@ struct input::implementation : boost::noncopyable
 		return is_eof_ && flush_av_packet_count_ <= 0;
 	}
 
-	bool is_mxf() const
-	{
-		return strcmp(format_context_->iformat->name, "mxf") == 0;
-	}
-
 	void tick()
 	{	
 		if(is_eof_)
@@ -291,7 +286,6 @@ bool input::try_pop_audio(std::shared_ptr<AVPacket>& packet){return impl_->try_p
 bool input::try_pop_video(std::shared_ptr<AVPacket>& packet) { return impl_->try_pop_video(packet); }
 safe_ptr<AVFormatContext> input::format_context(){return impl_->format_context_;}
 bool input::seek(int64_t target_time){return impl_->seek(target_time);}
-bool input::is_mxf() const { return impl_->is_mxf(); }
 safe_ptr<AVCodecContext> input::open_audio_codec(int& index) { return impl_->open_audio_codec(index);}
 safe_ptr<AVCodecContext> input::open_video_codec(int& index) { return impl_->open_video_codec(index); }
 

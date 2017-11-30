@@ -54,7 +54,6 @@ public:
 			const safe_ptr<core::frame_factory>& frame_factory,
 			bool thumbnail_mode,
 			const core::channel_layout& audio_channel_layout,
-			bool is_mxf,
 			const std::string& filter = "");
 	
 	void push(const std::shared_ptr<AVFrame>& video_frame, int hints = 0, int frame_timecode = std::numeric_limits<unsigned int>().max());

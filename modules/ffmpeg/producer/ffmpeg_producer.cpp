@@ -186,7 +186,7 @@ public:
 		if(!video_decoder_ && !audio_decoder_)
 			BOOST_THROW_EXCEPTION(averror_stream_not_found() << msg_info("No streams found"));
 
-		muxer_.reset(new frame_muxer(format_desc_.fps, frame_factory, thumbnail_mode_, audio_channel_layout_, input_.is_mxf(), filter_str_));
+		muxer_.reset(new frame_muxer(format_desc_.fps, frame_factory, thumbnail_mode_, audio_channel_layout_, filter_str_));
 		seek(start);
 		for (int n = 0; n < 32 && frame_buffer_.size() < 4; ++n)
 			try_decode_frame(thumbnail_mode ? core::frame_producer::DEINTERLACE_HINT : alpha_mode ? core::frame_producer::ALPHA_HINT : core::frame_producer::NO_HINT);

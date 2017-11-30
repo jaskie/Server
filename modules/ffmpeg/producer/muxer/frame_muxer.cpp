@@ -86,15 +86,14 @@ struct frame_muxer::implementation : boost::noncopyable
 	const bool										thumbnail_mode_;
 	bool											force_deinterlacing_;
 	const core::channel_layout						audio_channel_layout_;
-	const bool										is_mxf_;
 		
 	implementation(
 			double in_fps,
 			const safe_ptr<core::frame_factory>& frame_factory,
 			const std::string& filter_str,
 			bool thumbnail_mode,
-			const core::channel_layout& audio_channel_layout,
-			bool is_mxf)
+			const core::channel_layout& audio_channel_layout
+			)
 		: display_mode_(display_mode::invalid)
 		, in_fps_(in_fps)
 		, format_desc_(frame_factory->get_video_format_desc())
@@ -106,7 +105,6 @@ struct frame_muxer::implementation : boost::noncopyable
 		, thumbnail_mode_(thumbnail_mode)
 		, force_deinterlacing_(false)
 		, audio_channel_layout_(audio_channel_layout)
-		, is_mxf_(is_mxf)
 	{
 		video_streams_.push(std::queue<safe_ptr<write_frame>>());
 		audio_streams_.push(core::audio_buffer());
@@ -334,7 +332,7 @@ struct frame_muxer::implementation : boost::noncopyable
 		if(force_deinterlacing_ && frame->interlaced_frame && display_mode_ != display_mode::deinterlace_bob && display_mode_ != display_mode::deinterlace)
 			display_mode_ = display_mode::scale_interlaced;
 		
-		if (is_mxf_ && frame->height == 608 && frame->width == 720) // fix for IMX frames with VBI lines
+		if (frame->height == 608 && frame->width == 720) // fix for IMX frames with VBI lines
 			filter_str = append_filter(filter_str, "CROP=720:576:0:32");
 		if(display_mode_ == display_mode::deinterlace)
 			filter_str = append_filter(filter_str, "YADIF=0:-1");
@@ -383,9 +381,8 @@ frame_muxer::frame_muxer(
 		const safe_ptr<core::frame_factory>& frame_factory,
 		bool thumbnail_mode,
 		const core::channel_layout& audio_channel_layout,
-		bool is_mxf,
 		const std::string& filter)
-	: impl_(new implementation(in_fps, frame_factory, filter, thumbnail_mode, audio_channel_layout, is_mxf)){}
+	: impl_(new implementation(in_fps, frame_factory, filter, thumbnail_mode, audio_channel_layout)){}
 void frame_muxer::push(const std::shared_ptr<AVFrame>& video_frame, int hints, int frame_timecode){impl_->push(video_frame, hints, frame_timecode);}
 void frame_muxer::push(const std::shared_ptr<core::audio_buffer>& audio_samples){return impl_->push(audio_samples);}
 void frame_muxer::clear(){return impl_->clear();}
