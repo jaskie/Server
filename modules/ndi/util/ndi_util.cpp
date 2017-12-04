@@ -68,7 +68,7 @@ NDIlib_audio_frame_interleaved_32f_t * create_weak_audio_frame(core::channel_lay
 		f->no_samples = nb_samples;
 		f->sample_rate = sample_rate;
 		f->p_data = (float*)malloc(nb_samples * layout.num_channels * sizeof(float));
-		f->timecode = 0LL;
+		f->timecode = NDIlib_send_timecode_synthesize;
 	}
 	return f;
 }

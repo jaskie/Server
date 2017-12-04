@@ -146,6 +146,8 @@ namespace caspar {
 
 			~ndi_consumer()
 			{
+				executor_.stop();
+				executor_.join();
 				if (ndi_send_)
 					ndi_lib_->NDIlib_send_destroy(ndi_send_);
 				CASPAR_LOG(info) << print() << L" Successfully Uninitialized.";
@@ -153,8 +155,8 @@ namespace caspar {
 						
 			boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame)
 			{
-				if (executor_.size() < executor_.capacity()) 
-					return executor_.begin_invoke([this, frame]() -> bool {
+				if (executor_.is_running() && executor_.size() < executor_.capacity()) 
+					executor_.begin_invoke([this, frame]() {
 					send_video(frame);
 					audio_send_timer_.restart();
 					send_audio(frame);
@@ -162,13 +164,10 @@ namespace caspar {
 					current_encoding_delay_ = frame->get_age_millis();
 					graph_->set_value("tick-time", tick_timer_.elapsed() * format_desc_.fps * 0.5f);
 					tick_timer_.restart();
-					return true;
 				});
 				else
-				{
 					CASPAR_LOG(warning) << print() << L" Frame dropped.";
-					return caspar::wrap_as_future(true);
-				}
+				return caspar::wrap_as_future(true);
 			}
 
 			void send_video(const safe_ptr<core::read_frame>& frame)
