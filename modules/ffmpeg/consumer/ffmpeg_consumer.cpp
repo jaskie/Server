@@ -196,7 +196,7 @@ namespace caspar {
 				graph_->set_text(print());
 				diagnostics::register_graph(graph_);
 
-				encode_executor_.set_capacity(1);
+				encode_executor_.set_capacity(16);
 
 				try
 				{
@@ -711,7 +711,7 @@ namespace caspar {
 			const std::string				video_metadata_;
 			const int						tc_in_;
 			const int						tc_out_;
-			core::recorder*					recorder_;
+			core::recorder* const			recorder_;
 			bool							recording_;
 			tbb::atomic<unsigned int>		frames_left_;
 
@@ -727,7 +727,7 @@ namespace caspar {
 				const std::string audio_metadata,
 				const std::string video_metadata,
 				const bool separate_key,
-				core::recorder* recorder = nullptr, 
+				core::recorder* const recorder = nullptr, 
 				const int tc_in = 0, 
 				const int tc_out = std::numeric_limits<int>().max(), 
 				const unsigned int frame_limit = std::numeric_limits<unsigned int>().max())
@@ -868,7 +868,7 @@ namespace caspar {
 
 		};
 
-		safe_ptr<core::frame_consumer> create_capture_consumer(const std::wstring filename, const core::parameters& params, const int tc_in, const int tc_out, bool narrow_aspect_ratio, core::recorder* recorder)
+		safe_ptr<core::frame_consumer> create_capture_consumer(const std::wstring filename, const core::parameters& params, const int tc_in, const int tc_out, bool narrow_aspect_ratio, core::recorder* const recorder)
 		{
 			std::wstring acodec = params.get_original(L"ACODEC");
 			std::wstring vcodec = params.get_original(L"VCODEC");
@@ -892,7 +892,7 @@ namespace caspar {
 			return make_safe<ffmpeg_consumer_proxy>(format, narrow(options), narrow(output_metadata), narrow(audio_metadata), narrow(video_metadata), false, recorder, tc_in, tc_out, static_cast<unsigned int>(tc_out - tc_in));
 		}
 
-		safe_ptr<core::frame_consumer> create_manual_record_consumer(const std::wstring filename, const core::parameters& params, const unsigned int frame_limit, bool narrow_aspect_ratio, core::recorder* recorder)
+		safe_ptr<core::frame_consumer> create_manual_record_consumer(const std::wstring filename, const core::parameters& params, const unsigned int frame_limit, bool narrow_aspect_ratio, core::recorder* const recorder)
 		{
 			std::wstring acodec = params.get_original(L"ACODEC");
 			std::wstring vcodec = params.get_original(L"VCODEC");
@@ -971,7 +971,7 @@ namespace caspar {
 			return make_safe<ffmpeg_consumer_proxy>(format, narrow(options), narrow(output_metadata), narrow(audio_metadata), narrow(video_metadata), separate_key);
 		}
 
-		void set_time_limit(safe_ptr<core::frame_consumer> consumer, unsigned int frame_limit)
+		void set_frame_limit(const safe_ptr<core::frame_consumer>& consumer, unsigned int frame_limit)
 		{
 			auto ffmpeg_consumer = dynamic_cast<ffmpeg_consumer_proxy*>(consumer.get());
 			if (ffmpeg_consumer)
