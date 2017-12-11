@@ -132,16 +132,6 @@ void log_callback(void* ptr, int level, const char* fmt, va_list vl)
 
     print_prefix = strlen(line) && line[strlen(line)-1] == '\n';
 	
-    //if(print_prefix && !strcmp(line, prev)){
-    //    count++;
-    //    if(is_atty==1)
-    //        fprintf(stderr, "    Last message repeated %d times\r", count);
-    //    return;
-    //}
-    //if(count>0){
-    //    fprintf(stderr, "    Last message repeated %d times\n", count);
-    //    count=0;
-    //}
     strcpy(prev, line);
     sanitize((uint8_t*)line);
 
@@ -162,7 +152,6 @@ void log_callback(void* ptr, int level, const char* fmt, va_list vl)
 	else
 		CASPAR_LOG(trace) << L"[ffmpeg] " << line;
 
-    //colored_fputs(av_clip(level>>3, 0, 6), line);
 }
 
 boost::thread_specific_ptr<bool>& get_disable_logging_for_thread()
@@ -199,57 +188,16 @@ std::shared_ptr<void> temporary_disable_logging_for_thread(bool disable)
 void log_for_thread(void* ptr, int level, const char* fmt, va_list vl)
 {
 	win32_exception::ensure_handler_installed_for_thread("ffmpeg-thread");
-	//if (get_disable_logging_for_thread().get() == nullptr) // It does not matter what the value of the bool is
-		log_callback(ptr, level, fmt, vl);
+	log_callback(ptr, level, fmt, vl);
 }
 
-//static int query_yadif_formats(AVFilterContext *ctx)
-//{
-//    static const int pix_fmts[] = {
-//        PIX_FMT_YUV444P,
-//        PIX_FMT_YUV422P,
-//        PIX_FMT_YUV420P,
-//        PIX_FMT_YUV410P,
-//        PIX_FMT_YUV411P,
-//        PIX_FMT_GRAY8,
-//        PIX_FMT_YUVJ444P,
-//        PIX_FMT_YUVJ422P,
-//        PIX_FMT_YUVJ420P,
-//        AV_NE( PIX_FMT_GRAY16BE, PIX_FMT_GRAY16LE ),
-//        PIX_FMT_YUV440P,
-//        PIX_FMT_YUVJ440P,
-//        AV_NE( PIX_FMT_YUV444P16BE, PIX_FMT_YUV444P16LE ),
-//        AV_NE( PIX_FMT_YUV422P16BE, PIX_FMT_YUV422P16LE ),
-//        AV_NE( PIX_FMT_YUV420P16BE, PIX_FMT_YUV420P16LE ),
-//        PIX_FMT_YUVA420P,
-//        PIX_FMT_NONE
-//    };
-//    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
-//
-//    return 0;
-//}
-//
-//#pragma warning (push)
-//#pragma warning (disable : 4706)
-//void fix_yadif_filter_format_query()
-//{
-//	AVFilter** filter = nullptr;
-//    while((filter = av_filter_next(filter)) && *filter)
-//	{
-//		if(strstr((*filter)->name, "yadif") != 0)
-//			(*filter)->query_formats = query_yadif_formats;
-//	}
-//}
-//#pragma warning (pop)
 
 void init(const safe_ptr<core::media_info_repository>& media_info_repo)
 {
 	av_lockmgr_register(ffmpeg_lock_callback);
 	av_log_set_callback(log_for_thread);
 
-	//avdevice_register_all();
     avfilter_register_all();
-	//fix_yadif_filter_format_query();
 	avformat_network_init();
 	av_register_all();
 	

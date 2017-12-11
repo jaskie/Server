@@ -60,7 +60,6 @@ struct decklink_consumer : public IDeckLinkVideoOutputCallback, boost::noncopyab
 	CComQIPtr<IDeckLinkOutput>						output_;
 	CComQIPtr<IDeckLinkKeyer>						keyer_;
 	CComQIPtr<IDeckLinkAttributes>					attributes_;
-	CComQIPtr<IDeckLinkConfiguration_v10_2>			configuration_;
 
 	tbb::spin_mutex									exception_mutex_;
 	std::exception_ptr								exception_;
@@ -95,7 +94,6 @@ public:
 		, output_(decklink_)
 		, keyer_(decklink_)
 		, attributes_(decklink_)
-		, configuration_(decklink_)
 		, model_name_(get_model_name(decklink_))
 		, format_desc_(format_desc)
 		, buffer_size_(config.buffer_depth()) // Minimum buffer-size 3.
@@ -124,7 +122,7 @@ public:
 		if(config.embedded_audio)
 			enable_audio();
 
-		set_latency(configuration_, config.latency, print());
+		set_latency(CComQIPtr<IDeckLinkConfiguration_v10_2>(decklink_), config.latency, print());
 		set_keyer(attributes_, keyer_, config.keyer, print());
 				
 		if (config.embedded_audio)
@@ -133,7 +131,11 @@ public:
 		for (uint32_t n = 0; n < buffer_size_; ++n)
 		{
 			if (config.embedded_audio)
-				schedule_next_audio(silent_audio());
+			{
+				core::audio_buffer silent_audio_buffer(format_desc_.audio_cadence[preroll_count_ % format_desc_.audio_cadence.size()] * config_.num_out_channels(), 0);
+				auto audio = core::make_multichannel_view<int32_t>(silent_audio_buffer.begin(), silent_audio_buffer.end(), config_.audio_layout, config_.num_out_channels());;
+				schedule_next_audio(audio);
+			}
 			schedule_next_video(make_safe<core::read_frame>());
 		}
 
@@ -156,7 +158,6 @@ public:
 				output_->DisableAudioOutput();
 			output_->DisableVideoOutput();
 		}
-		CASPAR_LOG(info) << print() << L" successfully uninitialized.";
 	}
 	
 	void enable_audio()
@@ -183,12 +184,6 @@ public:
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Failed to schedule playback."));
 	}
 
-	core::multichannel_view<int32_t, std::_Vector_iterator<std::_Vector_val<int32_t, tbb::cache_aligned_allocator<int32_t>>>> silent_audio() const
-	{
-		core::audio_buffer silent_audio(format_desc_.audio_cadence[preroll_count_ % format_desc_.audio_cadence.size()] * config_.num_out_channels(), 0);
-		return core::make_multichannel_view<int32_t>(silent_audio.begin(), silent_audio.end(), config_.audio_layout, config_.num_out_channels());
-	}
-	
 	STDMETHOD (QueryInterface(REFIID, LPVOID*))	{return E_NOINTERFACE;}
 	STDMETHOD_(ULONG, AddRef())					{return 1;}
 	STDMETHOD_(ULONG, Release())				{return 1;}
@@ -245,13 +240,16 @@ public:
 			if (buffered_video <= 1)
 				CASPAR_LOG(warning) << print() << L" Video buffer underflow. Consider increasing the buffer depth.";
 
-			unsigned int buffered_audio;
-			output_->GetBufferedAudioSampleFrameCount(&buffered_audio);
-			graph_->set_value("buffered-audio", static_cast<double>(buffered_audio) / (format_desc_.audio_cadence[0] * config_.num_out_channels() * 2));
-			if (buffered_audio >= bmdAudioSampleRate48kHz)
-				CASPAR_LOG(error) << print() << L" Audio buffer overflow.";
-			if (buffered_audio <= format_desc_.audio_cadence[0])
-				CASPAR_LOG(warning) << print() << L" Audio buffer underflow.";
+			if (config_.embedded_audio)
+			{
+				unsigned int buffered_audio;
+				output_->GetBufferedAudioSampleFrameCount(&buffered_audio);
+				graph_->set_value("buffered-audio", static_cast<double>(buffered_audio) / (format_desc_.audio_cadence[0] * config_.num_out_channels() * 2));
+				if (buffered_audio >= bmdAudioSampleRate48kHz)
+					CASPAR_LOG(error) << print() << L" Audio buffer overflow.";
+				if (buffered_audio <= format_desc_.audio_cadence[0])
+					CASPAR_LOG(warning) << print() << L" Audio buffer underflow.";
+			}
 		}
 		catch(...)
 		{
@@ -374,6 +372,16 @@ public:
 		: config_(config)
 		, context_(L"decklink_consumer[" + boost::lexical_cast<std::wstring>(config.device_index) + L"]")
 	{
+	}
+
+	~decklink_consumer_proxy()
+	{
+		if(context_)
+		{
+			auto str = print();
+			context_.reset();
+			CASPAR_LOG(info) << str << L" Successfully Uninitialized.";	
+		}
 	}
 
 	// frame_consumer

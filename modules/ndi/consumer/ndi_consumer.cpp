@@ -134,11 +134,12 @@ namespace caspar {
 				, sws_(nullptr, [](SwsContext* ctx) -> void{ sws_freeContext(ctx); })
 			{
 				current_encoding_delay_ = 0;
-				executor_.set_capacity(1);
+				executor_.set_capacity(8);
 				graph_->set_text(print());
 				graph_->set_color("audio-send-time", diagnostics::color(0.5f, 1.0f, 0.1f));
 				graph_->set_color("video-send-time", diagnostics::color(1.0f, 1.0f, 0.1f));
 				graph_->set_color("tick-time", diagnostics::color(0.0f, 0.6f, 0.9f));
+				graph_->set_color("dropped-frame", diagnostics::color(1.0f, 0.1f, 0.1f));
 				if (!is_alpha)
 					graph_->set_color("frame-convert-time", diagnostics::color(0.8f, 0.6f, 0.9f));
 				diagnostics::register_graph(graph_);
@@ -166,7 +167,10 @@ namespace caspar {
 					tick_timer_.restart();
 				});
 				else
+				{
 					CASPAR_LOG(warning) << print() << L" Frame dropped.";
+					graph_->set_tag("dropped-frame");
+				}
 				return caspar::wrap_as_future(true);
 			}
 
@@ -270,7 +274,7 @@ namespace caspar {
 
 			virtual std::wstring print() const override
 			{
-				return consumer_ ? consumer_->print() : L"NewTel NDI[" + widen(ndi_name_) + L" (uninitialized)]";
+				return consumer_ ? consumer_->print() : L"NewTel NDI[" + widen(ndi_name_) + L" (not initialized)]";
 			}
 
 			virtual boost::property_tree::wptree info() const override

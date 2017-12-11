@@ -38,8 +38,8 @@ namespace caspar {
 	namespace ffmpeg {
 		safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params);
 		safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptree& ptree);
-		safe_ptr<core::frame_consumer> create_capture_consumer(const std::wstring filename, const core::parameters& params, const int tc_in, const int tc_out, bool narrow_aspect_ratio, core::recorder* recorder);
-		safe_ptr<core::frame_consumer> create_manual_record_consumer(const std::wstring filename, const core::parameters& params, const unsigned int frame_limit, bool narrow_aspect_ratio, core::recorder* recorder);
-		void set_time_limit(safe_ptr<core::frame_consumer> consumer, unsigned int frame_limit);
+		safe_ptr<core::frame_consumer> create_capture_consumer(const std::wstring filename, const core::parameters& params, const int tc_in, const int tc_out, bool narrow_aspect_ratio, core::recorder* const recorder);
+		safe_ptr<core::frame_consumer> create_manual_record_consumer(const std::wstring filename, const core::parameters& params, const unsigned int frame_limit, bool narrow_aspect_ratio, core::recorder* const recorder);
+		void set_frame_limit(const safe_ptr<core::frame_consumer>& consumer, unsigned int frame_limit);
 	}
 }
