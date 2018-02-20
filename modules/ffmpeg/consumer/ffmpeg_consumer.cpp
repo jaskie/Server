@@ -167,7 +167,7 @@ namespace caspar {
 				const std::string& filename, 
 				const core::video_format_desc& format_desc, 
 				bool key_only, 
-				output_format format, 
+				const output_format& format, 
 				const std::string& options, 
 				const std::string& output_metadata,
 				const std::string& audio_metadata,

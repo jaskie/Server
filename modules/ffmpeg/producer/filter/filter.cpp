@@ -122,7 +122,10 @@ struct filter::implementation
 	void configure_filtergraph()
 	{
 		if (filtergraph_.empty())
-			return; 
+		{
+			video_graph_.reset();
+			return;
+		}
 
 		video_graph_.reset(
 			avfilter_graph_alloc(), 
