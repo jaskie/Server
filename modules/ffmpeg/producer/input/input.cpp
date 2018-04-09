@@ -137,7 +137,7 @@ struct input::implementation : boost::noncopyable
 	bool try_pop_audio(std::shared_ptr<AVPacket>& packet)
 	{	
 		bool result = false;
-		for (int i = 0; i<16 && !result; ++i)
+		for (int i = 0; i < 32 && !result; ++i)
 		{
 			result = audio_buffer_.try_pop(packet);
 			if (!result)
@@ -158,7 +158,7 @@ struct input::implementation : boost::noncopyable
 	bool try_pop_video(std::shared_ptr<AVPacket>& packet)
 	{
 		bool result = false;
-		for (int i = 0; i<16 && !result; ++i)
+		for (int i = 0; i < 32 && !result; ++i)
 		{
 			result = video_buffer_.try_pop(packet);
 			if (!result)

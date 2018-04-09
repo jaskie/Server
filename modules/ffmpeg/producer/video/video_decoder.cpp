@@ -99,10 +99,12 @@ public:
 
 	std::shared_ptr<AVFrame> poll()
 	{		
-		std::shared_ptr<AVFrame> video = nullptr;
-		std::shared_ptr<AVPacket> packet = nullptr;
+		std::shared_ptr<AVFrame> video;
+		std::shared_ptr<AVPacket> packet;
 		while (!video && input_.try_pop_video(packet))
 			video = decode(packet);
+		if (!video && !input_.eof())
+			CASPAR_LOG(trace) << print() << L" Received empty frame";
 		return video;
 	}
 
