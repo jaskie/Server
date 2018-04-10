@@ -140,8 +140,6 @@ namespace caspar {
 
 			const safe_ptr<diagnostics::graph>		graph_;
 
-			executor								encode_executor_;
-
 			std::unique_ptr<AVFormatContext, std::function<void(AVFormatContext *)>>	format_context_;
 			std::unique_ptr<AVStream, std::function<void(AVStream  *)>>					audio_st_;
 			std::unique_ptr<AVStream, std::function<void(AVStream  *)>>					video_st_;
@@ -160,6 +158,7 @@ namespace caspar {
 			bool									audio_is_planar;
 			tbb::atomic<int64_t>					current_encoding_delay_;
 			boost::timer							frame_timer_;
+			executor								encode_executor_;
 
 		public:
 			ffmpeg_consumer
@@ -249,13 +248,13 @@ namespace caspar {
 
 			~ffmpeg_consumer()
 			{
-				encode_executor_.stop();
-				encode_executor_.join();
-				if ((video_st_ && (video_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY))
-					|| (!key_only_ && (audio_st_ && (audio_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY))))
-					flush_encoders();
-				avio_flush(format_context_->pb);
-				LOG_ON_ERROR2(av_write_trailer(format_context_.get()), "[ffmpeg_consumer]");
+				encode_executor_.begin_invoke([this] {
+					if ((video_st_ && (video_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY))
+						|| (!key_only_ && (audio_st_ && (audio_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY))))
+						flush_encoders();
+					avio_flush(format_context_->pb);
+					LOG_ON_ERROR2(av_write_trailer(format_context_.get()), "[ffmpeg_consumer]");
+				});
 
 				if (options_)
 					av_dict_free(&options_);
@@ -657,15 +656,13 @@ namespace caspar {
 			void flush_encoders()
 			{
 				encode_audio_buffer(true); // encode remaining buffer data
-				bool audio_full = false;
-				bool video_full = false;
-				bool need_flush_audio = !key_only_ && audio_st_ && (audio_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY) != 0;
-				bool need_flush_video = video_st_ && (video_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY) != 0;
-				do
+				bool audio_flushed = key_only_ || !audio_st_ || (audio_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY) == 0;
+				bool video_flushed = !video_st_ || (video_st_->codec->codec->capabilities & AV_CODEC_CAP_DELAY) == 0;
+				while (!(audio_flushed && video_flushed))
 				{
-					audio_full |= !need_flush_audio || flush_stream(false);
-					video_full |= !need_flush_video || flush_stream(true);
-				} while (!(audio_full && video_full));
+					audio_flushed |= flush_stream(false);
+					video_flushed |= flush_stream(true);
+				} 
 			}
 
 
