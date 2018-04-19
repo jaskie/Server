@@ -247,7 +247,7 @@ public:
 			if(FAILED(video->GetBytes(&bytes)) || !bytes)
 				return S_OK;
 			
-			safe_ptr<AVFrame> av_frame(av_frame_alloc(), [](AVFrame* frame) {av_frame_free(&frame);});
+			std::shared_ptr<AVFrame> av_frame(av_frame_alloc(), [](AVFrame* frame) {av_frame_free(&frame);});
 						
 			av_frame->data[0]			= reinterpret_cast<uint8_t*>(bytes);
 			av_frame->linesize[0]		= video->GetRowBytes();			

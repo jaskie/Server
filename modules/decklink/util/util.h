@@ -39,8 +39,9 @@ namespace caspar { namespace decklink {
 
 	struct com_initializer
 	{
-		com_initializer() { ::CoInitialize(nullptr); }
-		~com_initializer() { ::CoUninitialize(); }
+		const HRESULT result_;
+		com_initializer(): result_(::CoInitialize(nullptr)) {  }
+		~com_initializer() { if (SUCCEEDED(result_)) ::CoUninitialize(); }
 	};
 
 	

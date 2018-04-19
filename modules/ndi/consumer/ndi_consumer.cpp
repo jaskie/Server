@@ -122,7 +122,7 @@ namespace caspar {
 
 			// frame_consumer
 
-			ndi_consumer(const core::video_format_desc format_desc, const core::channel_layout channel_layout, const std::string& ndi_name, const std::string groups, const bool is_alpha)
+			ndi_consumer(const core::video_format_desc& format_desc, const core::channel_layout& channel_layout, const std::string& ndi_name, const std::string& groups, const bool is_alpha)
 				: channel_layout_(channel_layout)
 				, format_desc_(format_desc)
 				, ndi_name_(widen(ndi_name))
@@ -156,7 +156,7 @@ namespace caspar {
 						
 			boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame)
 			{
-				if (executor_.is_running() && executor_.size() < executor_.capacity()) 
+				if (executor_.is_running() && executor_.empty()) 
 					executor_.begin_invoke([this, frame]() {
 					send_video(frame);
 					audio_send_timer_.restart();

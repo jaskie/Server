@@ -42,12 +42,13 @@ template<typename T>
 class com_context : public executor
 {
 	std::unique_ptr<T> instance_;
+	HRESULT coinitialize_result_;
 public:
 	com_context(const std::wstring& name) : executor(name)
 	{
-		executor::begin_invoke([]
+		executor::begin_invoke([&]
 		{
-			::CoInitialize(nullptr);
+			coinitialize_result_ = ::CoInitialize(nullptr);
 		});
 	}
 
@@ -56,7 +57,8 @@ public:
 		if(!executor::begin_invoke([&]
 		{
 			instance_.reset(nullptr);
-			::CoUninitialize();
+			if (SUCCEEDED(coinitialize_result_)) 
+				::CoUninitialize();
 		}).timed_wait(boost::posix_time::milliseconds(500)))
 		{
 			CASPAR_LOG(error) << L"[com_contex] Timer expired, deadlock detected and released, leaking resources.";

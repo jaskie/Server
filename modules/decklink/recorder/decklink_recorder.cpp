@@ -313,14 +313,9 @@ namespace caspar {
 					try
 					{
 						clean_recorder();
-						if (rec_state != record_state::idle)
-						{
-							if (rec_state == record_state::manual_recording)
-								deck_control_->Stop(&last_deck_error_);
-							if (rec_state == record_state::vcr_recording)
-								deck_control_->Abort();
-							*monitor_subject_ << core::monitor::message("/control") % std::string("capture_complete");
-						}
+						if (rec_state == record_state::vcr_recording)
+							deck_control_->Abort();
+						*monitor_subject_ << core::monitor::message("/control") % std::string("capture_complete");
 						return true;
 					}
 					catch (...)
@@ -340,14 +335,9 @@ namespace caspar {
 					try
 					{
 						clean_recorder();
-						if (rec_state != record_state::idle)
-						{
-							if (rec_state == record_state::manual_recording)
-								deck_control_->Stop(&last_deck_error_);
-							if (rec_state == record_state::vcr_recording)
-								deck_control_->Abort();
-						}
-							return (SUCCEEDED(deck_control_->Abort()));
+						if (rec_state == record_state::vcr_recording)
+							deck_control_->Abort();
+						return (SUCCEEDED(deck_control_->Abort()));
 					}
 					catch (...)
 					{

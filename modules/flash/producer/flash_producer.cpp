@@ -209,9 +209,6 @@ public:
 
 		lock(get_global_init_destruct_mutex(), [this]
 		{
-
-			CoInitialize(nullptr);
-
 			if(FAILED(CComObject<caspar::flash::FlashAxContainer>::CreateInstance(&ax_)))
 				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Failed to create FlashAxContainer"));
 		

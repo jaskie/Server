@@ -227,29 +227,33 @@ public:
 			std::shared_ptr<core::read_frame> frame;	
 			frame_buffer_.pop(frame);
 			send_completion_.try_completion();
-
-			if (config_.embedded_audio && frame->audio_data())
-				schedule_next_audio(frame->multichannel_view());
-			schedule_next_video(frame);	
-			
+				
 			unsigned int buffered_video;
-			output_->GetBufferedVideoFrameCount(&buffered_video);
-			graph_->set_value("buffered-video", static_cast<double>(buffered_video)/buffer_size_);
-			if (buffered_video >= static_cast<unsigned int>(format_desc_.fps))
-				CASPAR_LOG(error) << print() << L" Video buffer overflow.";
-			if (buffered_video <= 1)
-				CASPAR_LOG(warning) << print() << L" Video buffer underflow. Consider increasing the buffer depth.";
+			if (SUCCEEDED(output_->GetBufferedVideoFrameCount(&buffered_video)))
+			{
+				graph_->set_value("buffered-video", static_cast<double>(buffered_video) / buffer_size_);
+				if (buffered_video >= static_cast<unsigned int>(format_desc_.fps))
+					CASPAR_LOG(error) << print() << L" Video buffer overflow.";
+				if (buffered_video == 0)
+					CASPAR_LOG(warning) << print() << L" Video buffer empty. Consider increasing the buffer depth.";
+			}
+
+			schedule_next_video(frame);
 
 			if (config_.embedded_audio)
 			{
 				unsigned int buffered_audio;
-				output_->GetBufferedAudioSampleFrameCount(&buffered_audio);
-				graph_->set_value("buffered-audio", static_cast<double>(buffered_audio) / (format_desc_.audio_cadence[0] * config_.num_out_channels() * 2));
-				if (buffered_audio >= bmdAudioSampleRate48kHz)
-					CASPAR_LOG(error) << print() << L" Audio buffer overflow.";
-				if (buffered_audio <= format_desc_.audio_cadence[0])
-					CASPAR_LOG(warning) << print() << L" Audio buffer underflow.";
+				if (SUCCEEDED(output_->GetBufferedAudioSampleFrameCount(&buffered_audio)))
+				{
+					graph_->set_value("buffered-audio", static_cast<double>(buffered_audio) / (format_desc_.audio_cadence[0] * config_.num_out_channels() * 2));
+					if (buffered_audio >= bmdAudioSampleRate48kHz)
+						CASPAR_LOG(error) << print() << L" Audio buffer overflow.";
+					if (buffered_audio == 0)
+						CASPAR_LOG(warning) << print() << L" Audio buffer empty.";
+				}
+				schedule_next_audio(frame->multichannel_view());
 			}
+
 		}
 		catch(...)
 		{

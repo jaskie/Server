@@ -225,6 +225,7 @@ public:
 			{
 				graph_->set_tag("underflow");  
 				send_osc();
+				CASPAR_LOG(trace) << print() << L" Empty frame buffer";
 				return std::make_pair(core::basic_frame::late(), -1);     
 			}
 		}
@@ -426,8 +427,11 @@ public:
 	}
 
 
-	void decode_frame(std::shared_ptr<AVFrame>& video, std::shared_ptr<core::audio_buffer>& audio, const int hints)
+	void decode_frame(const int hints)
 	{
+		std::shared_ptr<AVFrame>			video;
+		std::shared_ptr<core::audio_buffer> audio;
+
 		tbb::parallel_invoke(
 			[&]
 		{
@@ -440,8 +444,19 @@ public:
 				audio = audio_decoder_->poll();
 		});
 
-		muxer_->push(video, hints);
-		muxer_->push(audio);
+		if ((!audio_decoder_ || (audio == nullptr && input_.eof()))
+			&& !muxer_->audio_ready())
+			muxer_->push(empty_audio());
+		else
+			muxer_->push(audio);
+
+		if (!video_decoder_)
+		{
+			if (!muxer_->video_ready())
+				muxer_->push(empty_video(), 0);
+		}
+		else
+			muxer_->push(video, hints);
 	}
 	
 	void try_decode_frame(int hints)
@@ -453,20 +468,7 @@ public:
 		if (!loop_ && length_ != std::numeric_limits<uint32_t>().max() && decoded_frame_number_ >= start_ + length_)
 			return;
 
-		std::shared_ptr<AVFrame>			video;
-		std::shared_ptr<core::audio_buffer> audio;
-
-		decode_frame(video, audio, hints);
-
-		if((!audio_decoder_ || (audio == nullptr && input_.eof()))
-			&& !muxer_->audio_ready())
-				muxer_->push(empty_audio());
-		
-		if(!video_decoder_)
-		{
-			if(!muxer_->video_ready())
-				muxer_->push(empty_video(), 0);
-		}
+		decode_frame(hints);
 		
 		for (auto frame = muxer_->poll(); frame; frame = muxer_->poll())
 		{
