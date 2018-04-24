@@ -134,7 +134,7 @@ namespace caspar {
 				, sws_(nullptr, [](SwsContext* ctx) -> void{ sws_freeContext(ctx); })
 			{
 				current_encoding_delay_ = 0;
-				executor_.set_capacity(8);
+				executor_.set_capacity(1);
 				graph_->set_text(print());
 				graph_->set_color("audio-send-time", diagnostics::color(0.5f, 1.0f, 0.1f));
 				graph_->set_color("video-send-time", diagnostics::color(1.0f, 1.0f, 0.1f));

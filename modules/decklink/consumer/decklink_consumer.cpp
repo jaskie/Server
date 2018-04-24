@@ -248,8 +248,6 @@ public:
 					graph_->set_value("buffered-audio", static_cast<double>(buffered_audio) / (format_desc_.audio_cadence[0] * config_.num_out_channels() * 2));
 					if (buffered_audio >= bmdAudioSampleRate48kHz)
 						CASPAR_LOG(error) << print() << L" Audio buffer overflow.";
-					if (buffered_audio == 0)
-						CASPAR_LOG(warning) << print() << L" Audio buffer empty.";
 				}
 				schedule_next_audio(frame->multichannel_view());
 			}
