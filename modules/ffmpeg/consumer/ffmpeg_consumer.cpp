@@ -292,7 +292,7 @@ namespace caspar {
 				c->height = format_desc_.height;
 				c->gop_size = 25;
 				c->time_base = st->time_base;
-				c->flags |= format_desc_.field_mode == core::field_mode::progressive ? 0 : (CODEC_FLAG_INTERLACED_ME | CODEC_FLAG_INTERLACED_DCT);
+				c->flags |= format_desc_.field_mode == core::field_mode::progressive ? 0 : (AV_CODEC_FLAG_INTERLACED_ME | AV_CODEC_FLAG_INTERLACED_DCT);
 				if (c->pix_fmt == AV_PIX_FMT_NONE)
 					c->pix_fmt = AV_PIX_FMT_YUV420P;
 
@@ -347,7 +347,7 @@ namespace caspar {
 						c->rc_min_rate = c->bit_rate;
 						c->rc_buffer_size = 2000000;
 						c->rc_initial_buffer_occupancy = 2000000;
-						c->rc_buffer_aggressivity = 0.25;
+						//c->rc_buffer_aggressivity = 0.25; TODO: amend this
 						c->gop_size = 1;
 					}
 					else
@@ -376,7 +376,7 @@ namespace caspar {
 
 
 				if (output_format_.format->flags & AVFMT_GLOBALHEADER)
-					c->flags |= CODEC_FLAG_GLOBAL_HEADER;
+					c->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 				c->sample_aspect_ratio = sample_aspect_ratio;
 
 				if (tbb_avcodec_open(c, encoder, &options_, true) < 0)
@@ -433,7 +433,7 @@ namespace caspar {
 				}
 
 				if (output_format_.format->flags & AVFMT_GLOBALHEADER)
-					c->flags |= CODEC_FLAG_GLOBAL_HEADER;
+					c->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
 				if (output_format_.audio_bitrate != 0)
 					c->bit_rate = output_format_.audio_bitrate * 1024;

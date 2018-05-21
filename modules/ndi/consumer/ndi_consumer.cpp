@@ -134,7 +134,7 @@ namespace caspar {
 				, sws_(nullptr, [](SwsContext* ctx) -> void{ sws_freeContext(ctx); })
 			{
 				current_encoding_delay_ = 0;
-				executor_.set_capacity(1);
+				executor_.set_capacity(4);
 				graph_->set_text(print());
 				graph_->set_color("audio-send-time", diagnostics::color(0.5f, 1.0f, 0.1f));
 				graph_->set_color("video-send-time", diagnostics::color(1.0f, 1.0f, 0.1f));
@@ -156,7 +156,7 @@ namespace caspar {
 						
 			boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame)
 			{
-				if (executor_.is_running() && executor_.empty()) 
+				if (executor_.is_running() && executor_.size()<executor_.capacity()) 
 					executor_.begin_invoke([this, frame]() {
 					send_video(frame);
 					audio_send_timer_.restart();

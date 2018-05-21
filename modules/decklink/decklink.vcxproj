@@ -138,22 +138,22 @@
     <IntDir Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">$(ProjectDir)tmp\$(Configuration)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='Develop|Win32'">$(ProjectDir)tmp\$(Configuration)\</IntDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='Develop|x64'">$(ProjectDir)tmp\$(Configuration)\</IntDir>
-    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg57\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
-    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg57\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
-    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg57\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
-    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg57\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
-    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Profile|Win32'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg57\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
-    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg57\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
-    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Develop|Win32'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg57\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
-    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Develop|x64'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg57\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg57\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg57\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg57\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg57\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Profile|Win32'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg57\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg57\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Develop|Win32'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg57\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Develop|x64'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg57\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
+    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
+    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
+    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
+    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
+    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Profile|Win32'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
+    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
+    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Develop|Win32'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
+    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Develop|x64'">..\..\;..\..\dependencies\boost\;..\..\dependencies\ffmpeg\include\;..\..\dependencies\tbb\include\;$(IncludePath)</IncludePath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|x64'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Profile|Win32'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Develop|Win32'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Develop|x64'">..\..\dependencies\boost\stage\lib\;..\..\dependencies\ffmpeg\x86\lib;..\..\dependencies\tbb\lib\ia32\vc10\;$(LibraryPath)</LibraryPath>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(ProjectDir)bin\$(Configuration)\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)bin\$(Configuration)\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(ProjectDir)bin\$(Configuration)\</OutDir>
