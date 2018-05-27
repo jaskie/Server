@@ -263,7 +263,7 @@ struct input::implementation : boost::noncopyable
 				video_buffer_.clear();
 				audio_buffer_.try_push(flush_packet());
 				video_buffer_.try_push(flush_packet());
-				avformat_flush(format_context_.get());
+				LOG_ON_ERROR2(avformat_flush(format_context_.get()), "FFMpeg input avformat_flush");
 			}
 			graph_->set_value("audio-buffer-count", (static_cast<double>(audio_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
 			graph_->set_value("video-buffer-count", (static_cast<double>(video_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
@@ -271,7 +271,8 @@ struct input::implementation : boost::noncopyable
 				CASPAR_LOG(trace) << print() << " Seeking: " << target_time / 1000 << " ms";
 			flush_av_packet_count_ = FLUSH_AV_PACKET_COUNT;
 			is_eof_ = false;
-			av_seek_frame(format_context_.get(), -1, target_time - AV_TIME_BASE, AVSEEK_FLAG_BACKWARD); // trial and error correction of unknown reason
+			if (av_seek_frame(format_context_.get(), -1, target_time - AV_TIME_BASE, AVSEEK_FLAG_BACKWARD) < 0)
+				CASPAR_LOG(warning) << print() << "av_seek_frame failed"; // trial and error correction of unknown reason
 			tick();
 			return true;
 		}, high_priority).get();
