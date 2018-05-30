@@ -122,11 +122,11 @@ public:
 		GL(glBindBuffer(target_, 0));
 	}
 
-	void begin_read(uint32_t width, uint32_t height, GLuint format)
+	void begin_read(uint32_t width, uint32_t height, unsigned int format)
 	{
 		unmap();
 		bind();
-		GL(glReadPixels(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height), format, GL_UNSIGNED_BYTE, NULL));
+		GL(glReadPixels(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height), static_cast<GLuint>(format), GL_UNSIGNED_BYTE, NULL));
 		unbind();
 		fence_.set();
 	}
@@ -144,7 +144,7 @@ void host_buffer::map(){impl_->map();}
 void host_buffer::unmap(){impl_->unmap();}
 void host_buffer::bind(){impl_->bind();}
 void host_buffer::unbind(){impl_->unbind();}
-void host_buffer::begin_read(uint32_t width, uint32_t height, GLuint format){impl_->begin_read(width, height, format);}
+void host_buffer::begin_read(uint32_t width, uint32_t height, unsigned int format){impl_->begin_read(width, height, format);}
 uint32_t host_buffer::size() const { return impl_->size_; }
 bool host_buffer::ready() const{return impl_->ready();}
 void host_buffer::wait(ogl_device& ogl){impl_->wait(ogl);}

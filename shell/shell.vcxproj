@@ -302,7 +302,7 @@
       <MapExports>false</MapExports>
     </Link>
     <PostBuildEvent>
-      <Command>copy "$(SolutionDir)dependencies\ffmpeg57\x86\bin\*.dll" "$(OutDir)"
+      <Command>copy "$(SolutionDir)dependencies\ffmpeg\x86\bin\*.dll" "$(OutDir)"
 copy "$(SolutionDir)dependencies\FreeImage\Dist\*.dll" "$(OutDir)"
 copy "$(SolutionDir)dependencies\glew-1.6.0\bin\*.dll" "$(OutDir)"
 copy "$(SolutionDir)dependencies\tbb\bin\ia32\vc10\*.dll" "$(OutDir)"
@@ -418,7 +418,7 @@ copy "$(ProjectDir)casparcg_auto_restart.bat" "$(OutDir)"</Command>
       <LargeAddressAware>true</LargeAddressAware>
     </Link>
     <PostBuildEvent>
-      <Command>copy "$(SolutionDir)dependencies\ffmpeg57\x86\bin\*.dll" "$(OutDir)"
+      <Command>copy "$(SolutionDir)dependencies\ffmpeg\x86\bin\*.dll" "$(OutDir)"
 copy "$(SolutionDir)dependencies\FreeImage\Dist\*.dll" "$(OutDir)"
 copy "$(SolutionDir)dependencies\glew-1.6.0\bin\*.dll" "$(OutDir)"
 copy "$(SolutionDir)dependencies\tbb\bin\ia32\vc10\*.dll" "$(OutDir)"
@@ -540,7 +540,7 @@ copy "$(ProjectDir)casparcg_auto_restart.bat" "$(OutDir)"</Command>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
     <PostBuildEvent>
-      <Command>copy "$(SolutionDir)dependencies\ffmpeg57\x86\bin\*.dll" "$(OutDir)"
+      <Command>copy "$(SolutionDir)dependencies\ffmpeg\x86\bin\*.dll" "$(OutDir)"
 copy "$(SolutionDir)dependencies\FreeImage\Dist\*.dll" "$(OutDir)"
 copy "$(SolutionDir)dependencies\glew-1.6.0\bin\*.dll" "$(OutDir)"
 copy "$(SolutionDir)dependencies\tbb\bin\ia32\vc10\*.dll" "$(OutDir)"
@@ -661,7 +661,7 @@ copy "$(ProjectDir)casparcg_auto_restart.bat" "$(OutDir)"</Command>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
     <PostBuildEvent>
-      <Command>copy "$(SolutionDir)dependencies\ffmpeg57\x86\bin\*.dll" "$(OutDir)"
+      <Command>copy "$(SolutionDir)dependencies\ffmpeg\x86\bin\*.dll" "$(OutDir)"
 copy "$(SolutionDir)dependencies\FreeImage\Dist\*.dll" "$(OutDir)"
 copy "$(SolutionDir)dependencies\glew-1.6.0\bin\*.dll" "$(OutDir)"
 copy "$(SolutionDir)dependencies\tbb\bin\ia32\vc10\*.dll" "$(OutDir)"
