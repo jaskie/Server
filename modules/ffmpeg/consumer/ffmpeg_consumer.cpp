@@ -87,40 +87,42 @@ namespace caspar {
 			const std::string							audio_metadata_;
 			const std::string							video_metadata_;
 			const std::string							options_;
+			const std::string							pixel_format_;
 			const bool									is_mxf_;
 			const bool									is_narrow_;
 			const bool									is_stream_;
 			const int									audio_bitrate_;
 			const int									video_bitrate_;
 			const std::string							file_timecode_;
-
-
-
-			output_params(const std::string& filename, 
-				const std::string& audio_codec, 
-				const std::string& video_codec, 
-				const std::string& output_metadata,
-				const std::string& audio_metadata,
-				const std::string& video_metadata,
-				const std::string& options,
+			
+			output_params(
+				std::string filename, 
+				std::string audio_codec, 
+				std::string video_codec, 
+				std::string output_metadata,
+				std::string audio_metadata,
+				std::string video_metadata,
+				std::string options,
+				std::string pixel_format,
 				const bool is_stream,
 				const bool is_narrow, 
 				const int a_rate, 
 				const int v_rate, 
-				const std::string& file_tc)
-				: video_codec_(video_codec)
-				, audio_codec_(audio_codec)
-				, output_metadata_(output_metadata)
-				, audio_metadata_(audio_metadata)
-				, video_metadata_(video_metadata)
-				, options_(options)
+				std::string file_tc)
+				: video_codec_(std::move(video_codec))
+				, audio_codec_(std::move(audio_codec))
+				, output_metadata_(std::move(output_metadata))
+				, audio_metadata_(std::move(audio_metadata))
+				, video_metadata_(std::move(video_metadata))
+				, options_(std::move(options))
+				, pixel_format_(std::move(pixel_format))
 				, is_narrow_(is_narrow)
 				, is_stream_(is_stream)
 				, is_mxf_(std::equal(MXF.rbegin(), MXF.rend(), boost::to_upper_copy(filename).rbegin()))
 				, audio_bitrate_(a_rate)
 				, video_bitrate_(v_rate)
-				, file_name_(filename)
-				, file_timecode_(file_tc)
+				, file_name_(std::move(filename))
+				, file_timecode_(std::move(file_tc))
 			{ }
 			
 		};
@@ -136,8 +138,6 @@ namespace caspar {
 		struct ffmpeg_consumer : boost::noncopyable
 		{
 			AVDictionary *							options_;
-			AVDictionary *							audio_metadata_;
-			AVDictionary *							video_metadata_;
 			const output_params						output_params_;
 			const core::video_format_desc			format_desc_;
 
@@ -167,21 +167,19 @@ namespace caspar {
 			ffmpeg_consumer
 			(
 				const core::video_format_desc& format_desc,
-				const output_params& params,
+				output_params params,
 				bool key_only
 			)
 				: encode_executor_(print())
 				, out_audio_sample_number_(0)
-				, output_params_(params)
+				, output_params_(std::move(params))
 				, format_desc_(format_desc)
 				, key_only_(key_only)
 				, options_(read_parameters(params.options_))
-				, audio_metadata_(read_parameters(params.audio_metadata_))
-				, video_metadata_(read_parameters(params.video_metadata_))
 			{
 				current_encoding_delay_ = 0;
 				out_frame_number_ = 0;
-				// TODO: Ask stakeholders about case where file already exists.
+
 				if (boost::filesystem::exists(output_params_.file_name_))
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("File already exists: " + params.file_name_));
 
@@ -239,6 +237,7 @@ namespace caspar {
 					LOG_ON_ERROR2(av_dict_set(&video_st_->metadata, "timecode", output_params_.file_timecode_.c_str(), AV_DICT_DONT_OVERWRITE), "[ffmpeg_consumer]");
 
 					av_dump_format(format_context_.get(), 0, output_params_.file_name_.c_str(), 1);
+					
 					// Open the output
 
 					if (!(format_context_->oformat->flags & AVFMT_NOFILE))
@@ -299,7 +298,7 @@ namespace caspar {
 
 				st->id = 0;
 				st->time_base = av_make_q(format_desc_.duration, format_desc_.time_scale);
-				st->metadata = video_metadata_;
+				st->metadata = read_parameters(output_params_.video_metadata_);
 				AVCodecContext * c = st->codec;
 
 				c->refcounted_frames = 0;
@@ -344,7 +343,6 @@ namespace caspar {
 				}
 				else if (c->codec_id == AV_CODEC_ID_H264)
 				{
-					c->pix_fmt = AV_PIX_FMT_YUV420P;
 					c->bit_rate = format_desc_.height * 14 * 1000; // about 8Mbps for SD, 14 for HD
 					LOG_ON_ERROR2(av_opt_set(c->priv_data, "preset", "veryfast", NULL), "[ffmpeg_consumer]");
 				}
@@ -372,8 +370,11 @@ namespace caspar {
 						}
 					}
 				}
+
 				if (output_params_.video_bitrate_ != 0)
 					c->bit_rate = output_params_.video_bitrate_ * 1024;
+				if (!output_params_.pixel_format_.empty())
+					c->pix_fmt = av_get_pix_fmt(output_params_.pixel_format_.c_str());
 
 				c->max_b_frames = 0; // b-frames not supported.
 
@@ -416,7 +417,7 @@ namespace caspar {
 				if (!st)
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not allocate audio-stream") << boost::errinfo_api_function("avformat_new_stream"));
 				st->id = 1;
-				st->metadata = audio_metadata_;
+				st->metadata = read_parameters(output_params_.audio_metadata_);
 
 				AVCodecContext * c = st->codec;
 				c->refcounted_frames = 0;
@@ -723,13 +724,13 @@ namespace caspar {
 		public:
 
 			ffmpeg_consumer_proxy(
-				const output_params& output_params,
+				output_params output_params,
 				const bool separate_key,
 				core::recorder* const recorder = nullptr, 
 				const int tc_in = 0, 
 				const int tc_out = std::numeric_limits<int>().max(), 
 				const unsigned int frame_limit = std::numeric_limits<unsigned int>().max())
-				: output_params_(output_params)
+				: output_params_(std::move(output_params))
 				, separate_key_(separate_key)
 				, index_(FFMPEG_CONSUMER_BASE_INDEX + crc16(boost::to_lower_copy(output_params.file_name_)))
 				, tc_in_(tc_in)
@@ -853,16 +854,17 @@ namespace caspar {
 
 		safe_ptr<core::frame_consumer> create_capture_consumer(const std::wstring filename, const core::parameters& params, const int tc_in, const int tc_out, bool narrow_aspect_ratio, core::recorder* const recorder)
 		{
-			std::wstring acodec = params.get_original(L"ACODEC");
-			std::wstring vcodec = params.get_original(L"VCODEC");
-			std::wstring options = params.get_original(L"OPTIONS");
-			std::wstring output_metadata = params.get_original(L"OUTPUT_METADATA");
-			std::wstring audio_metadata = params.get_original(L"AUDIO_METADATA");
-			std::wstring video_metadata = params.get_original(L"VIDEO_METADATA");
-			int arate = params.get(L"ARATE", 0);
-			int vrate = params.get(L"VRATE", 0);
-			std::wstring file_tc = params.get(L"IN", L"00:00:00:00");
-			bool file_path_is_complete = boost::filesystem2::path(narrow(filename)).is_complete();
+			auto acodec = params.get_original(L"ACODEC");
+			auto vcodec = params.get_original(L"VCODEC");
+			auto options = params.get_original(L"OPTIONS");
+			auto output_metadata = params.get_original(L"OUTPUT_METADATA");
+			auto audio_metadata = params.get_original(L"AUDIO_METADATA");
+			auto video_metadata = params.get_original(L"VIDEO_METADATA");
+			auto pixel_format = params.get_original(L"PIXEL_FORMAT");
+			auto arate = params.get(L"ARATE", 0);
+			auto vrate = params.get(L"VRATE", 0);
+			auto file_tc = params.get(L"IN", L"00:00:00:00");
+			auto file_path_is_complete = boost::filesystem2::path(narrow(filename)).is_complete();
 			auto op = output_params(
 				narrow(file_path_is_complete ? filename : env::media_folder() + filename),
 				narrow(acodec),
@@ -871,6 +873,7 @@ namespace caspar {
 				narrow(audio_metadata),
 				narrow(video_metadata),
 				narrow(options),
+				narrow(pixel_format),
 				false,
 				narrow_aspect_ratio,
 				arate,
@@ -881,15 +884,16 @@ namespace caspar {
 
 		safe_ptr<core::frame_consumer> create_manual_record_consumer(const std::wstring filename, const core::parameters& params, const unsigned int frame_limit, bool narrow_aspect_ratio, core::recorder* const recorder)
 		{
-			std::wstring acodec = params.get_original(L"ACODEC");
-			std::wstring vcodec = params.get_original(L"VCODEC");
-			std::wstring options = params.get_original(L"OPTIONS");
-			std::wstring output_metadata = params.get_original(L"OUTPUT_METADATA");
-			std::wstring audio_metadata = params.get_original(L"AUDIO_METADATA");
-			std::wstring video_metadata = params.get_original(L"VIDEO_METADATA");
-			int		 arate = params.get(L"ARATE", 0);
-			int		 vrate = params.get(L"VRATE", 0);
-			bool file_path_is_complete = boost::filesystem2::path(narrow(filename)).is_complete();
+			auto acodec = params.get_original(L"ACODEC");
+			auto vcodec = params.get_original(L"VCODEC");
+			auto options = params.get_original(L"OPTIONS");
+			auto output_metadata = params.get_original(L"OUTPUT_METADATA");
+			auto audio_metadata = params.get_original(L"AUDIO_METADATA");
+			auto video_metadata = params.get_original(L"VIDEO_METADATA");
+			auto pixel_format = params.get_original(L"PIXEL_FORMAT");
+			auto arate = params.get(L"ARATE", 0);
+			auto vrate = params.get(L"VRATE", 0);
+			auto file_path_is_complete = boost::filesystem2::path(narrow(filename)).is_complete();
 			auto op = output_params(
 				narrow(file_path_is_complete ? filename : env::media_folder() + filename),
 				narrow(acodec),
@@ -898,6 +902,7 @@ namespace caspar {
 				narrow(audio_metadata),
 				narrow(video_metadata),
 				narrow(options),
+				narrow(pixel_format),
 				false,
 				narrow_aspect_ratio,
 				arate,
@@ -911,19 +916,20 @@ namespace caspar {
 		{
 			if (params.size() < 1 || (params[0] != L"FILE" && params[0] != L"STREAM"))
 				return core::frame_consumer::empty();
-			std::string filename = params.size() > 1 ? narrow(params.at_original(1)) : "";
-			bool file_path_is_complete = boost::filesystem2::path(filename).is_complete();
-			bool separate_key = params.has(L"SEPARATE_KEY");
-			bool is_stream = params[0] == L"STREAM";
-			std::wstring acodec = params.get_original(L"ACODEC");
-			std::wstring vcodec = params.get_original(L"VCODEC");
-			std::wstring options = params.get_original(L"OPTIONS");
-			std::wstring output_metadata = params.get_original(L"OUTPUT_METADATA");
-			std::wstring audio_metadata = params.get_original(L"AUDIO_METADATA");
-			std::wstring video_metadata = params.get_original(L"VIDEO_METADATA");
-			int		 arate = params.get(L"ARATE", 0);
-			int		 vrate = params.get(L"VRATE", 0);
-			bool		 narrow_aspect_ratio = params.get(L"NARROW", false);
+			auto filename = params.size() > 1 ? narrow(params.at_original(1)) : "";
+			auto file_path_is_complete = boost::filesystem2::path(filename).is_complete();
+			auto separate_key = params.has(L"SEPARATE_KEY");
+			auto is_stream = params[0] == L"STREAM";
+			auto acodec = params.get_original(L"ACODEC");
+			auto vcodec = params.get_original(L"VCODEC");
+			auto options = params.get_original(L"OPTIONS");
+			auto output_metadata = params.get_original(L"OUTPUT_METADATA");
+			auto audio_metadata = params.get_original(L"AUDIO_METADATA");
+			auto video_metadata = params.get_original(L"VIDEO_METADATA");
+			auto pixel_format = params.get_original(L"PIXEL_FORMAT");
+			auto arate = params.get(L"ARATE", 0);
+			auto vrate = params.get(L"VRATE", 0);
+			auto narrow_aspect_ratio = params.get(L"NARROW", false);
 			output_params op(
 				file_path_is_complete ? filename : narrow(env::media_folder()) + filename,
 				narrow(acodec),
@@ -932,6 +938,7 @@ namespace caspar {
 				narrow(audio_metadata),
 				narrow(video_metadata),
 				narrow(options),
+				narrow(pixel_format),
 				is_stream,
 				narrow_aspect_ratio,
 				arate,
@@ -950,6 +957,7 @@ namespace caspar {
 			auto vrate = ptree.get(L"vrate", 0);
 			auto arate = ptree.get(L"arate", 0);
 			auto options = ptree.get(L"options", L"");
+			auto pixel_format = ptree.get(L"pixel-format", L"");
 			auto output_metadata = ptree.get(L"output-metadata", L"");
 			auto audio_metadata = ptree.get(L"audio-metadata", L"");
 			auto video_metadata = ptree.get(L"video-metadata", L"");
@@ -961,6 +969,7 @@ namespace caspar {
 				narrow(audio_metadata),
 				narrow(video_metadata),
 				narrow(options),
+				narrow(pixel_format),
 				true,
 				!ptree.get(L"narrow", false),
 				arate,
