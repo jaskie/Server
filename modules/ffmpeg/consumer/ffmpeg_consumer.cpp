@@ -194,7 +194,12 @@ namespace caspar {
 				{
 					AVOutputFormat * format = NULL;
 					if (output_params_.is_stream_)
-						format = av_guess_format("mpegts", NULL, NULL);
+					{
+						if (output_params_.file_name_.find("rtmp://") == 0)
+							format = av_guess_format("flv", NULL, NULL);
+						else
+							format = av_guess_format("mpegts", NULL, NULL);
+					}
 					if (!format && output_params_.is_mxf_ && format_desc.format == core::video_format::pal)
 						format = av_guess_format("mxf_d10", output_params_.file_name_.c_str(), NULL);
 					if (!format)
@@ -917,9 +922,9 @@ namespace caspar {
 			if (params.size() < 1 || (params[0] != L"FILE" && params[0] != L"STREAM"))
 				return core::frame_consumer::empty();
 			auto filename = params.size() > 1 ? narrow(params.at_original(1)) : "";
-			auto file_path_is_complete = boost::filesystem2::path(filename).is_complete();
-			auto separate_key = params.has(L"SEPARATE_KEY");
 			auto is_stream = params[0] == L"STREAM";
+			auto file_path_is_complete = is_stream || boost::filesystem2::path(filename).is_complete();
+			auto separate_key = params.has(L"SEPARATE_KEY");
 			auto acodec = params.get_original(L"ACODEC");
 			auto vcodec = params.get_original(L"VCODEC");
 			auto options = params.get_original(L"OPTIONS");
@@ -950,7 +955,6 @@ namespace caspar {
 		safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptree& ptree)
 		{
 			auto filename = narrow(ptree.get<std::wstring>(L"path"));
-			bool file_path_is_complete = boost::filesystem2::path(filename).is_complete();
 			auto vcodec = ptree.get(L"vcodec", L"libx264");
 			auto acodec = ptree.get(L"acodec", L"aac");
 			auto separate_key = ptree.get(L"separate-key", false);
@@ -962,7 +966,7 @@ namespace caspar {
 			auto audio_metadata = ptree.get(L"audio-metadata", L"");
 			auto video_metadata = ptree.get(L"video-metadata", L"");
 			output_params op(
-				file_path_is_complete ? filename : narrow(env::media_folder()) + filename,
+				filename,
 				narrow(acodec),
 				narrow(vcodec),
 				narrow(output_metadata),
