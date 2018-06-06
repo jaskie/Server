@@ -377,7 +377,7 @@ namespace caspar {
 				}
 
 				if (output_params_.video_bitrate_ != 0)
-					c->bit_rate = output_params_.video_bitrate_ * 1024;
+					c->bit_rate = output_params_.video_bitrate_ * 1000;
 				if (!output_params_.pixel_format_.empty())
 					c->pix_fmt = av_get_pix_fmt(output_params_.pixel_format_.c_str());
 
@@ -454,7 +454,7 @@ namespace caspar {
 					c->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
 				if (output_params_.audio_bitrate_ != 0)
-					c->bit_rate = output_params_.audio_bitrate_ * 1024;
+					c->bit_rate = output_params_.audio_bitrate_ * 1000;
 
 				audio_is_planar = av_sample_fmt_is_planar(c->sample_fmt) != 0;
 
@@ -975,7 +975,7 @@ namespace caspar {
 				narrow(options),
 				narrow(pixel_format),
 				true,
-				!ptree.get(L"narrow", false),
+				ptree.get(L"narrow", false),
 				arate,
 				vrate,
 				std::string("00:00:00:00"));
