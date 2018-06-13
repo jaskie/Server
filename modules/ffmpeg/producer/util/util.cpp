@@ -445,37 +445,25 @@ std::wstring print_mode(size_t width, size_t height, double fps, bool interlaced
 
 bool is_valid_file(const std::wstring filename, const std::vector<std::wstring>& invalid_exts)
 {
-	//static std::vector<std::wstring> valid_exts = boost::assign::list_of(L".m2t")(L".mov")(L".mp4")(L".dv")(L".flv")(L".mpg")(L".wav")(L".mp3")(L".dnxhd")(L".h264")(L".prores");
-
 	auto ext = boost::to_lower_copy(boost::filesystem::wpath(filename).extension());
 		
 	if(std::find(invalid_exts.begin(), invalid_exts.end(), ext) != invalid_exts.end())
 		return false;	
 
-	//if(std::find(valid_exts.begin(), valid_exts.end(), ext) != valid_exts.end())
-	//	return true;	
-
 	auto filename2 = narrow(filename);
 
-	//if(boost::filesystem::path(filename2).extension() == ".m2t")
-	//	return true;
+	std::basic_ifstream<unsigned char> file(filename, std::ios::in | std::ios::binary | std::ios::beg);
 
-	std::ifstream file(filename);
+	const int PROBE_BUFFER_SIZE(2048);
+	std::vector<unsigned char> buf(PROBE_BUFFER_SIZE + AVPROBE_PADDING_SIZE);
 
-	std::vector<unsigned char> buf;
-	for(auto file_it = std::istreambuf_iterator<char>(file); file_it != std::istreambuf_iterator<char>() && buf.size() < 2048; ++file_it)
-		buf.push_back(*file_it);
-
-	if(buf.empty())
+	if (!file.read(buf.data(), PROBE_BUFFER_SIZE))
 		return false;
-
 	AVProbeData pb;
 	pb.filename = filename2.c_str();
 	pb.buf		= buf.data();
-	pb.buf_size = buf.size();
-	//TODO: find exception reason
-	//int score = 0;
-	return true;//av_probe_input_format2(&pb, true, &score) != nullptr;
+	pb.buf_size = PROBE_BUFFER_SIZE;
+	return av_probe_input_format(&pb, true) != nullptr;
 }
 
 bool is_valid_file(const std::wstring filename)
