@@ -463,6 +463,7 @@ bool is_valid_file(const std::wstring filename, const std::vector<std::wstring>&
 	pb.filename = filename2.c_str();
 	pb.buf		= buf.data();
 	pb.buf_size = PROBE_BUFFER_SIZE;
+	pb.mime_type = nullptr;
 	return av_probe_input_format(&pb, true) != nullptr;
 }
 
