@@ -86,6 +86,8 @@ namespace caspar {
 			const std::string							output_metadata_;
 			const std::string							audio_metadata_;
 			const std::string							video_metadata_;
+			const int									audio_stream_id_;
+			const int									video_stream_id_;
 			const std::string							options_;
 			const std::string							pixel_format_;
 			const bool									is_mxf_;
@@ -102,6 +104,8 @@ namespace caspar {
 				std::string output_metadata,
 				std::string audio_metadata,
 				std::string video_metadata,
+				const int audio_stream_id,
+				const int video_stream_id,
 				std::string options,
 				std::string pixel_format,
 				const bool is_stream,
@@ -114,6 +118,8 @@ namespace caspar {
 				, output_metadata_(std::move(output_metadata))
 				, audio_metadata_(std::move(audio_metadata))
 				, video_metadata_(std::move(video_metadata))
+				, audio_stream_id_(audio_stream_id)
+				, video_stream_id_(video_stream_id)
 				, options_(std::move(options))
 				, pixel_format_(std::move(pixel_format))
 				, is_narrow_(is_narrow)
@@ -208,18 +214,12 @@ namespace caspar {
 						BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not guess output format."));
 					AVCodec * video_codec = NULL;
 					AVCodec * audio_codec = NULL;
-					if (!output_params_.video_codec_.empty())
-						video_codec = avcodec_find_encoder_by_name(output_params_.video_codec_.c_str());
-					if (!output_params_.audio_codec_.empty())
-						audio_codec = avcodec_find_encoder_by_name(output_params_.audio_codec_.c_str());
-					if (!video_codec)
-						video_codec = avcodec_find_encoder(format->video_codec);
-					if (!audio_codec)
-						audio_codec = avcodec_find_encoder(format->audio_codec);
-					if (!video_codec)
-						video_codec = avcodec_find_encoder(AV_CODEC_ID_H264);
-					if (!audio_codec)
-						audio_codec = avcodec_find_encoder(AV_CODEC_ID_AAC);
+					video_codec = output_params_.video_codec_.empty()
+						? avcodec_find_encoder_by_name("libx264")
+						: avcodec_find_encoder_by_name(output_params_.video_codec_.c_str());
+					audio_codec = output_params_.audio_codec_.empty()
+						? avcodec_find_encoder_by_name("aac")
+						: avcodec_find_encoder_by_name(output_params_.audio_codec_.c_str());
 
 					format_context_ = std::unique_ptr<AVFormatContext, std::function<void(AVFormatContext *)>>(alloc_output_params_context(output_params_.file_name_, format), ([](AVFormatContext * ctx)
 					{
@@ -246,8 +246,10 @@ namespace caspar {
 					// Open the output
 
 					if (!(format_context_->oformat->flags & AVFMT_NOFILE))
-						THROW_ON_ERROR2(avio_open2(&format_context_->pb, output_params_.file_name_.c_str(), AVIO_FLAG_WRITE | AVIO_FLAG_NONBLOCK, NULL, &options_), "[ffmpeg_consumer]");
+						THROW_ON_ERROR2(avio_open2(&format_context_->pb, output_params_.file_name_.c_str(), AVIO_FLAG_WRITE, NULL, &options_), "[ffmpeg_consumer]");
 					format_context_->metadata = read_parameters(params.output_metadata_);
+					if (format_context_->max_delay <= 0)
+						format_context_->max_delay = AV_TIME_BASE * 10 / 7;
 
 					THROW_ON_ERROR2(avformat_write_header(format_context_.get(), &options_), "[ffmpeg_consumer]");
 
@@ -301,9 +303,10 @@ namespace caspar {
 				if (!st)
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not allocate video-stream.") << boost::errinfo_api_function("avformat_new_stream"));
 
-				st->id = 0;
 				st->time_base = av_make_q(format_desc_.duration, format_desc_.time_scale);
 				st->metadata = read_parameters(output_params_.video_metadata_);
+				st->id = output_params_.video_stream_id_;
+
 				AVCodecContext * c = st->codec;
 
 				c->refcounted_frames = 0;
@@ -326,7 +329,6 @@ namespace caspar {
 				{
 					if (c->width < 1280 || c->height < 720)
 						BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Unsupported video dimensions."));
-
 					c->bit_rate = 220 * 1000000;
 					c->pix_fmt = AV_PIX_FMT_YUV422P;
 				}
@@ -349,7 +351,8 @@ namespace caspar {
 				else if (c->codec_id == AV_CODEC_ID_H264)
 				{
 					c->bit_rate = format_desc_.height * 14 * 1000; // about 8Mbps for SD, 14 for HD
-					LOG_ON_ERROR2(av_opt_set(c->priv_data, "preset", "veryfast", NULL), "[ffmpeg_consumer]");
+					if (strcmp(encoder->name, "libx264") == 0)
+						LOG_ON_ERROR2(av_opt_set(c->priv_data, "preset", "veryfast", NULL), "[ffmpeg_consumer]");
 				}
 				else if (c->codec_id == AV_CODEC_ID_QTRLE)
 				{
@@ -421,8 +424,8 @@ namespace caspar {
 				auto st = avformat_new_stream(format_context_.get(), encoder);
 				if (!st)
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not allocate audio-stream") << boost::errinfo_api_function("avformat_new_stream"));
-				st->id = 1;
 				st->metadata = read_parameters(output_params_.audio_metadata_);
+				st->id = output_params_.audio_stream_id_;
 
 				AVCodecContext * c = st->codec;
 				c->refcounted_frames = 0;
@@ -435,7 +438,7 @@ namespace caspar {
 				c->sample_fmt = encoder->sample_fmts[0];
 				if (encoder->id == AV_CODEC_ID_FLV1)
 					c->sample_rate = 44100;
-
+				
 				if (encoder->id == AV_CODEC_ID_AAC)
 				{
 					c->sample_fmt = AV_SAMPLE_FMT_FLTP;
@@ -513,25 +516,21 @@ namespace caspar {
 				av_frame->top_field_first = format_desc_.field_mode == core::field_mode::upper;
 				av_frame->pts = out_frame_number_++;
 
-				std::unique_ptr<AVPacket, std::function<void(AVPacket *)>> pkt(av_packet_alloc(), [](AVPacket *p) { av_packet_free(&p); });
-				av_init_packet(pkt.get());
+				AVPacket pkt = { 0 };
+				av_init_packet(&pkt);
+
 				int got_packet;
 
-				THROW_ON_ERROR2(avcodec_encode_video2(codec_context, pkt.get(), av_frame.get(), &got_packet), "[video_encoder]");
+				THROW_ON_ERROR2(avcodec_encode_video2(codec_context, &pkt, av_frame.get(), &got_packet), "[video_encoder]");
 
 				if (got_packet == 0)
 					return;
 
-				if (pkt->pts != AV_NOPTS_VALUE)
-					pkt->pts = av_rescale_q(pkt->pts, codec_context->time_base, video_st_->time_base);
-				if (pkt->dts != AV_NOPTS_VALUE)
-					pkt->dts = av_rescale_q(pkt->dts, codec_context->time_base, video_st_->time_base);
-
+				av_packet_rescale_ts(&pkt, codec_context->time_base, video_st_->time_base);
 				if (codec_context->coded_frame->key_frame)
-					pkt->flags |= AV_PKT_FLAG_KEY;
-
-				pkt->stream_index = video_st_->index;
-				THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), pkt.get()), "[video_encoder]");
+					pkt.flags |= AV_PKT_FLAG_KEY;
+				pkt.stream_index = video_st_->index;
+				THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), &pkt), "[video_encoder]");
 			}
 
 			void resample_audio(core::read_frame& frame, AVCodecContext* ctx)
@@ -606,7 +605,8 @@ namespace caspar {
 				int frame_size = input_audio_size / (av_get_bytes_per_sample(enc->sample_fmt) * enc->channels);
 				while (audio_bufers_[0].size() >= input_audio_size)
 				{
-					std::unique_ptr<AVPacket, std::function<void(AVPacket *)>> pkt(av_packet_alloc(), [](AVPacket *p) { av_packet_free(&p); });
+					AVPacket pkt = { 0 };
+					av_init_packet(&pkt);
 					std::unique_ptr<AVFrame, std::function<void(AVFrame *)>> in_frame(av_frame_alloc(), [](AVFrame *frame) { av_frame_free(&frame); });
 					in_frame->nb_samples = frame_size;
 					in_frame->pts = out_audio_sample_number_;
@@ -619,7 +619,7 @@ namespace caspar {
 						for (char i = 0; i < enc->channels; i++)
 							in_frame->data[i] = audio_bufers_[i].data();
 					int got_packet;
-					THROW_ON_ERROR2(avcodec_encode_audio2(enc, pkt.get(), in_frame.get(), &got_packet), "[audio_encoder]");
+					THROW_ON_ERROR2(avcodec_encode_audio2(enc, &pkt, in_frame.get(), &got_packet), "[audio_encoder]");
 					if (audio_is_planar)
 						for (char i = 0; i < enc->channels; i++)
 							audio_bufers_[i].erase(audio_bufers_[i].begin(), audio_bufers_[i].begin() + (enc->frame_size * av_get_bytes_per_sample(enc->sample_fmt)));
@@ -627,12 +627,9 @@ namespace caspar {
 						audio_bufers_[0].erase(audio_bufers_[0].begin(), audio_bufers_[0].begin() + input_audio_size);
 					if (!got_packet)
 						return;
-					if (pkt->pts != AV_NOPTS_VALUE)
-						pkt->pts = av_rescale_q(pkt->pts, enc->time_base, audio_st_->time_base);
-					if (pkt->dts != AV_NOPTS_VALUE)
-						pkt->dts = av_rescale_q(pkt->dts, enc->time_base, audio_st_->time_base);
-					pkt->stream_index = audio_st_->index;
-					THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), pkt.get()), "[audio_encoder]");
+					av_packet_rescale_ts(&pkt, enc->time_base, audio_st_->time_base);
+					pkt.stream_index = audio_st_->index;
+					THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), &pkt), "[audio_encoder]");
 				}
 			}
 
@@ -868,6 +865,8 @@ namespace caspar {
 			auto pixel_format = params.get_original(L"PIXEL_FORMAT");
 			auto arate = params.get(L"ARATE", 0);
 			auto vrate = params.get(L"VRATE", 0);
+			auto audio_stream_id = params.get(L"AUDIO_STREAM_ID", 1);
+			auto video_stream_id = params.get(L"VIDEO_STREAM_ID", 0);
 			auto file_tc = params.get(L"IN", L"00:00:00:00");
 			auto file_path_is_complete = boost::filesystem2::path(narrow(filename)).is_complete();
 			auto op = output_params(
@@ -877,6 +876,8 @@ namespace caspar {
 				narrow(output_metadata),
 				narrow(audio_metadata),
 				narrow(video_metadata),
+				audio_stream_id,
+				video_stream_id,
 				narrow(options),
 				narrow(pixel_format),
 				false,
@@ -895,6 +896,8 @@ namespace caspar {
 			auto output_metadata = params.get_original(L"OUTPUT_METADATA");
 			auto audio_metadata = params.get_original(L"AUDIO_METADATA");
 			auto video_metadata = params.get_original(L"VIDEO_METADATA");
+			auto audio_stream_id = params.get(L"AUDIO_STREAM_ID", 1);
+			auto video_stream_id = params.get(L"VIDEO_STREAM_ID", 0);
 			auto pixel_format = params.get_original(L"PIXEL_FORMAT");
 			auto arate = params.get(L"ARATE", 0);
 			auto vrate = params.get(L"VRATE", 0);
@@ -906,6 +909,8 @@ namespace caspar {
 				narrow(output_metadata),
 				narrow(audio_metadata),
 				narrow(video_metadata),
+				audio_stream_id,
+				video_stream_id,
 				narrow(options),
 				narrow(pixel_format),
 				false,
@@ -931,6 +936,8 @@ namespace caspar {
 			auto output_metadata = params.get_original(L"OUTPUT_METADATA");
 			auto audio_metadata = params.get_original(L"AUDIO_METADATA");
 			auto video_metadata = params.get_original(L"VIDEO_METADATA");
+			auto audio_stream_id = params.get(L"AUDIO_STREAM_ID", 1);
+			auto video_stream_id = params.get(L"VIDEO_STREAM_ID", 0);
 			auto pixel_format = params.get_original(L"PIXEL_FORMAT");
 			auto arate = params.get(L"ARATE", 0);
 			auto vrate = params.get(L"VRATE", 0);
@@ -942,6 +949,8 @@ namespace caspar {
 				narrow(output_metadata),
 				narrow(audio_metadata),
 				narrow(video_metadata),
+				audio_stream_id,
+				video_stream_id,
 				narrow(options),
 				narrow(pixel_format),
 				is_stream,
@@ -955,8 +964,8 @@ namespace caspar {
 		safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptree& ptree)
 		{
 			auto filename = narrow(ptree.get<std::wstring>(L"path"));
-			auto vcodec = ptree.get(L"vcodec", L"libx264");
-			auto acodec = ptree.get(L"acodec", L"aac");
+			auto vcodec = ptree.get(L"vcodec", L"");
+			auto acodec = ptree.get(L"acodec", L"");
 			auto separate_key = ptree.get(L"separate-key", false);
 			auto vrate = ptree.get(L"vrate", 0);
 			auto arate = ptree.get(L"arate", 0);
@@ -965,6 +974,8 @@ namespace caspar {
 			auto output_metadata = ptree.get(L"output-metadata", L"");
 			auto audio_metadata = ptree.get(L"audio-metadata", L"");
 			auto video_metadata = ptree.get(L"video-metadata", L"");
+			auto audio_stream_id = ptree.get(L"audio_stream_id", 1);
+			auto video_stream_id = ptree.get(L"video_stream_id", 0);
 			output_params op(
 				filename,
 				narrow(acodec),
@@ -972,6 +983,8 @@ namespace caspar {
 				narrow(output_metadata),
 				narrow(audio_metadata),
 				narrow(video_metadata),
+				audio_stream_id,
+				video_stream_id,
 				narrow(options),
 				narrow(pixel_format),
 				true,
