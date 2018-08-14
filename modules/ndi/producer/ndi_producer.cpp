@@ -29,7 +29,7 @@
 #include "../../ffmpeg/producer/muxer/frame_muxer.h"
 #include "../../ffmpeg/producer/muxer/display_mode.h"
 
-#include <common/concurrency/com_context.h>
+#include <common/concurrency/executor.h>
 #include <common/diagnostics/graph.h>
 #include <common/exception/exceptions.h>
 #include <common/exception/win32_exception.h>
@@ -69,7 +69,7 @@ extern "C"
 
 namespace caspar { namespace ndi {
 
-	typedef std::unique_ptr<NDIlib_recv_instance_t, std::function<void(NDIlib_recv_instance_t *)>> ndi_receiver_t;
+	typedef std::unique_ptr<void, std::function<void(NDIlib_recv_instance_t)>> ndi_receiver_t;
 
 class ndi_producer : public core::frame_producer
 {	
@@ -95,6 +95,7 @@ class ndi_producer : public core::frame_producer
 	std::exception_ptr																		exception_;	
 	int																						num_input_channels_;
 	core::channel_layout																	audio_channel_layout_;
+	executor																				executor_;
 
 public:
 	ndi_producer(
@@ -110,6 +111,7 @@ public:
 		, sync_buffer_(format_desc.audio_cadence.size())
 		, frame_factory_(frame_factory)
 		, audio_channel_layout_(audio_channel_layout)
+		, executor_(print())
 	{		
 		hints_ = 0;
 		frame_buffer_.set_capacity(2);
@@ -144,11 +146,17 @@ public:
 		ndi_source.p_ip_address = NULL;
 		NDIlib_recv_create_t settings;
 		settings.source_to_connect_to = ndi_source;
-		settings.color_format = NDIlib_recv_color_format_e_BGRX_BGRA;
+		settings.color_format = NDIlib_recv_color_format_e_UYVY_BGRA;
 		settings.bandwidth = NDIlib_recv_bandwidth_highest;
 		settings.allow_video_fields = false;
-		ndi_receive_ = ndi_receiver_t(NDIlib_recv_create(&settings), [](NDIlib_recv_instance_t * r) {});
+		ndi_receive_ = ndi_receiver_t(NDIlib_recv_create2(&settings), [](NDIlib_recv_instance_t  r) 
+		{ 
+			if (r == NULL)
+				return;
+			NDIlib_recv_destroy(r); 
+		});
 		CASPAR_LOG(info) << print() << L" successfully initialized.";
+		tick();
 	}
 
 	~ndi_producer()
@@ -157,33 +165,55 @@ public:
 		CASPAR_LOG(info) << print() << L" successfully uninitialized.";
 	}
 
-	/*
-	void close_input()
+	void tick()
 	{
-		if(input_ != nullptr) 
+		executor_.begin_invoke([this]
 		{
-			input_->StopStreams();
-			input_->DisableAudioInput();
-			input_->DisableVideoInput();
+			read_next_frame();
+		});
+	}
+
+	void read_next_frame()
+	{
+		NDIlib_video_frame_t video_frame;
+		NDIlib_audio_frame_t audio_frame;
+		switch (NDIlib_recv_capture(ndi_receive_.get(), &video_frame, &audio_frame, NULL, 1000))
+		{
+		case NDIlib_frame_type_video:
+			NDIlib_recv_free_video(ndi_receive_.get(), &video_frame);
+			break;
+		case NDIlib_frame_type_audio:
+			NDIlib_recv_free_audio(ndi_receive_.get(), &audio_frame);
+			break;
 		}
 	}
 
-	void VideoInputFormatChanged()
+
+	void processVideo(NDIlib_video_frame_t * ndi_video)
 	{
-		close_input();
-		open_input(newDisplayMode->GetDisplayMode(), bmdVideoInputEnableFormatDetection);
-		current_display_mode_ = newDisplayMode;
-		newDisplayMode->GetFrameRate(&frame_duration_, &time_scale_);
-		BSTR displayModeString = NULL; 
-		if (SUCCEEDED(newDisplayMode->GetName(&displayModeString)) && displayModeString != NULL)
-		{
-			std::wstring modeName(displayModeString, SysStringLen(displayModeString));
-			SysFreeString(displayModeString);
-			CASPAR_LOG(info) << model_name_ << L" [" << device_index_ << L"]: Changed input video mode to " << modeName;
-			graph_->set_text(print());
-		}
-		return S_OK;
+		graph_->set_value("tick-time", tick_timer_.elapsed()*format_desc_.fps*0.5);
+		tick_timer_.restart();
+		std::shared_ptr<AVFrame> av_frame(av_frame_alloc(), [](AVFrame* frame) {av_frame_free(&frame); });
+		av_frame->data[0] = ndi_video->p_data;
+		av_frame->linesize[0] = ndi_video->line_stride_in_bytes;
+		av_frame->format = AV_PIX_FMT_UYVY422;
+		av_frame->width = ndi_video->xres;
+		av_frame->height = ndi_video->yres;
+		av_frame->pict_type = AV_PICTURE_TYPE_I;
+		av_frame->interlaced_frame = ndi_video->frame_format_type == NDIlib_frame_format_type_interleaved ? 1 : 0;
+		av_frame->top_field_first = true;
+		muxer_.push(av_frame, hints_, static_cast<int>((ndi_video->timecode * ndi_video->frame_rate_N)/(ndi_video->frame_rate_D * 10000000)));
 	}
+
+	void processAudio(NDIlib_audio_frame_t * ndi_audio)
+	{
+
+	}
+
+
+
+	/*
+
 
 	void VideoInputFrameArrived()
 	{	
@@ -302,9 +332,7 @@ public:
 	{
 		if(exception_ != nullptr)
 			std::rethrow_exception(exception_);
-
 		hints_ = hints;
-
 		safe_ptr<core::basic_frame> frame = core::basic_frame::late();
 		if(!frame_buffer_.try_pop(frame))
 			graph_->set_tag("late-frame");
@@ -344,18 +372,15 @@ safe_ptr<core::frame_producer> create_producer(
 {
 	if(params.empty() || !boost::iequals(params[0], "ndi"))
 		return core::frame_producer::empty();
-	auto source = L"";
-	auto device_index	= params.get(L"DEVICE", -1);
-	if(device_index == -1)
-		device_index = boost::lexical_cast<int>(params.at(1));
-	auto format_desc	= core::video_format_desc::get(params.get(L"FORMAT", L"INVALID"));
-	auto audio_layout		= core::create_custom_channel_layout(
+	auto source = params.get(L"NDI", L"");
+	if (source.empty())
+		return core::frame_producer::empty();
+	auto format_desc = core::video_format_desc::get(params.get(L"FORMAT", L"INVALID"));
+	auto audio_layout = core::create_custom_channel_layout(
 			params.get(L"CHANNEL_LAYOUT", L"STEREO"),
 			core::default_channel_layout_repository());
-	
 	if(format_desc.format == core::video_format::invalid)
 		format_desc = frame_factory->get_video_format_desc();
-			
 	return make_safe<ndi_producer>(frame_factory, format_desc, audio_layout, source);
 }
 
