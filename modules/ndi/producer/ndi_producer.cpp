@@ -16,15 +16,13 @@
 * You should have received a copy of the GNU General Public License
 * along with CasparCG. If not, see <http://www.gnu.org/licenses/>.
 *
-* Author: Robert Nagy, ronag89@gmail.com
+*  Author: Jerzy Jaœkiewicz, jurek@tvp.pl based on Robert Nagy, ronag89@gmail.com work
 */
 
-#include "../stdafx.h"
 
-#include "decklink_producer.h"
-
-#include "../interop/DeckLinkAPI_h.h"
-#include "../util/util.h"
+#include "ndi_producer.h"
+#include "../util/ndi_util.h"
+#include "../ndi.h"
 
 #include "../../ffmpeg/producer/filter/filter.h"
 #include "../../ffmpeg/producer/util/util.h"
@@ -39,6 +37,7 @@
 #include <common/memory/memclr.h>
 #include <common/utility/string.h>
 
+#include <core/producer/frame_producer.h>
 #include <core/parameters/parameters.h>
 #include <core/monitor/monitor.h>
 #include <core/mixer/write_frame.h>
@@ -51,6 +50,7 @@
 #include <boost/foreach.hpp>
 #include <boost/timer.hpp>
 #include <boost/locale.hpp>
+#include <boost/circular_buffer.hpp>
 
 #if defined(_MSC_VER)
 #pragma warning (push)
@@ -66,82 +66,53 @@ extern "C"
 #pragma warning (pop)
 #endif
 
-#pragma warning(push)
-#pragma warning(disable : 4996)
 
-	#include <atlbase.h>
+namespace caspar { namespace ndi {
 
-	#include <atlcom.h>
-	#include <atlhost.h>
+	typedef std::unique_ptr<NDIlib_recv_instance_t, std::function<void(NDIlib_recv_instance_t *)>> ndi_receiver_t;
 
-#pragma warning(push)
-
-#include <functional>
-
-namespace caspar { namespace decklink {
-		
-class decklink_producer : boost::noncopyable, public IDeckLinkInputCallback
+class ndi_producer : public core::frame_producer
 {	
-	core::monitor::subject										monitor_subject_;
-	safe_ptr<diagnostics::graph>								graph_;
-	boost::timer												tick_timer_;
-	boost::timer												frame_timer_;
-	core::video_format_desc										format_desc_;
+	core::monitor::subject																	monitor_subject_;
+	safe_ptr<diagnostics::graph>															graph_;
+	boost::timer																			tick_timer_;
+	boost::timer																			frame_timer_;
+	core::video_format_desc																	format_desc_;
+	caspar::safe_ptr<core::basic_frame>														last_frame_;
 
-	CComPtr<IDeckLink>											decklink_;
-	CComQIPtr<IDeckLinkInput>									input_;
-	CComQIPtr<IDeckLinkAttributes>								attributes_;
-	CComQIPtr<IDeckLinkDisplayMode>								current_display_mode_;
+	ndi_receiver_t																			ndi_receive_;
 
-	const std::wstring											model_name_;
-	const size_t												device_index_;
-	const std::wstring											filter_;
+	const std::wstring																		source_;
 	
-	std::vector<size_t>											audio_cadence_;
-	boost::circular_buffer<size_t>								sync_buffer_;
-	ffmpeg::frame_muxer											muxer_;
+	std::vector<size_t>																		audio_cadence_;
+	boost::circular_buffer<size_t>															sync_buffer_;
+	ffmpeg::frame_muxer																		muxer_;
 			
-	tbb::atomic<int>											hints_;
-	safe_ptr<core::frame_factory>								frame_factory_;
+	tbb::atomic<int>																		hints_;
+	safe_ptr<core::frame_factory>															frame_factory_;
+	tbb::concurrent_bounded_queue<safe_ptr<core::basic_frame>>								frame_buffer_;
 
-	tbb::concurrent_bounded_queue<safe_ptr<core::basic_frame>>	frame_buffer_;
-
-	std::exception_ptr											exception_;	
-	int															num_input_channels_;
-	core::channel_layout										audio_channel_layout_;
-	const BMDTimecodeFormat										timecode_source_;
-	BMDTimeValue												frame_duration_;
-	BMDTimeScale												time_scale_;
+	std::exception_ptr																		exception_;	
+	int																						num_input_channels_;
+	core::channel_layout																	audio_channel_layout_;
 
 public:
-	decklink_producer(
+	ndi_producer(
+			const safe_ptr<core::frame_factory>& frame_factory,
 			const core::video_format_desc& format_desc,
 			const core::channel_layout& audio_channel_layout,
-			size_t device_index,
-			const safe_ptr<core::frame_factory>& frame_factory,
-			const std::wstring& filter,
-			std::size_t buffer_depth,
-			const BMDTimecodeFormat timecode_source
+			const std::wstring& source
 		)
-		: decklink_(get_device(device_index))
-		, input_(decklink_)
-		, attributes_(decklink_)
-		, model_name_(get_model_name(decklink_))
-		, device_index_(device_index)
-		, filter_(filter)
+		: source_(source)
 		, format_desc_(format_desc)
 		, audio_cadence_(format_desc.audio_cadence)
-		, muxer_(format_desc.fps, frame_factory, false, audio_channel_layout, narrow(filter))
+		, muxer_(format_desc.fps, frame_factory, false, audio_channel_layout, "")
 		, sync_buffer_(format_desc.audio_cadence.size())
 		, frame_factory_(frame_factory)
 		, audio_channel_layout_(audio_channel_layout)
-		, timecode_source_(timecode_source)
-		, current_display_mode_(get_display_mode(input_, format_desc_.format, bmdFormat8BitYUV, bmdVideoInputFlagDefault))
-		, frame_duration_(format_desc_.duration)
-		, time_scale_(format_desc_.time_scale)
 	{		
 		hints_ = 0;
-		frame_buffer_.set_capacity(buffer_depth);
+		frame_buffer_.set_capacity(2);
 
 		if (audio_channel_layout.num_channels <= 2)
 			num_input_channels_ = 2;
@@ -159,44 +130,34 @@ public:
 		graph_->set_text(print());
 		diagnostics::register_graph(graph_);
 		
-		BOOL supportsFormatDetection = false;
-		if (FAILED(attributes_->GetFlag(BMDDeckLinkSupportsInputFormatDetection, &supportsFormatDetection)))
-			supportsFormatDetection = false;
-		
-		open_input(current_display_mode_->GetDisplayMode(), supportsFormatDetection ? bmdVideoInputEnableFormatDetection : bmdVideoInputFlagDefault);
+		//open_input(current_display_mode_->GetDisplayMode(), supportsFormatDetection ? bmdVideoInputEnableFormatDetection : bmdVideoInputFlagDefault);
 
+		/*
 		if (FAILED(input_->SetCallback(this)) != S_OK)
 			BOOST_THROW_EXCEPTION(caspar_exception() 
 									<< msg_info(narrow(print()) + " Failed to set input callback.")
 									<< boost::errinfo_api_function("SetCallback"));
+		*/
+		std::string source_n = narrow(source);
+		NDIlib_source_t ndi_source;
+		ndi_source.p_ndi_name = source_n.c_str();
+		ndi_source.p_ip_address = NULL;
+		NDIlib_recv_create_t settings;
+		settings.source_to_connect_to = ndi_source;
+		settings.color_format = NDIlib_recv_color_format_e_BGRX_BGRA;
+		settings.bandwidth = NDIlib_recv_bandwidth_highest;
+		settings.allow_video_fields = false;
+		ndi_receive_ = ndi_receiver_t(NDIlib_recv_create(&settings), [](NDIlib_recv_instance_t * r) {});
 		CASPAR_LOG(info) << print() << L" successfully initialized.";
 	}
 
-	~decklink_producer()
+	~ndi_producer()
 	{
-		close_input();
+		//close_input();
 		CASPAR_LOG(info) << print() << L" successfully uninitialized.";
 	}
 
-	void open_input(BMDDisplayMode displayMode, BMDVideoInputFlags bmdVideoInputFlags)
-	{
-		if(FAILED(input_->EnableVideoInput(displayMode, bmdFormat8BitYUV, bmdVideoInputFlags))) 
-			BOOST_THROW_EXCEPTION(caspar_exception() 
-									<< msg_info(narrow(print()) + " Could not enable video input.")
-									<< boost::errinfo_api_function("EnableVideoInput"));
-
-		if(FAILED(input_->EnableAudioInput(bmdAudioSampleRate48kHz, bmdAudioSampleType32bitInteger, num_input_channels_))) 
-			BOOST_THROW_EXCEPTION(caspar_exception() 
-									<< msg_info(narrow(print()) + " Could not enable audio input.")
-									<< boost::errinfo_api_function("EnableAudioInput"));
-			
-		if(FAILED(input_->StartStreams()))
-			BOOST_THROW_EXCEPTION(caspar_exception() 
-									<< msg_info(narrow(print()) + " Failed to start input stream.")
-									<< boost::errinfo_api_function("StartStreams"));
-
-	}
-
+	/*
 	void close_input()
 	{
 		if(input_ != nullptr) 
@@ -207,11 +168,7 @@ public:
 		}
 	}
 
-	virtual HRESULT STDMETHODCALLTYPE	QueryInterface (REFIID, LPVOID*)	{return E_NOINTERFACE;}
-	virtual ULONG STDMETHODCALLTYPE		AddRef ()							{return 1;}
-	virtual ULONG STDMETHODCALLTYPE		Release ()							{return 1;}
-		
-	virtual HRESULT STDMETHODCALLTYPE VideoInputFormatChanged(BMDVideoInputFormatChangedEvents notificationEvents, IDeckLinkDisplayMode* newDisplayMode, BMDDetectedVideoInputFormatFlags /*detectedSignalFlags*/)
+	void VideoInputFormatChanged()
 	{
 		close_input();
 		open_input(newDisplayMode->GetDisplayMode(), bmdVideoInputEnableFormatDetection);
@@ -228,7 +185,7 @@ public:
 		return S_OK;
 	}
 
-	virtual HRESULT STDMETHODCALLTYPE VideoInputFrameArrived(IDeckLinkVideoInputFrame* video, IDeckLinkAudioInputPacket* audio)
+	void VideoInputFrameArrived()
 	{	
 		win32_exception::ensure_handler_installed_for_thread("decklink-VideoInputFrameArrived");
 		if(!video)
@@ -339,8 +296,9 @@ public:
 
 		return S_OK;
 	}
+	*/
 	
-	safe_ptr<core::basic_frame> get_frame(int hints)
+	virtual safe_ptr<core::basic_frame> receive(int hints) override
 	{
 		if(exception_ != nullptr)
 			std::rethrow_exception(exception_);
@@ -351,61 +309,7 @@ public:
 		if(!frame_buffer_.try_pop(frame))
 			graph_->set_tag("late-frame");
 		graph_->set_value("output-buffer", static_cast<float>(frame_buffer_.size())/static_cast<float>(frame_buffer_.capacity()));	
-		return frame;
-	}
-	
-	std::wstring print() const
-	{
-		BSTR displayModeString = NULL;
-		if (!FAILED(current_display_mode_->GetName(&displayModeString)) && displayModeString != NULL)
-		{
-			std::wstring modeName(displayModeString, SysStringLen(displayModeString));
-			SysFreeString(displayModeString);
-			return model_name_ + L"[decklink_producer] [" + boost::lexical_cast<std::wstring>(device_index_) + L"|" + modeName + L"]";
-		}
-		return model_name_ + L"[decklink_producer] [" + boost::lexical_cast<std::wstring>(device_index_) + L"]";
-	}
-
-	core::monitor::subject& monitor_output()
-	{
-		return monitor_subject_;
-	}
-};
-	
-class decklink_producer_proxy : public core::frame_producer
-{		
-	safe_ptr<core::basic_frame>		last_frame_;
-	com_context<decklink_producer>	context_;
-public:
-
-	explicit decklink_producer_proxy(
-		const safe_ptr<core::frame_factory>& frame_factory,
-		const core::video_format_desc& format_desc,
-		const core::channel_layout& audio_channel_layout,
-		size_t device_index,
-		const std::wstring& filter_str,
-		uint32_t length,
-		std::size_t buffer_depth,
-		const std::wstring timecode_source_str
-	)
-		: context_(L"decklink_producer[" + boost::lexical_cast<std::wstring>(device_index) + L"]")
-		, last_frame_(core::basic_frame::empty())
-	{
-		BMDTimecodeFormat timecode_source = bmdTimecodeRP188Any;
-		if (timecode_source_str == L"serial")
-			timecode_source = bmdTimecodeSerial;
-		else if (timecode_source_str == L"vitc")
-			timecode_source = bmdTimecodeVITC;
-		context_.reset([&]{return new decklink_producer(format_desc, audio_channel_layout, device_index, frame_factory, filter_str, buffer_depth, timecode_source);});
-	}
-	
-	// frame_producer
-				
-	virtual safe_ptr<core::basic_frame> receive(
-			int hints) override
-	{
-		auto frame = context_->get_frame(hints);
-		if(frame != core::basic_frame::late())
+		if (frame != core::basic_frame::late())
 			last_frame_ = frame;
 		return frame;
 	}
@@ -415,64 +319,53 @@ public:
 		return disable_audio(last_frame_);
 	}
 	
-	std::wstring print() const override
+	std::wstring print() const
 	{
-		return context_->print();
+		return L"[ndi_producer] [" + source_+ L"]";
 	}
 
 	virtual boost::property_tree::wptree info() const override
 	{
 		boost::property_tree::wptree info;
-		info.add(L"type", L"decklink-producer");
+		info.add(L"type", L"ndi-producer");
 		return info;
 	}
 
-	core::monitor::subject& monitor_output()
+	virtual core::monitor::subject& monitor_output() override
 	{
-		return context_->monitor_output();
+		return monitor_subject_;
 	}
+
 };
 
 safe_ptr<core::frame_producer> create_producer(
 		const safe_ptr<core::frame_factory>& frame_factory,
 		const core::parameters& params)
 {
-	if(params.empty() || !boost::iequals(params[0], "decklink"))
+	if(params.empty() || !boost::iequals(params[0], "ndi"))
 		return core::frame_producer::empty();
-
+	auto source = L"";
 	auto device_index	= params.get(L"DEVICE", -1);
 	if(device_index == -1)
 		device_index = boost::lexical_cast<int>(params.at(1));
-	auto filter_str		= params.get(L"FILTER"); 	
-	auto length			= params.get(L"LENGTH", std::numeric_limits<uint32_t>::max()); 	
-	auto buffer_depth	= params.get(L"BUFFER", 2); 	
 	auto format_desc	= core::video_format_desc::get(params.get(L"FORMAT", L"INVALID"));
 	auto audio_layout		= core::create_custom_channel_layout(
 			params.get(L"CHANNEL_LAYOUT", L"STEREO"),
 			core::default_channel_layout_repository());
 	
-	boost::replace_all(filter_str, L"DEINTERLACE", L"YADIF=0:-1");
-	boost::replace_all(filter_str, L"DEINTERLACE_BOB", L"YADIF=1:-1");
-	
 	if(format_desc.format == core::video_format::invalid)
 		format_desc = frame_factory->get_video_format_desc();
 			
-	return create_producer_print_proxy(
-		   create_producer_destroy_proxy(
-			make_safe<decklink_producer_proxy>(frame_factory, format_desc, audio_layout, device_index, filter_str, length, buffer_depth, L"")));
+	return make_safe<ndi_producer>(frame_factory, format_desc, audio_layout, source);
 }
 
-safe_ptr<core::frame_producer> create_producer(const safe_ptr<core::frame_factory>& frame_factory, const core::video_format_desc format_desc, const core::channel_layout channel_layout, int device_index, const std::wstring timecode_source)
+safe_ptr<core::frame_producer> create_producer(const safe_ptr<core::frame_factory>& frame_factory, const core::video_format_desc format_desc, const core::channel_layout channel_layout, const std::wstring source)
 {
-	return make_safe<decklink_producer_proxy>(
+	return make_safe<ndi_producer>(
 		frame_factory,
 		format_desc,
 		channel_layout,
-		device_index, 
-		L"", 
-		std::numeric_limits<uint32_t>::max(),
-		3,
-		timecode_source
+		source
 		);
 }
 

@@ -144,7 +144,7 @@ namespace caspar {
 		typedef std::unique_ptr<SwrContext, std::function<void(SwrContext *)>> SwrContextPtr;
 		typedef std::unique_ptr<AVFormatContext, std::function<void(AVFormatContext *)>> AVFormatContextPtr;
 		typedef std::unique_ptr<AVCodecContext, std::function<void(AVCodecContext *)>> AVCodecContextPtr;
-
+		
 		struct ffmpeg_consumer : boost::noncopyable
 		{
 			AVDictionary *							options_;
@@ -229,24 +229,25 @@ namespace caspar {
 						? avcodec_find_encoder_by_name("aac")
 						: avcodec_find_encoder_by_name(output_params_.audio_codec_.c_str());
 
-					format_context_ = AVFormatContextPtr(alloc_output_params_context(output_params_.file_name_, format), ([](AVFormatContext * ctx)
+				
+					format_context_ = AVFormatContextPtr(alloc_output_params_context(output_params_.file_name_, format), [](AVFormatContext * ctx)
 					{
 						if (!(ctx->oformat->flags & AVFMT_NOFILE))
 							LOG_ON_ERROR2(avio_close(ctx->pb), "[ffmpeg_consumer]"); // Close the output ffmpeg.
 						avformat_free_context(ctx);
-					}));
-
+					});
+					
 					//  Add the audio and video streams using the default format codecs	and initialize the codecs.
 
 
 
 					video_stream_ = add_video_stream(video_codec, format);
-					
+
 					if (!key_only)
 						audio_stream_ = add_audio_stream(audio_codec, format);
 
 					LOG_ON_ERROR2(av_dict_set(&video_stream_->metadata, "timecode", output_params_.file_timecode_.c_str(), AV_DICT_DONT_OVERWRITE), "[ffmpeg_consumer]");
-
+					
 					// Open the output
 					format_context_->metadata = read_parameters(params.output_metadata_);
 					if (format_context_->max_delay <= 0)
@@ -429,7 +430,7 @@ namespace caspar {
 			{
 				if (!encoder)
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("codec not found") << boost::errinfo_api_function("avcodec_find_encoder"));
-				
+
 				audio_codec_ctx_ = AVCodecContextPtr(avcodec_alloc_context3(encoder), [](AVCodecContext * ctx) {avcodec_free_context(&ctx); });
 
 				audio_codec_ctx_->refcounted_frames = 0;

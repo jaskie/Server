@@ -22,7 +22,9 @@
 #include "ndi.h" 
 #include "util/ndi_util.h"
 #include <core/consumer/frame_consumer.h>
+#include <core/producer/frame_producer.h>
 #include "consumer/ndi_consumer.h"
+#include "producer/ndi_producer.h"
 #include <common/log/log.h>
 #include <common/utility/string.h>
 
@@ -44,6 +46,8 @@ namespace caspar {
 			{
 				return create_ndi_consumer(params);
 			});
+			core::register_producer_factory([](const safe_ptr<core::frame_factory>& factory, const core::parameters& params) { return ndi::create_producer(factory, params); });
+
 		}
 
 		std::wstring get_version()
