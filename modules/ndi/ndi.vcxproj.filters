@@ -8,6 +8,9 @@
     <ClInclude Include="util\ndi_util.h">
       <Filter>util</Filter>
     </ClInclude>
+    <ClInclude Include="producer\ndi_producer.h">
+      <Filter>producer</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ndi.cpp" />
@@ -17,6 +20,9 @@
     <ClCompile Include="util\ndi_util.cpp">
       <Filter>util</Filter>
     </ClCompile>
+    <ClCompile Include="producer\ndi_producer.cpp">
+      <Filter>producer</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="consumer">
@@ -24,6 +30,9 @@
     </Filter>
     <Filter Include="util">
       <UniqueIdentifier>{bbd5a3b9-00cc-47bc-b46b-efde3d720088}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="producer">
+      <UniqueIdentifier>{46d2c9c8-b329-46ce-a621-d07988ac280e}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

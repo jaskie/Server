@@ -221,12 +221,12 @@ namespace caspar {
 						? avcodec_find_encoder_by_name("aac")
 						: avcodec_find_encoder_by_name(output_params_.audio_codec_.c_str());
 
-					format_context_ = std::unique_ptr<AVFormatContext, std::function<void(AVFormatContext *)>>(alloc_output_params_context(output_params_.file_name_, format), ([](AVFormatContext * ctx)
+					format_context_ = std::unique_ptr<AVFormatContext, std::function<void(AVFormatContext *)>>(alloc_output_params_context(output_params_.file_name_, format), [](AVFormatContext * ctx)
 					{
 						if (!(ctx->oformat->flags & AVFMT_NOFILE))
 							LOG_ON_ERROR2(avio_close(ctx->pb), "[ffmpeg_consumer]"); // Close the output ffmpeg.
 						avformat_free_context(ctx);
-					}));
+					});
 
 					//  Add the audio and video streams using the default format codecs	and initialize the codecs.
 
