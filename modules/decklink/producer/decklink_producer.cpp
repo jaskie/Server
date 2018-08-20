@@ -330,6 +330,8 @@ public:
 			graph_->set_value("frame-time", frame_timer_.elapsed()*format_desc_.fps*0.5);
 
 			graph_->set_value("output-buffer", static_cast<float>(frame_buffer_.size())/static_cast<float>(frame_buffer_.capacity()));	
+
+			monitor_subject_ << core::monitor::message("/device") % static_cast<int>(device_index_);
 		}
 		catch(...)
 		{
@@ -389,7 +391,7 @@ public:
 		const std::wstring timecode_source_str
 	)
 		: context_(L"decklink_producer[" + boost::lexical_cast<std::wstring>(device_index) + L"]")
-		, last_frame_(core::basic_frame::empty())
+		, last_frame_(core::basic_frame::late())
 	{
 		BMDTimecodeFormat timecode_source = bmdTimecodeRP188Any;
 		if (timecode_source_str == L"serial")

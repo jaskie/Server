@@ -70,7 +70,7 @@ namespace caspar {
 		NDIlib_send_instance_t create_ndi_send(const NDIlib_v2* ndi_lib, const std::string ndi_name, const std::string groups)
 		{
 			if (!ndi_lib)
-				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(" NDI library not available"));
+				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(" NDI library not loaded"));
 			NDIlib_send_create_t NDI_send_create_desc = { ndi_name.c_str(), groups.c_str(), true, false };
 			return ndi_lib->NDIlib_send_create(&NDI_send_create_desc);
 		}
@@ -308,7 +308,7 @@ namespace caspar {
 		};
 
 
-		safe_ptr<core::frame_consumer> create_ndi_consumer(const core::parameters& params)
+		safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params)
 		{
 			if (params.size() < 1 || params[0] != L"NDI")
 				return core::frame_consumer::empty();

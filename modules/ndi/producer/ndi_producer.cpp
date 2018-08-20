@@ -80,6 +80,7 @@ class ndi_producer : public core::frame_producer
 	core::video_format_desc																	format_desc_;
 	caspar::safe_ptr<core::basic_frame>														last_frame_;
 
+	const NDIlib_v2*																		ndi_lib_;
 	ndi_receiver_t																			ndi_receive_;
 
 	const std::wstring																		source_;
@@ -111,9 +112,13 @@ public:
 		, sync_buffer_(format_desc.audio_cadence.size())
 		, frame_factory_(frame_factory)
 		, audio_channel_layout_(audio_channel_layout)
+		, ndi_lib_(load_ndi())
+		, hints_(tbb::atomic<int>())
 		, executor_(print())
 	{		
-		hints_ = 0;
+		if (!ndi_lib_)
+			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(" NDI library not loaded"));
+
 		frame_buffer_.set_capacity(2);
 
 		if (audio_channel_layout.num_channels <= 2)
@@ -132,14 +137,6 @@ public:
 		graph_->set_text(print());
 		diagnostics::register_graph(graph_);
 		
-		//open_input(current_display_mode_->GetDisplayMode(), supportsFormatDetection ? bmdVideoInputEnableFormatDetection : bmdVideoInputFlagDefault);
-
-		/*
-		if (FAILED(input_->SetCallback(this)) != S_OK)
-			BOOST_THROW_EXCEPTION(caspar_exception() 
-									<< msg_info(narrow(print()) + " Failed to set input callback.")
-									<< boost::errinfo_api_function("SetCallback"));
-		*/
 		std::string source_n = narrow(source);
 		NDIlib_source_t ndi_source;
 		ndi_source.p_ndi_name = source_n.c_str();
@@ -149,14 +146,14 @@ public:
 		settings.color_format = NDIlib_recv_color_format_e_UYVY_BGRA;
 		settings.bandwidth = NDIlib_recv_bandwidth_highest;
 		settings.allow_video_fields = false;
-		ndi_receive_ = ndi_receiver_t(NDIlib_recv_create2(&settings), [](NDIlib_recv_instance_t  r) 
+		ndi_receive_ = ndi_receiver_t(ndi_lib_->NDIlib_recv_create2(&settings), [this](NDIlib_recv_instance_t  r)
 		{ 
 			if (r == NULL)
 				return;
-			NDIlib_recv_destroy(r); 
+			ndi_lib_->NDIlib_recv_destroy(r);
 		});
 		CASPAR_LOG(info) << print() << L" successfully initialized.";
-		tick();
+		//tick();
 	}
 
 	~ndi_producer()
@@ -167,10 +164,15 @@ public:
 
 	void tick()
 	{
-		executor_.begin_invoke([this]
-		{
-			read_next_frame();
-		});
+		while (!(muxer_.video_ready()))
+			executor_.begin_invoke([this]
+			{
+				read_next_frame();
+				for (auto frame = muxer_.poll(); frame; frame = muxer_.poll())
+				{
+					frame_buffer_.push(make_safe_ptr(frame));
+				}
+			});
 	}
 
 	void read_next_frame()
@@ -184,6 +186,8 @@ public:
 			break;
 		case NDIlib_frame_type_audio:
 			NDIlib_recv_free_audio(ndi_receive_.get(), &audio_frame);
+			break;
+		default:
 			break;
 		}
 	}
@@ -339,6 +343,7 @@ public:
 		graph_->set_value("output-buffer", static_cast<float>(frame_buffer_.size())/static_cast<float>(frame_buffer_.capacity()));	
 		if (frame != core::basic_frame::late())
 			last_frame_ = frame;
+		monitor_subject_ << core::monitor::message("/source") % source_;
 		return frame;
 	}
 
@@ -381,10 +386,10 @@ safe_ptr<core::frame_producer> create_producer(
 			core::default_channel_layout_repository());
 	if(format_desc.format == core::video_format::invalid)
 		format_desc = frame_factory->get_video_format_desc();
-	return make_safe<ndi_producer>(frame_factory, format_desc, audio_layout, source);
+	return create_producer_destroy_proxy(make_safe<ndi_producer>(frame_factory, format_desc, audio_layout, source));
 }
 
-safe_ptr<core::frame_producer> create_producer(const safe_ptr<core::frame_factory>& frame_factory, const core::video_format_desc format_desc, const core::channel_layout channel_layout, const std::wstring source)
+safe_ptr<core::frame_producer> create_ndi_producer(const safe_ptr<core::frame_factory>& frame_factory, const core::video_format_desc format_desc, const core::channel_layout channel_layout, const std::wstring source)
 {
 	return make_safe<ndi_producer>(
 		frame_factory,
