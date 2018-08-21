@@ -316,13 +316,11 @@ public:
 			
 			for(auto frame = muxer_.poll(); frame; frame = muxer_.poll())
 			{
-				if(!frame_buffer_.try_push(make_safe_ptr(frame)))
+				auto safe_frame = make_safe_ptr(frame);
+				while (!frame_buffer_.try_push(safe_frame))
 				{
 					auto dummy = core::basic_frame::empty();
 					frame_buffer_.try_pop(dummy);
-
-					frame_buffer_.try_push(make_safe_ptr(frame));
-
 					graph_->set_tag("dropped-frame");
 				}
 			}

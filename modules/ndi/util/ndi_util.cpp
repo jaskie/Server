@@ -87,7 +87,7 @@ std::shared_ptr<NDIlib_audio_frame_interleaved_32f_t> create_audio_frame(const c
 }
 
 
-NDIlib_v2* load_ndi()
+std::shared_ptr<NDIlib_v2> load_ndi()
 {
 #ifdef	_WIN64
 	std::string ndi_lib("Processing.NDI.Lib.x64.dll");
@@ -106,18 +106,20 @@ NDIlib_v2* load_ndi()
 			h_lib = ::LoadLibraryA(ndi_lib.c_str());
 		}
 	}
-	NDIlib_v2* (*ndi_lib_load)(void) = NULL;
 	if (h_lib)
+	{
+		NDIlib_v2* (*ndi_lib_load)(void) = NULL;
 		*((FARPROC*)&ndi_lib_load) = ::GetProcAddress(h_lib, "NDIlib_v2_load");
-	if (!ndi_lib_load)
-	{	// Cannot run NDI. Most likely because the CPU is not sufficient (see SDK documentation).
-		// you can check this directly with a call to NDIlib_is_supported_CPU()
-		if (h_lib)
+		if (!ndi_lib_load)
+		{	// Cannot run NDI. Most likely because the CPU is not sufficient (see SDK documentation).
+			// you can check this directly with a call to NDIlib_is_supported_CPU()
 			::FreeLibrary(h_lib);
-		CASPAR_LOG(info) << L"Newtek NDI runtime not found.";
-		return nullptr;
+			CASPAR_LOG(info) << L"Newtek NDI runtime not found.";
+			return nullptr;
+		}
+		return std::shared_ptr<NDIlib_v2>(ndi_lib_load(), [h_lib](NDIlib_v2*) { ::FreeLibrary(h_lib); });
 	}
-	return ndi_lib_load();
+	return nullptr;
 }
 
 
