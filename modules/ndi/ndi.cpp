@@ -35,13 +35,18 @@ namespace caspar {
 
 		void init()
 		{
-			const NDIlib_v2* p_ndi_lib = load_ndi();
-			if (!p_ndi_lib || !p_ndi_lib->NDIlib_initialize())
+			auto ndi_lib = load_ndi();
+			if (!ndi_lib)
+			{
+				CASPAR_LOG(info) << L"Newtek NDI library not found.";
+				return;
+			}
+			if (!ndi_lib->NDIlib_initialize())
 			{
 				CASPAR_LOG(info) << L"Newtek NDI unable to initialize. This may be caused by an unsupported CPU.";
 				return;
 			}
-			p_ndi_lib->NDIlib_destroy();
+			ndi_lib->NDIlib_destroy();
 			core::register_consumer_factory(create_consumer);
 			core::register_producer_factory(create_producer);
 
@@ -49,10 +54,10 @@ namespace caspar {
 
 		std::wstring get_version()
 		{
-			const NDIlib_v2* p_ndi_lib = load_ndi();
-			if (!p_ndi_lib)
+			auto ndi_lib = load_ndi();
+			if (!ndi_lib)
 				return L"Unavailable";
-			return widen(p_ndi_lib->NDIlib_version());
+			return widen(ndi_lib->NDIlib_version());
 		}
 
 	}

@@ -35,6 +35,6 @@ namespace core {
 namespace ndi {
 	NDIlib_video_frame_t* create_video_frame(const core::video_format_desc& format, const bool is_alpha);
 	std::shared_ptr<NDIlib_audio_frame_interleaved_32f_t> create_audio_frame(const core::channel_layout& layout, const int nb_samples, const int sample_rate);
-	NDIlib_v2* load_ndi();
+	std::shared_ptr<NDIlib_v2> load_ndi();
 
 } }
