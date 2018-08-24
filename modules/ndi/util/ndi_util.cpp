@@ -87,39 +87,44 @@ std::shared_ptr<NDIlib_audio_frame_interleaved_32f_t> create_audio_frame(const c
 }
 
 
-std::shared_ptr<NDIlib_v2> load_ndi()
+NDIlib_v2* load_ndi()
 {
+	static NDIlib_v2* ndi_lib_ptr = nullptr;
+	if (ndi_lib_ptr == nullptr)
+	{
+
 #ifdef	_WIN64
-	std::string ndi_lib("Processing.NDI.Lib.x64.dll");
+		std::string ndi_lib("Processing.NDI.Lib.x64.dll");
 #else	
-	std::string ndi_lib("Processing.NDI.Lib.x86.dll");
+		std::string ndi_lib("Processing.NDI.Lib.x86.dll");
 #endif
-	HMODULE h_lib = nullptr;
-	h_lib = ::LoadLibraryA(ndi_lib.c_str());
-	if (!h_lib)
-	{
-		char* env_path = ::getenv("NDI_RUNTIME_DIR_V2");
-		if (env_path)
+		HMODULE h_lib = nullptr;
+		h_lib = ::LoadLibraryA(ndi_lib.c_str());
+		if (!h_lib)
 		{
-			std::string ndi_runtime_v2(env_path);
-			ndi_lib = ndi_runtime_v2 + '\\' + ndi_lib;
-			h_lib = ::LoadLibraryA(ndi_lib.c_str());
+			char* env_path = ::getenv("NDI_RUNTIME_DIR_V2");
+			if (env_path)
+			{
+				std::string ndi_runtime_v2(env_path);
+				ndi_lib = ndi_runtime_v2 + '\\' + ndi_lib;
+				h_lib = ::LoadLibraryA(ndi_lib.c_str());
+			}
+		}
+		if (h_lib)
+		{
+			NDIlib_v2* (*ndi_lib_load)(void) = NULL;
+			*((FARPROC*)&ndi_lib_load) = ::GetProcAddress(h_lib, "NDIlib_v2_load");
+			if (!ndi_lib_load)
+			{	// Cannot run NDI. Most likely because the CPU is not sufficient (see SDK documentation).
+				// you can check this directly with a call to NDIlib_is_supported_CPU()
+				::FreeLibrary(h_lib);
+				CASPAR_LOG(info) << L"Newtek NDI runtime not found.";
+				return nullptr;
+			}
+			ndi_lib_ptr = ndi_lib_load();
 		}
 	}
-	if (h_lib)
-	{
-		NDIlib_v2* (*ndi_lib_load)(void) = NULL;
-		*((FARPROC*)&ndi_lib_load) = ::GetProcAddress(h_lib, "NDIlib_v2_load");
-		if (!ndi_lib_load)
-		{	// Cannot run NDI. Most likely because the CPU is not sufficient (see SDK documentation).
-			// you can check this directly with a call to NDIlib_is_supported_CPU()
-			::FreeLibrary(h_lib);
-			CASPAR_LOG(info) << L"Newtek NDI runtime not found.";
-			return nullptr;
-		}
-		return std::shared_ptr<NDIlib_v2>(ndi_lib_load(), [h_lib](NDIlib_v2*) { ::FreeLibrary(h_lib); });
-	}
-	return nullptr;
+	return ndi_lib_ptr;
 }
 
 

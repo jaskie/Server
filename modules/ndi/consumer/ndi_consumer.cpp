@@ -67,7 +67,7 @@ namespace caspar {
 			return result.checksum();
 		}
 
-		NDIlib_send_instance_t create_ndi_send(const std::shared_ptr<NDIlib_v2>& ndi_lib, const std::string ndi_name, const std::string groups)
+		NDIlib_send_instance_t create_ndi_send(const NDIlib_v2* ndi_lib, const std::string ndi_name, const std::string groups)
 		{
 			if (!ndi_lib)
 				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(" NDI library not loaded"));
@@ -106,7 +106,7 @@ namespace caspar {
 			const std::wstring												ndi_name_;
 			const bool														is_alpha_;
 			const bool														is_blocking_;
-			const std::shared_ptr<NDIlib_v2>								ndi_lib_;
+			const NDIlib_v2*												ndi_lib_;
 			const NDIlib_send_instance_t									ndi_send_;
 			std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>     send_frame_buffer_;
 			executor														executor_;
@@ -132,9 +132,7 @@ namespace caspar {
 				, ndi_lib_(load_ndi())
 				, ndi_send_(create_ndi_send(ndi_lib_, ndi_name, groups))
 				, executor_(print())
-				, swr_(nullptr, [](SwrContext* ctx) -> void { if (ctx) swr_free(&ctx); })
-				, sws_(nullptr, [](SwsContext* ctx) -> void{ sws_freeContext(ctx); })
-			{
+		{
 				current_encoding_delay_ = 0;
 				executor_.set_capacity(1);
 				graph_->set_text(print());

@@ -484,7 +484,7 @@ public:
 stage::stage(const safe_ptr<diagnostics::graph>& graph, const safe_ptr<target_t>& target, const video_format_desc& format_desc) 
 	: impl_(new implementation(graph, target, format_desc)){}
 void stage::apply_transforms(const std::vector<stage::transform_tuple_t>& transforms){impl_->apply_transforms(transforms);}
-void stage::apply_transform(int index, const std::function<core::frame_transform(core::frame_transform)>& transform, unsigned int mix_duration, const std::wstring& tween){impl_->apply_transform(index, transform, mix_duration, tween);}
+void stage::apply_transform(int index, const transform_func_t& transform, unsigned int mix_duration, const std::wstring& tween){impl_->apply_transform(index, transform, mix_duration, tween);}
 void stage::clear_transforms(int index){impl_->clear_transforms(index);}
 void stage::clear_transforms(){impl_->clear_transforms();}
 frame_transform stage::get_current_transform(int index) { return impl_->get_current_transform(index); }

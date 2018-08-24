@@ -62,6 +62,7 @@ extern "C"
 	#define __STDC_CONSTANT_MACROS
 	#define __STDC_LIMIT_MACROS
 	#include <libavcodec/avcodec.h>
+	#include <libswresample/swresample.h>
 }
 #if defined(_MSC_VER)
 #pragma warning (pop)
@@ -71,6 +72,31 @@ extern "C"
 namespace caspar { namespace ndi {
 
 	typedef std::unique_ptr<void, std::function<void(NDIlib_recv_instance_t)>> ndi_receiver_ptr_t;
+	typedef std::unique_ptr<SwrContext, std::function<void(SwrContext*)>> swr_ptr_t;
+
+	swr_ptr_t create_swr(const core::video_format_desc format_desc, const core::channel_layout out_layout, const int in_nb_channels, const int in_sample_rate)
+	{
+		const auto ALL_63_CHANNELS = 0x7FFFFFFFFFFFFFFFULL;
+		auto to_shift = 63 - in_nb_channels;
+		auto in_channel_layout = ALL_63_CHANNELS >> to_shift;
+		to_shift = 63 - out_layout.num_channels;
+		auto out_channel_layout = ALL_63_CHANNELS >> to_shift;
+		auto swr = swr_alloc_set_opts(nullptr,
+			out_channel_layout,
+			AV_SAMPLE_FMT_S32,
+			format_desc.audio_sample_rate,
+			in_channel_layout,
+			AV_SAMPLE_FMT_FLT,
+			in_sample_rate,
+			0, nullptr);
+		if (!swr)
+			BOOST_THROW_EXCEPTION(caspar_exception()
+				<< msg_info("Cannot alloc audio resampler"));
+		if (swr_init(swr) < 0)
+			BOOST_THROW_EXCEPTION(caspar_exception()
+				<< msg_info("Cannot initialize audio resampler"));
+		return swr_ptr_t(swr, [](SwrContext* ctx) { if (ctx) swr_free(&ctx); });
+	}
 
 class ndi_producer : public core::frame_producer
 {	
@@ -81,8 +107,11 @@ class ndi_producer : public core::frame_producer
 	core::video_format_desc																	format_desc_;
 	caspar::safe_ptr<core::basic_frame>														last_frame_;
 
-	const std::shared_ptr<NDIlib_v2>														ndi_lib_;
+	const NDIlib_v2 *																		ndi_lib_;
 	ndi_receiver_ptr_t																		ndi_receive_;
+	swr_ptr_t																				swr_;
+	int																						in_audio_sample_rate_;
+	int																						in_audio_nb_channels_;
 
 	const std::wstring																		source_name_;
 	const std::wstring																		source_address_;
@@ -97,7 +126,7 @@ class ndi_producer : public core::frame_producer
 
 	std::exception_ptr																		exception_;	
 	core::channel_layout																	audio_channel_layout_;
-	boost::thread																			receiver_thread_;
+	executor																				executor_;
 
 public:
 	ndi_producer(
@@ -116,12 +145,12 @@ public:
 		, sync_buffer_(format_desc.audio_cadence.size())
 		, frame_factory_(frame_factory)
 		, audio_channel_layout_(audio_channel_layout)
-		, ndi_lib_(load_ndi())
 		, hints_(tbb::atomic<int>())
-		, receiver_thread_([this]() { receiver_proc(); })
+		, ndi_lib_(load_ndi())
+		, executor_(print())
 	{		
-		if (!ndi_lib_)
-			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(" NDI library not loaded"));
+		//if (!ndi_lib_)
+		//	BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(" NDI library not loaded"));
 
 		frame_buffer_.set_capacity(buffer_depth);
 
@@ -134,14 +163,14 @@ public:
 		graph_->set_color("output-buffer", diagnostics::color(0.0f, 1.0f, 0.0f));
 		graph_->set_text(print());
 		diagnostics::register_graph(graph_);
+		executor_.begin_invoke([this]() { receiver_proc(); });
 		CASPAR_LOG(info) << print() << L" successfully initialized.";
 	}
 
 	~ndi_producer()
 	{
-		//close_input();
-		receiver_thread_.interrupt();
-		receiver_thread_.join();
+		executor_.stop();
+		executor_.join();
 		CASPAR_LOG(info) << print() << L" successfully uninitialized.";
 	}
 
@@ -166,7 +195,7 @@ public:
 	void receiver_proc()
 	{
 		ndi_connect();
-		while (!receiver_thread_.interruption_requested())
+		while (executor_.is_running())
 		{
 			tick();
 		}
@@ -198,7 +227,7 @@ public:
 			ndi_lib_->NDIlib_recv_free_video(ndi_receive_.get(), &video_frame);
 			break;
 		case NDIlib_frame_type_audio:
-			//processAudio(&audio_frame);
+			processAudio(&audio_frame);
 			ndi_lib_->NDIlib_recv_free_audio(ndi_receive_.get(), &audio_frame);
 			break;
 		case NDIlib_frame_type_error:
@@ -225,56 +254,38 @@ public:
 		av_frame->interlaced_frame = ndi_video->frame_format_type == NDIlib_frame_format_type_interleaved ? 1 : 0;
 		av_frame->top_field_first = true;
 		muxer_.push(av_frame, hints_, static_cast<int>((ndi_video->timecode * ndi_video->frame_rate_N)/(ndi_video->frame_rate_D * 10000000)));
-		if (muxer_.video_ready() && !muxer_.audio_ready())
-		{
-			std::shared_ptr<core::audio_buffer> audio_buffer = std::make_shared<core::audio_buffer>(audio_cadence_.front() * audio_channel_layout_.num_channels, 0);
-			muxer_.push(audio_buffer);
-			graph_->set_tag("empty-audio");
-		}
+		//if (muxer_.video_ready() && !muxer_.audio_ready())
+		//{
+		//	std::shared_ptr<core::audio_buffer> audio_buffer = std::make_shared<core::audio_buffer>(audio_cadence_.front() * audio_channel_layout_.num_channels, 0);
+		//	muxer_.push(audio_buffer);
+		//	graph_->set_tag("empty-audio");
+		//}
 	}
 
 	void processAudio(NDIlib_audio_frame_t * ndi_audio)
 	{
-		std::shared_ptr<core::audio_buffer> audio_buffer;
-
-		// It is assumed that audio is always equal or ahead of video.
-		auto sample_frame_count = ndi_audio->no_samples;
-		auto audio_data = reinterpret_cast<int32_t*>(ndi_audio->p_data);
-
-		if (ndi_audio->no_channels == audio_channel_layout_.num_channels)
+		if (!swr_ || ndi_audio->sample_rate != in_audio_sample_rate_ || ndi_audio->no_channels != in_audio_nb_channels_)
 		{
-			audio_buffer = std::make_shared<core::audio_buffer>(
-				audio_data,
-				audio_data + sample_frame_count * ndi_audio->no_channels);
+			swr_ = create_swr(format_desc_, audio_channel_layout_, ndi_audio->no_channels, ndi_audio->sample_rate);
+			if (swr_)
+			{
+				in_audio_nb_channels_ = ndi_audio->no_channels;
+				in_audio_sample_rate_ = ndi_audio->sample_rate;
+			}
 		}
-		else
-		{
-			audio_buffer = std::make_shared<core::audio_buffer>();
-			audio_buffer->resize(sample_frame_count * audio_channel_layout_.num_channels, 0);
-			auto src_view = core::make_multichannel_view<int32_t>(
-				audio_data,
-				audio_data + sample_frame_count * ndi_audio->no_channels,
-				audio_channel_layout_,
-				ndi_audio->no_channels);
-			auto dst_view = core::make_multichannel_view<int32_t>(
-				audio_buffer->begin(),
-				audio_buffer->end(),
-				audio_channel_layout_);
-
-			core::rearrange(src_view, dst_view);
-		}
-
-		// Note: Uses 1 step rotated cadence for 1001 modes (1602, 1602, 1601, 1602, 1601)
-		// This cadence fills the audio mixer most optimally.
-
-	/*	sync_buffer_.push_back(audio_buffer->size() / audio_channel_layout_.num_channels);
-		if (!boost::range::equal(sync_buffer_, audio_cadence_))
-		{
-			CASPAR_LOG(trace) << print() << L" Syncing audio.";
-			return S_OK;
-		}*/
-
-		muxer_.push(audio_buffer);
+		int out_samples_count = swr_get_out_samples(swr_.get(), ndi_audio->no_samples);
+		std::shared_ptr<core::audio_buffer> buffer (std::make_shared<core::audio_buffer>(out_samples_count));
+		buffer->resize(out_samples_count);
+		uint8_t* out[] = { reinterpret_cast<uint8_t*>(buffer->data()) }; 
+		const uint8_t* in[] = { reinterpret_cast<const uint8_t*>(ndi_audio->p_data) };
+		int converted_sample_count = swr_convert(swr_.get(),
+			out, 
+			out_samples_count,
+			in,
+			ndi_audio->no_samples);
+		if (converted_sample_count != out_samples_count)
+			CASPAR_LOG(warning) << print() << L" Not all samples were converted (" << converted_sample_count << L" of " << out_samples_count << L").";
+		muxer_.push(buffer);
 	}
 
 
@@ -453,7 +464,7 @@ safe_ptr<core::frame_producer> create_producer(
 			core::default_channel_layout_repository());
 	if(format_desc.format == core::video_format::invalid)
 		format_desc = frame_factory->get_video_format_desc();
-	return create_producer_destroy_proxy(make_safe<ndi_producer>(frame_factory, format_desc, audio_layout, source_name, source_address, buffer_depth));
+	return make_safe<ndi_producer>(frame_factory, format_desc, audio_layout, source_name, source_address, buffer_depth);
 }
 
 }}
