@@ -314,7 +314,6 @@ namespace caspar {
 				c->codec_type = AVMEDIA_TYPE_VIDEO;
 				c->width = format_desc_.width;
 				c->height = format_desc_.height;
-				c->gop_size = 25;
 				c->time_base = st->time_base;
 				c->flags |= format_desc_.field_mode == core::field_mode::progressive ? 0 : (AV_CODEC_FLAG_INTERLACED_ME | AV_CODEC_FLAG_INTERLACED_DCT);
 				if (c->pix_fmt == AV_PIX_FMT_NONE)
