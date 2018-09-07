@@ -78,10 +78,8 @@ namespace caspar {
 		SwrContext* create_swr(const core::video_format_desc format_desc, const core::channel_layout out_layout, const int input_channel_count)
 		{
 			const auto ALL_63_CHANNELS = 0x7FFFFFFFFFFFFFFFULL;
-			auto to_shift = 63 - input_channel_count;
-			auto in_channel_layout = ALL_63_CHANNELS >> to_shift;
-			to_shift = 63 - out_layout.num_channels;
-			auto out_channel_layout = ALL_63_CHANNELS >> to_shift;
+			auto in_channel_layout = ALL_63_CHANNELS >> (63 - input_channel_count);
+			auto out_channel_layout = ALL_63_CHANNELS >> (63 - out_layout.num_channels);
 			auto swr = swr_alloc_set_opts(nullptr,
 				out_channel_layout,
 				AV_SAMPLE_FMT_FLT,
