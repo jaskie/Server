@@ -76,10 +76,8 @@ namespace caspar { namespace ndi {
 	swr_ptr_t create_swr(const int out_sample_rate, const int out_nb_channels, const int in_nb_channels, const int in_sample_rate)
 	{
 		const auto ALL_63_CHANNELS = 0x7FFFFFFFFFFFFFFFULL;
-		auto to_shift = 63 - in_nb_channels;
-		auto in_channel_layout = ALL_63_CHANNELS >> to_shift;
-		to_shift = 63 - out_nb_channels;
-		auto out_channel_layout = ALL_63_CHANNELS >> to_shift;
+		auto in_channel_layout = ALL_63_CHANNELS >> (63 - in_nb_channels);
+		auto out_channel_layout = ALL_63_CHANNELS >> (63 - out_nb_channels);
 		auto swr = swr_alloc_set_opts(NULL,
 			out_channel_layout,
 			AV_SAMPLE_FMT_S32,

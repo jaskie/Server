@@ -289,10 +289,8 @@ namespace caspar {
 					avio_flush(format_context_->pb);
 					LOG_ON_ERROR2(av_write_trailer(format_context_.get()), "[ffmpeg_consumer]");
 				});
-
 				if (options_)
 					av_dict_free(&options_);
-				encode_executor_.join();
 				CASPAR_LOG(info) << print() << L" Successfully Uninitialized.";
 			}
 
