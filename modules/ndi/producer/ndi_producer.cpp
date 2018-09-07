@@ -1,4 +1,4 @@
-/*
+﻿/*
 * Copyright 2013 Sveriges Television AB http://casparcg.com/
 *
 * This file is part of CasparCG (www.casparcg.com).
@@ -16,7 +16,7 @@
 * You should have received a copy of the GNU General Public License
 * along with CasparCG. If not, see <http://www.gnu.org/licenses/>.
 *
-*  Author: Jerzy Ja�kiewicz, jurek@tvp.pl based on Robert Nagy, ronag89@gmail.com work
+*  Author: Jerzy Jaśkiewicz, jurek@tvp.pl
 */
 
 
@@ -392,4 +392,5 @@ safe_ptr<core::frame_producer> create_producer(
 	return make_safe<ndi_producer>(frame_factory, format_desc, audio_layout, source_name, source_address, buffer_depth);
 }
 
-}}
+}
+}
