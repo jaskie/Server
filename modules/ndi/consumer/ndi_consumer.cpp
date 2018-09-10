@@ -106,8 +106,9 @@ namespace caspar {
 			const bool														is_blocking_;
 			const NDIlib_v2*												ndi_lib_;
 			const NDIlib_send_instance_t									ndi_send_;
-			std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>     send_frame_buffer_;
 			executor														executor_;
+			std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>     send_frame_buffer_;
+			int																input_audio_channel_count_;
 			std::unique_ptr<SwrContext, std::function<void(SwrContext*)>>	swr_;
 			std::unique_ptr<SwsContext, std::function<void(SwsContext*)>>	sws_;
 			safe_ptr<diagnostics::graph>									graph_;
@@ -130,6 +131,10 @@ namespace caspar {
 				, ndi_lib_(load_ndi())
 				, ndi_send_(create_ndi_send(ndi_lib_, ndi_name, groups))
 				, executor_(print())
+				, input_audio_channel_count_(channel_layout.num_channels)
+				, sws_(is_alpha ? nullptr : sws_getContext(format_desc.width, format_desc.height, AV_PIX_FMT_BGRA, format_desc.width, format_desc.height, AV_PIX_FMT_UYVY422, SWS_POINT, NULL, NULL, NULL), [](SwsContext * ctx) { sws_freeContext(ctx); })
+				, swr_(create_swr(format_desc_, channel_layout_, input_audio_channel_count_), [](SwrContext * ctx) { swr_free(&ctx); })
+				, send_frame_buffer_(is_alpha ? 0 : av_image_get_buffer_size(AV_PIX_FMT_BGRA, format_desc.width, format_desc.height, 16))
 		{
 				current_encoding_delay_ = 0;
 				executor_.set_capacity(1);
@@ -154,13 +159,21 @@ namespace caspar {
 
 			bool do_send(const safe_ptr<core::read_frame>& frame)
 			{
-				send_video(frame);
-				audio_send_timer_.restart();
-				send_audio(frame);
-				graph_->set_value("audio-send-time", audio_send_timer_.elapsed() * format_desc_.fps * 0.5f);
-				current_encoding_delay_ = frame->get_age_millis();
-				graph_->set_value("tick-time", tick_timer_.elapsed() * format_desc_.fps * 0.5f);
-				tick_timer_.restart();
+				try
+				{
+					send_video(frame);
+					audio_send_timer_.restart();
+					send_audio(frame);
+					graph_->set_value("audio-send-time", audio_send_timer_.elapsed() * format_desc_.fps * 0.5f);
+					current_encoding_delay_ = frame->get_age_millis();
+					graph_->set_value("tick-time", tick_timer_.elapsed() * format_desc_.fps * 0.5f);
+					tick_timer_.restart();
+				}
+				catch (...)
+				{
+					CASPAR_LOG_CURRENT_EXCEPTION();
+					return false;
+				}
 				return true;
 			}
 						
@@ -194,15 +207,10 @@ namespace caspar {
 				else  //colorspace conversion
 				{
 					frame_convert_timer_.restart();
-					if (!sws_)
-					{
-						sws_.reset(sws_getContext(format_desc_.width, format_desc_.height, AV_PIX_FMT_BGRA, format_desc_.width, format_desc_.height, AV_PIX_FMT_UYVY422, SWS_POINT, NULL, NULL, NULL));
-						send_frame_buffer_.resize(av_image_get_buffer_size(AV_PIX_FMT_BGRA, format_desc_.width, format_desc_.height, 16));
-					}
-					uint8_t *src_data[4];
-					int src_linesize[4];
-					uint8_t *dest_data[4];
-					int dst_linesize[4];
+					uint8_t * src_data[AV_NUM_DATA_POINTERS];
+					int src_linesize[AV_NUM_DATA_POINTERS];
+					uint8_t * dest_data[AV_NUM_DATA_POINTERS];
+					int dst_linesize[AV_NUM_DATA_POINTERS];
 					av_image_fill_arrays(src_data, src_linesize, frame->image_data().begin(), AV_PIX_FMT_BGRA, format_desc_.width, format_desc_.height, 1);
 					av_image_fill_arrays(dest_data, dst_linesize, &send_frame_buffer_.front(), AV_PIX_FMT_UYVY422, format_desc_.width, format_desc_.height, 16);
 					sws_scale(sws_.get(), src_data, src_linesize, 0, format_desc_.height, dest_data, dst_linesize);
@@ -216,8 +224,12 @@ namespace caspar {
 
 			void send_audio(const safe_ptr<core::read_frame>& frame)
 			{
-				if (!swr_)
+				if (input_audio_channel_count_ != frame->num_channels())
+				{
 					swr_.reset(create_swr(format_desc_, channel_layout_, frame->num_channels()));
+					input_audio_channel_count_ = frame->num_channels();
+					CASPAR_LOG(trace) << print() << L" Replaced audio resampler.";
+				}
 				auto audio_frame = create_audio_frame(channel_layout_, frame->multichannel_view().num_samples(), format_desc_.audio_sample_rate);
 				const uint8_t* in[] = { reinterpret_cast<const uint8_t*>(frame->audio_data().begin()) };
 				int converted_sample_count = swr_convert(swr_.get(),
