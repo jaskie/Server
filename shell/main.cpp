@@ -310,7 +310,7 @@ int main(int argc, wchar_t* argv[])
 					{
 						// This is just dummy code for testing.
 						if(wcmd.substr(0, 1) == L"1")
-							wcmd = L"PLAY 1-0 ndi 192.168.2.6";
+							wcmd = L"PLAY 1-0 ndi 192.168.2.6:5651";
 						else if(wcmd.substr(0, 1) == L"2")
 							wcmd = L"CALL 1-0 SEEK 9300";
 						else if(wcmd.substr(0, 1) == L"3")
@@ -384,7 +384,7 @@ int main(int argc, wchar_t* argv[])
 	catch(...)
 	{
 		CASPAR_LOG_CURRENT_EXCEPTION();
-		CASPAR_LOG(fatal) << L"Unhandled exception in main thread. Please report this error on the CasparCG forums (www.casparcg.com/forum).";
+		CASPAR_LOG(fatal) << L"Unhandled exception in main thread. Please report this error on GitHub (https://github.com/jaskie/Server/issues).";
 		Sleep(1000);
 		std::wcout << L"\n\nCasparCG will automatically shutdown. See the log file located at the configured log-file folder for more information.\n\n";
 		Sleep(4000);
