@@ -174,9 +174,10 @@ namespace caspar {
 			tbb::atomic<int64_t>					out_frame_number_;
 			int64_t									out_audio_sample_number_;
 
-			bool									key_only_;
-			bool									audio_is_planar;
+			const bool								key_only_;
+			bool									audio_is_planar_;
 			const bool								is_imx50_pal_;
+			const bool								deinterlace_;
 			tbb::atomic<int64_t>					current_encoding_delay_;
 			boost::timer							frame_timer_;
 			executor								encode_executor_;
@@ -198,7 +199,12 @@ namespace caspar {
 				, audio_stream_(nullptr)
 				, video_stream_(nullptr)
 				, is_imx50_pal_(output_params_.is_mxf_ && output_format_desc_.format == core::video_format::pal)
+				, deinterlace_(output_format_desc_.field_mode != channel_format_desc.field_mode)
 			{
+
+				if (deinterlace_) //TODO
+					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Deinterlacing not yet supported."));
+
 				current_encoding_delay_ = 0;
 				out_frame_number_ = 0;
 
@@ -232,7 +238,7 @@ namespace caspar {
 					format_context_ = AVFormatContextPtr(alloc_output_params_context(output_params_.file_name_, format), [](AVFormatContext * ctx)
 					{
 						if (!(ctx->oformat->flags & AVFMT_NOFILE))
-							LOG_ON_ERROR2(avio_close(ctx->pb), "[ffmpeg_consumer]"); // Close the output ffmpeg.
+							LOG_ON_ERROR2(avio_close(ctx->pb), "[ffmpeg_consumer]"); 
 						avformat_free_context(ctx);
 					});
 					
@@ -245,8 +251,6 @@ namespace caspar {
 						? output_params_.is_mxf_ ? avcodec_find_encoder_by_name("pcm_s16le") : avcodec_find_encoder_by_name("aac")
 						: avcodec_find_encoder_by_name(output_params_.audio_codec_.c_str());
 
-					//  Add the audio and video streams using the default format codecs	and initialize the codecs.
-					
 					video_stream_ = add_video_stream(video_codec, format);
 
 					if (!key_only)
@@ -486,7 +490,7 @@ namespace caspar {
 				if (output_params_.audio_bitrate_ != 0)
 					audio_codec_ctx_->bit_rate = output_params_.audio_bitrate_ * 1000;
 
-				audio_is_planar = av_sample_fmt_is_planar(audio_codec_ctx_->sample_fmt) != 0;
+				audio_is_planar_ = av_sample_fmt_is_planar(audio_codec_ctx_->sample_fmt) != 0;
 
 				THROW_ON_ERROR2(tbb_avcodec_open(audio_codec_ctx_.get(), encoder, &options_, true), "[ffmpeg_consumer]");
 
@@ -595,7 +599,7 @@ namespace caspar {
 				byte_vector out_buffers[AV_NUM_DATA_POINTERS];
 				const int in_samples_count = frame.audio_data().size() / frame.num_channels();
 				const int out_samples_count = static_cast<int>(av_rescale_rnd(in_samples_count, audio_codec_ctx_->sample_rate, channel_format_desc_.audio_sample_rate, AV_ROUND_UP));
-				if (audio_is_planar)
+				if (audio_is_planar_)
 					for (char i = 0; i < audio_codec_ctx_->channels; i++)
 						out_buffers[i].resize(out_samples_count * av_get_bytes_per_sample(AV_SAMPLE_FMT_S32));
 				else
@@ -609,7 +613,7 @@ namespace caspar {
 				int converted_sample_count = swr_convert(swr_.get(),
 					out, out_samples_count,
 					in, in_samples_count);
-				if (audio_is_planar)
+				if (audio_is_planar_)
 					for (char i = 0; i < audio_codec_ctx_->channels; i++)
 					{
 						out_buffers[i].resize(converted_sample_count * av_get_bytes_per_sample(audio_codec_ctx_->sample_fmt));
@@ -652,12 +656,12 @@ namespace caspar {
 					for (char i = 0; i < AV_NUM_DATA_POINTERS; i++)
 						out_buffers[i] = audio_bufers_[i].data();
 					THROW_ON_ERROR2(avcodec_fill_audio_frame(in_frame.get(), audio_codec_ctx_->channels, audio_codec_ctx_->sample_fmt, (const uint8_t *)out_buffers[0], input_audio_size, 0), "[audio_encoder]");
-					if (audio_is_planar)
+					if (audio_is_planar_)
 						for (char i = 0; i < audio_codec_ctx_->channels; i++)
 							in_frame->data[i] = audio_bufers_[i].data();
 					int got_packet;
 					THROW_ON_ERROR2(avcodec_encode_audio2(audio_codec_ctx_.get(), &pkt, in_frame.get(), &got_packet), "[audio_encoder]");
-					if (audio_is_planar)
+					if (audio_is_planar_)
 						for (char i = 0; i < audio_codec_ctx_->channels; i++)
 							audio_bufers_[i].erase(audio_bufers_[i].begin(), audio_bufers_[i].begin() + (audio_codec_ctx_->frame_size * av_get_bytes_per_sample(audio_codec_ctx_->sample_fmt)));
 					else

@@ -121,7 +121,6 @@ namespace caspar {
 			int										offset_;
 			BMDDeckControlError						last_deck_error_;
 			CComPtr<IDeckLinkDeckControl>			deck_control_;
-			executor								executor_;
 
 			//fields of the current operation
 			tbb::atomic<record_state>				record_state_;
@@ -136,6 +135,7 @@ namespace caspar {
 			int										tc_out_;
 			tbb::atomic<int>						current_timecode_;
 			safe_ptr<core::monitor::subject>		monitor_subject_;
+			executor								executor_;
 
 			void clean_recorder()
 			{
@@ -214,6 +214,7 @@ namespace caspar {
 					BSTR modelName;
 					device->GetModelName(&modelName);
 					CASPAR_LOG(info) << print() << L" on " << modelName << L" successfully initialized.";
+					device.Release();
 				});
 			}
 			
@@ -221,6 +222,7 @@ namespace caspar {
 			{
 				executor_.begin_invoke([this]
 				{
+					deck_control_.Release();
 					::CoUninitialize();
 					CASPAR_LOG(info) << print() << L" successfully uninitialized.";
 				});
