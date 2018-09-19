@@ -99,6 +99,7 @@ struct filter::implementation
 		, in_time_base_(in_time_base)
 		, in_frame_rate_(in_frame_rate)
 		, in_sample_aspect_ratio_(in_sample_aspect_ratio)
+		, pix_fmts_(out_pix_fmts)
 	{
 		if(pix_fmts_.empty())
 		{

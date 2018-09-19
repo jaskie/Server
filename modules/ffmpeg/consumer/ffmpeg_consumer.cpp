@@ -24,6 +24,7 @@
 #include "../ffmpeg_error.h"
 #include "../tbb_avcodec.h"
 #include "../ffmpeg.h"
+#include "../producer/filter/filter.h"
 
 #include "ffmpeg_consumer.h"
 
@@ -162,6 +163,7 @@ namespace caspar {
 			AVStream *								video_stream_;
 			AVCodecContextPtr						audio_codec_ctx_;
 			AVCodecContextPtr						video_codec_ctx_;
+			std::shared_ptr<filter>					filter_;
 
 			SwrContextPtr							swr_;
 			SwsContextPtr							sws_;
@@ -199,11 +201,26 @@ namespace caspar {
 				, audio_stream_(nullptr)
 				, video_stream_(nullptr)
 				, is_imx50_pal_(output_params_.is_mxf_ && output_format_desc_.format == core::video_format::pal)
-				, deinterlace_(output_format_desc_.field_mode != channel_format_desc.field_mode)
+				, deinterlace_(output_format_desc_.field_mode == core::field_mode::progressive && channel_format_desc.field_mode != core::field_mode::progressive)
 			{
 
-				if (deinterlace_) //TODO
-					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Deinterlacing not yet supported."));
+				if (deinterlace_)
+				{
+					std::vector<AVPixelFormat> out_pix_fmts;
+					out_pix_fmts.push_back(AV_PIX_FMT_BGRA);
+					filter_.reset(new filter(
+						channel_format_desc.width,
+						channel_format_desc.height,
+						boost::rational<int>(1, 1),
+						boost::rational<int>(1, 1),
+						boost::rational<int>(1, 1),
+						AV_PIX_FMT_BGRA,
+						out_pix_fmts,
+						//"w3fdif=filter=simple"));
+						"yadif"));
+
+				}
+					
 
 				current_encoding_delay_ = 0;
 				out_frame_number_ = 0;
@@ -294,6 +311,12 @@ namespace caspar {
 			~ffmpeg_consumer()
 			{
 				encode_executor_.begin_invoke([this] {
+					if (filter_)
+					{
+						auto frames = filter_->poll_all();
+						for (auto frame = frames.begin(); frame != frames.end(); frame++)
+							encode_video(*frame);
+					}
 					if ((video_codec_ctx_->codec->capabilities & AV_CODEC_CAP_DELAY)
 						|| (!key_only_ && audio_codec_ctx_ && (audio_codec_ctx_->codec->capabilities & AV_CODEC_CAP_DELAY)))
 						flush_encoders();
@@ -559,19 +582,39 @@ namespace caspar {
 				return out_frame;
 			}
 
-			void encode_video_frame(core::read_frame& frame)
+			void encode_video(std::shared_ptr<AVFrame> frame)
 			{
-				auto av_frame = convert_video(frame);
 				AVPacket pkt = { 0 };
 				av_init_packet(&pkt);
 				int got_packet;
-				THROW_ON_ERROR2(avcodec_encode_video2(video_codec_ctx_.get(), &pkt, av_frame.get(), &got_packet), "[video_encoder]");
+				THROW_ON_ERROR2(avcodec_encode_video2(video_codec_ctx_.get(), &pkt, frame.get(), &got_packet), "[video_encoder]");
 				if (got_packet == 0)
 					return;
-
 				av_packet_rescale_ts(&pkt, video_codec_ctx_->time_base, video_stream_->time_base);
 				pkt.stream_index = video_stream_->index;
 				THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), &pkt), "[video_encoder]");
+
+			}
+
+			void process_video_frame(core::read_frame& frame)
+			{
+				auto av_frame = convert_video(frame);
+				if (filter_)
+				{
+					filter_->push(av_frame);
+					auto converted = filter_->poll();
+					if (converted)
+					{
+						converted->pict_type = av_frame->pict_type;
+						converted->pts = av_frame->pts;
+						converted->interlaced_frame = false;
+						encode_video(converted);
+					}
+				}
+				else
+				{
+					encode_video(av_frame);
+				}
 			}
 
 			void resample_audio(core::read_frame& frame)
@@ -685,7 +728,7 @@ namespace caspar {
 				encode_executor_.begin_invoke([=] {
 					frame_timer_.restart();
 
-					encode_video_frame(*frame);
+					process_video_frame(*frame);
 
 					if (!key_only_)
 						encode_audio_frame(*frame);
