@@ -166,7 +166,12 @@ namespace caspar {
 			std::shared_ptr<filter>					filter_;
 
 			SwrContextPtr							swr_;
-			SwsContextPtr							sws_;
+
+			const size_t							scale_slices_;
+			const int								scale_input_slice_height_;
+			const int								scale_output_slice_height_;
+			std::vector<SwsContextPtr>				sws_;
+
 			int										last_frame_no_channels_;
 
 			byte_vector								audio_bufers_[AV_NUM_DATA_POINTERS];
@@ -202,6 +207,9 @@ namespace caspar {
 				, video_stream_(nullptr)
 				, is_imx50_pal_(output_params_.is_mxf_ && output_format_desc_.format == core::video_format::pal)
 				, deinterlace_(output_format_desc_.field_mode == core::field_mode::progressive && channel_format_desc.field_mode != core::field_mode::progressive)
+				, scale_slices_(channel_format_desc.height >= 1080 ? 4 : 1)
+				, scale_input_slice_height_(channel_format_desc.height / scale_slices_)
+				, scale_output_slice_height_(output_format_desc_.height / scale_slices_)
 			{
 
 				if (deinterlace_)
@@ -335,19 +343,22 @@ namespace caspar {
 
 			void create_sws()
 			{
-				if (channel_format_desc_.field_mode == caspar::core::field_mode::progressive)
+				for (size_t i = 0; i < scale_slices_; i++)
 				{
-					sws_ = SwsContextPtr(
-						sws_getContext(channel_format_desc_.width, channel_format_desc_.height, AV_PIX_FMT_BGRA, output_format_desc_.width, output_format_desc_.height, video_codec_ctx_->pix_fmt, 0, nullptr, nullptr, NULL),
-						[](SwsContext * ctx) { sws_freeContext(ctx); });
+					if (channel_format_desc_.field_mode == caspar::core::field_mode::progressive)
+					{
+						sws_.push_back(SwsContextPtr(
+							sws_getContext(channel_format_desc_.width, scale_input_slice_height_, AV_PIX_FMT_BGRA, output_format_desc_.width, scale_output_slice_height_, video_codec_ctx_->pix_fmt, 0, nullptr, nullptr, NULL),
+							[](SwsContext * ctx) { sws_freeContext(ctx); }));
+					}
+					else
+					{
+						sws_.push_back(SwsContextPtr(
+							sws_getContext(channel_format_desc_.width, scale_input_slice_height_ / 2, AV_PIX_FMT_BGRA, output_format_desc_.width, scale_output_slice_height_ / 2, video_codec_ctx_->pix_fmt, 0, nullptr, nullptr, NULL),
+							[](SwsContext * ctx) { sws_freeContext(ctx); }));
+					}
 				}
-				else
-				{
-					sws_ = SwsContextPtr(
-						sws_getContext(channel_format_desc_.width, channel_format_desc_.height / 2, AV_PIX_FMT_BGRA, output_format_desc_.width, output_format_desc_.height/2, video_codec_ctx_->pix_fmt, 0, nullptr, nullptr, NULL),
-						[](SwsContext * ctx) { sws_freeContext(ctx); });
-				}
-				if (!sws_)
+				if (sws_.size() != scale_slices_)
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Cannot initialize the conversion context"));
 			}
 
@@ -472,6 +483,8 @@ namespace caspar {
 
 				picture_buf_.resize(av_image_get_buffer_size(video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 16));
 
+
+
 				return st;
 			}
 
@@ -551,28 +564,39 @@ namespace caspar {
 
 				av_image_fill_arrays(out_frame->data, out_frame->linesize, picture_buf_.data(), video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 16);
 
-				if (channel_format_desc_.field_mode == caspar::core::field_mode::progressive)
-				{
-					sws_scale(sws_.get(), in_frame->data, in_frame->linesize, 0, channel_format_desc_.height, out_frame->data, out_frame->linesize);
-				}
-				else
-				{
-					uint8_t * in_data_lower[4];
-					int in_stride[4];
-					uint8_t * out_data_upper[4];
-					uint8_t * out_data_lower[4];
-					int out_stride[4];
-					for (uint32_t i = 0; i < 4; i++)
+				tbb::parallel_for(0u, scale_slices_, [&](const size_t& sws_index) {
+					if (channel_format_desc_.field_mode == caspar::core::field_mode::progressive)
 					{
-						in_data_lower[i] = in_frame->data[i] + in_frame->linesize[i];
-						out_data_upper[i] = out_frame->data[i] + ((is_imx50_pal_ && out_frame->data[i]) ? 32 * out_frame->linesize[i] : 0);
-						out_data_lower[i] = out_frame->data[i] + (out_frame->data[i] ? ((is_imx50_pal_ ? 33 : 1) * out_frame->linesize[i]) : 0);
-						in_stride[i] = in_frame->linesize[i] * 2;
-						out_stride[i] = out_frame->linesize[i] * 2;
+						uint8_t *in_data[4];
+						uint8_t *out_data[4];
+						for (size_t i = 0; i < 4; i++)
+						{
+							in_data[i] = in_frame->data[i] + (sws_index * scale_input_slice_height_ * in_frame->linesize[i]);
+							out_data[i] = out_frame->data[i] == NULL ? NULL : out_frame->data[i] + (sws_index * scale_output_slice_height_ * out_frame->linesize[i]);
+						}
+						sws_scale(sws_.at(sws_index).get(), in_data, in_frame->linesize, 0, scale_input_slice_height_, out_data, out_frame->linesize);
 					}
-					sws_scale(sws_.get(), in_frame->data, in_stride, 0, channel_format_desc_.height / 2, out_data_upper, out_stride);
-					sws_scale(sws_.get(), in_data_lower, in_stride, 0, channel_format_desc_.height / 2, out_data_lower, out_stride);
-				}
+					else
+					{
+						uint8_t * in_data_upper[4];
+						uint8_t * in_data_lower[4];
+						int in_stride[4];
+						uint8_t * out_data_upper[4];
+						uint8_t * out_data_lower[4];
+						int out_stride[4];
+						for (uint32_t i = 0; i < 4; i++)
+						{
+							in_data_upper[i] = in_frame->data[i] + (sws_index * scale_input_slice_height_ * in_frame->linesize[i]);
+							in_data_lower[i] = in_frame->data[i] + ((sws_index * scale_input_slice_height_ + 1) * in_frame->linesize[i]);;
+							out_data_upper[i] = out_frame->data[i] + (out_frame->data[i] == NULL ? NULL : ((is_imx50_pal_  ? 32 : 0) + (sws_index * scale_input_slice_height_)) * out_frame->linesize[i]);
+							out_data_lower[i] = out_frame->data[i] + (out_frame->data[i] == NULL ? NULL : ((is_imx50_pal_ ? 33 : 1) + (sws_index * scale_input_slice_height_)) * out_frame->linesize[i]);;
+							in_stride[i] = in_frame->linesize[i] * 2;
+							out_stride[i] = out_frame->linesize[i] * 2;
+						}
+						sws_scale(sws_.at(sws_index).get(), in_data_upper, in_stride, 0, channel_format_desc_.height / 2, out_data_upper, out_stride);
+						sws_scale(sws_.at(sws_index).get(), in_data_lower, in_stride, 0, channel_format_desc_.height / 2, out_data_lower, out_stride);
+					}
+				});
 				out_frame->height = video_codec_ctx_->height;
 				out_frame->width = video_codec_ctx_->width;
 				out_frame->format = video_codec_ctx_->pix_fmt;
