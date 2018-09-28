@@ -77,11 +77,20 @@ namespace caspar {
 			return result.checksum();
 		}
 
+		int getScaleSlices(int height, bool interlaced)
+		{
+			int result = 1;
+			int max = height <= 575 ? 2 : 16;
+			while (result < max
+				&& height  % (result * (interlaced  ? 4 : 2)) == 0)
+				result *= 2;
+			return result;
+		}
+
 		static const std::string			MXF = ".MXF";
 
 		struct output_params
 		{
-			const core::video_format_desc				format_;
 			const std::string							file_name_;
 			const std::string							video_codec_;
 			const std::string							audio_codec_;
@@ -100,7 +109,6 @@ namespace caspar {
 			const std::string							file_timecode_;
 			
 			output_params(
-				const core::video_format_desc& format,
 				const std::string& filename, 
 				const std::string& audio_codec, 
 				const std::string& video_codec, 
@@ -116,8 +124,7 @@ namespace caspar {
 				const int a_rate, 
 				const int v_rate, 
 				const std::string& file_tc)
-				: format_(format)
-				, video_codec_(std::move(video_codec))
+				: video_codec_(std::move(video_codec))
 				, audio_codec_(std::move(audio_codec))
 				, output_metadata_(std::move(output_metadata))
 				, audio_metadata_(std::move(audio_metadata))
@@ -154,7 +161,6 @@ namespace caspar {
 			AVDictionary *							options_;
 			const output_params						output_params_;
 			const core::video_format_desc			channel_format_desc_;
-			const core::video_format_desc			output_format_desc_;
 
 			const safe_ptr<diagnostics::graph>		graph_;
 
@@ -168,8 +174,8 @@ namespace caspar {
 			SwrContextPtr							swr_;
 
 			const size_t							scale_slices_;
-			const int								scale_input_slice_height_;
-			const int								scale_output_slice_height_;
+			const int								scale_slice_height_;
+			
 			std::vector<SwsContextPtr>				sws_;
 
 			int										last_frame_no_channels_;
@@ -184,7 +190,6 @@ namespace caspar {
 			const bool								key_only_;
 			bool									audio_is_planar_;
 			const bool								is_imx50_pal_;
-			const bool								deinterlace_;
 			tbb::atomic<int64_t>					current_encoding_delay_;
 			boost::timer							frame_timer_;
 			executor								encode_executor_;
@@ -200,39 +205,18 @@ namespace caspar {
 				, out_audio_sample_number_(0)
 				, output_params_(std::move(params))
 				, channel_format_desc_(channel_format_desc)
-				, output_format_desc_(params.format_.format == caspar::core::video_format::invalid ? channel_format_desc : params.format_)
 				, key_only_(key_only)
 				, options_(read_parameters(params.options_))
 				, audio_stream_(nullptr)
 				, video_stream_(nullptr)
-				, is_imx50_pal_(output_params_.is_mxf_ && output_format_desc_.format == core::video_format::pal)
-				, deinterlace_(output_format_desc_.field_mode == core::field_mode::progressive && channel_format_desc.field_mode != core::field_mode::progressive)
-				, scale_slices_(channel_format_desc.height >= 1080 ? 4 : 1)
-				, scale_input_slice_height_(channel_format_desc.height / scale_slices_)
-				, scale_output_slice_height_(output_format_desc_.height / scale_slices_)
+				, is_imx50_pal_(output_params_.is_mxf_ && channel_format_desc.format == core::video_format::pal)
+				, scale_slices_(getScaleSlices(channel_format_desc.height, channel_format_desc.field_mode != caspar::core::field_mode::progressive))
+				, scale_slice_height_(channel_format_desc.height / scale_slices_)
 			{
-
-				if (deinterlace_)
-				{
-					std::vector<AVPixelFormat> out_pix_fmts;
-					out_pix_fmts.push_back(AV_PIX_FMT_BGRA);
-					filter_.reset(new filter(
-						channel_format_desc.width,
-						channel_format_desc.height,
-						boost::rational<int>(1, 1),
-						boost::rational<int>(1, 1),
-						boost::rational<int>(1, 1),
-						AV_PIX_FMT_BGRA,
-						out_pix_fmts,
-						//"w3fdif=filter=simple"));
-						"yadif"));
-
-				}
-					
 
 				current_encoding_delay_ = 0;
 				out_frame_number_ = 0;
-
+								
 				if (boost::filesystem::exists(output_params_.file_name_))
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("File already exists: " + params.file_name_));
 
@@ -348,13 +332,13 @@ namespace caspar {
 					if (channel_format_desc_.field_mode == caspar::core::field_mode::progressive)
 					{
 						sws_.push_back(SwsContextPtr(
-							sws_getContext(channel_format_desc_.width, scale_input_slice_height_, AV_PIX_FMT_BGRA, output_format_desc_.width, scale_output_slice_height_, video_codec_ctx_->pix_fmt, 0, nullptr, nullptr, NULL),
+							sws_getContext(channel_format_desc_.width, scale_slice_height_, AV_PIX_FMT_BGRA, channel_format_desc_.width, scale_slice_height_, video_codec_ctx_->pix_fmt, 0, nullptr, nullptr, NULL),
 							[](SwsContext * ctx) { sws_freeContext(ctx); }));
 					}
 					else
 					{
 						sws_.push_back(SwsContextPtr(
-							sws_getContext(channel_format_desc_.width, scale_input_slice_height_ / 2, AV_PIX_FMT_BGRA, output_format_desc_.width, scale_output_slice_height_ / 2, video_codec_ctx_->pix_fmt, 0, nullptr, nullptr, NULL),
+							sws_getContext(channel_format_desc_.width, scale_slice_height_ / 2, AV_PIX_FMT_BGRA, channel_format_desc_.width, scale_slice_height_ / 2, video_codec_ctx_->pix_fmt, 0, nullptr, nullptr, NULL),
 							[](SwsContext * ctx) { sws_freeContext(ctx); }));
 					}
 				}
@@ -373,11 +357,12 @@ namespace caspar {
 				video_codec_ctx_->refcounted_frames = 0;
 				video_codec_ctx_->codec_id = encoder->id;
 				video_codec_ctx_->codec_type = AVMEDIA_TYPE_VIDEO;
-				video_codec_ctx_->width = output_format_desc_.width;
-				video_codec_ctx_->height = output_format_desc_.height;
-				video_codec_ctx_->time_base = av_make_q(output_format_desc_.duration, output_format_desc_.time_scale);
+				video_codec_ctx_->width = channel_format_desc_.width;
+				video_codec_ctx_->height = channel_format_desc_.height;
+				video_codec_ctx_->time_base = av_make_q(channel_format_desc_.duration, channel_format_desc_.time_scale);
 				video_codec_ctx_->framerate = av_inv_q(video_codec_ctx_->time_base);
-				video_codec_ctx_->flags |= output_format_desc_.field_mode == core::field_mode::progressive ? 0 : (AV_CODEC_FLAG_INTERLACED_ME | AV_CODEC_FLAG_INTERLACED_DCT);
+				video_codec_ctx_->flags |= channel_format_desc_.field_mode == core::field_mode::progressive ? 0 : (AV_CODEC_FLAG_INTERLACED_ME | AV_CODEC_FLAG_INTERLACED_DCT);
+
 				if (video_codec_ctx_->pix_fmt == AV_PIX_FMT_NONE)
 					video_codec_ctx_->pix_fmt = AV_PIX_FMT_YUV420P;
 
@@ -397,21 +382,21 @@ namespace caspar {
 				{
 					video_codec_ctx_->width = video_codec_ctx_->height == 1280 ? 960 : video_codec_ctx_->width;
 
-					if (output_format_desc_.format == core::video_format::ntsc)
+					if (channel_format_desc_.format == core::video_format::ntsc)
 						video_codec_ctx_->pix_fmt = AV_PIX_FMT_YUV411P;
-					else if (output_format_desc_.format == core::video_format::pal)
+					else if (channel_format_desc_.format == core::video_format::pal)
 						video_codec_ctx_->pix_fmt = AV_PIX_FMT_YUV420P;
 					else // dv50
 						video_codec_ctx_->pix_fmt = AV_PIX_FMT_YUV422P;
 
-					if (output_format_desc_.duration == 1001)
+					if (channel_format_desc_.duration == 1001)
 						video_codec_ctx_->width = video_codec_ctx_->height == 1080 ? 1280 : video_codec_ctx_->width;
 					else
 						video_codec_ctx_->width = video_codec_ctx_->height == 1080 ? 1440 : video_codec_ctx_->width;
 				}
 				else if (video_codec_ctx_->codec_id == AV_CODEC_ID_H264)
 				{
-					video_codec_ctx_->bit_rate = output_format_desc_.height * 14 * 1000; // about 8Mbps for SD, 14 for HD
+					video_codec_ctx_->bit_rate = channel_format_desc_.height * 14 * 1000; // about 8Mbps for SD, 14 for HD
 					if (strcmp(encoder->name, "libx264") == 0)
 						LOG_ON_ERROR2(av_opt_set(video_codec_ctx_->priv_data, "preset", "veryfast", NULL), "[ffmpeg_consumer]");
 				}
@@ -425,7 +410,7 @@ namespace caspar {
 					{
 						video_codec_ctx_->pix_fmt = AV_PIX_FMT_YUV422P;
 						video_codec_ctx_->bit_rate = 50 * 1000000;
-						if (output_format_desc_.format == core::video_format::pal)
+						if (channel_format_desc_.format == core::video_format::pal)
 						{
 							// IMX50 encoding parameters
 							video_codec_ctx_->bit_rate = 50 * 1000000;
@@ -447,7 +432,7 @@ namespace caspar {
 				video_codec_ctx_->max_b_frames = 0; // b-frames not supported.
 
 				AVRational sample_aspect_ratio;
-				switch (output_format_desc_.format) {
+				switch (channel_format_desc_.format) {
 				case caspar::core::video_format::pal:
 					sample_aspect_ratio = output_params_.is_narrow_ ? av_make_q(16, 15) : av_make_q(64, 45);
 					break;
@@ -481,9 +466,10 @@ namespace caspar {
 				st->metadata = read_parameters(output_params_.video_metadata_);
 				st->id = output_params_.video_stream_id_;
 
-				picture_buf_.resize(av_image_get_buffer_size(video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 16));
-
-
+				picture_buf_.resize(av_image_get_buffer_size(video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 32));
+				AVFrame frame;
+				av_image_fill_arrays(frame.data, frame.linesize, picture_buf_.data(), video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 32);
+				av_image_fill_black(frame.data, frame.linesize, video_codec_ctx_->pix_fmt, video_codec_ctx_->color_range, video_codec_ctx_->width, video_codec_ctx_->height);
 
 				return st;
 			}
@@ -498,7 +484,7 @@ namespace caspar {
 				audio_codec_ctx_->refcounted_frames = 0;
 				audio_codec_ctx_->codec_id = encoder->id;
 				audio_codec_ctx_->codec_type = AVMEDIA_TYPE_AUDIO;
-				audio_codec_ctx_->sample_rate = output_format_desc_.audio_sample_rate;
+				audio_codec_ctx_->sample_rate = channel_format_desc_.audio_sample_rate;
 				audio_codec_ctx_->channels = 2;
 				audio_codec_ctx_->channel_layout = av_get_default_channel_layout(audio_codec_ctx_->channels);
 				audio_codec_ctx_->profile = FF_PROFILE_UNKNOWN;
@@ -538,43 +524,45 @@ namespace caspar {
 
 				st->metadata = read_parameters(output_params_.audio_metadata_);
 				st->id = output_params_.audio_stream_id_;
-				
+
 				return st;
 			}
 
 			std::shared_ptr<AVFrame> convert_video(core::read_frame& frame)
 			{
 
-				std::unique_ptr<AVFrame, std::function<void(AVFrame *)>> in_frame(av_frame_alloc(), [](AVFrame *frame) { av_frame_free(&frame); });
-				auto in_picture = reinterpret_cast<AVPicture*>(in_frame.get());
-
+				AVFrame in_frame;
 				if (key_only_)
 				{
 					key_picture_buf_.resize(frame.image_data().size());
-					in_picture->linesize[0] = output_format_desc_.width * 4; //AV_PIX_FMT_BGRA
-					in_picture->data[0] = key_picture_buf_.data();
-					fast_memshfl(in_picture->data[0], frame.image_data().begin(), frame.image_data().size(), 0x0F0F0F0F, 0x0B0B0B0B, 0x07070707, 0x03030303);
+					in_frame.linesize[0] = channel_format_desc_.width * 4; //AV_PIX_FMT_BGRA
+					in_frame.data[0] = key_picture_buf_.data();
+					fast_memshfl(in_frame.data[0], frame.image_data().begin(), frame.image_data().size(), 0x0F0F0F0F, 0x0B0B0B0B, 0x07070707, 0x03030303);
 				}
 				else
 				{
-					avpicture_fill(in_picture, const_cast<uint8_t*>(frame.image_data().begin()), AV_PIX_FMT_BGRA, channel_format_desc_.width, channel_format_desc_.height);
+					av_image_fill_arrays(in_frame.data, in_frame.linesize, const_cast<uint8_t*>(frame.image_data().begin()), AV_PIX_FMT_BGRA, channel_format_desc_.width, channel_format_desc_.height, 32);
 				}
 
 				std::shared_ptr<AVFrame> out_frame(av_frame_alloc(), [](AVFrame* frame) { av_frame_free(&frame); });
 
-				av_image_fill_arrays(out_frame->data, out_frame->linesize, picture_buf_.data(), video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 16);
+				av_image_fill_arrays(out_frame->data, out_frame->linesize, picture_buf_.data(), video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 32);
 
-				tbb::parallel_for(0u, scale_slices_, [&](const size_t& sws_index) {
+				tbb::parallel_for(0u, scale_slices_, [&](const size_t& sws_index) 
+				{
 					if (channel_format_desc_.field_mode == caspar::core::field_mode::progressive)
 					{
 						uint8_t *in_data[4];
 						uint8_t *out_data[4];
 						for (size_t i = 0; i < 4; i++)
 						{
-							in_data[i] = in_frame->data[i] + (sws_index * scale_input_slice_height_ * in_frame->linesize[i]);
-							out_data[i] = out_frame->data[i] == NULL ? NULL : out_frame->data[i] + (sws_index * scale_output_slice_height_ * out_frame->linesize[i]);
+							auto in_offset = sws_index * scale_slice_height_ * in_frame.linesize[i];
+							in_data[i] = in_frame.data[i] == NULL ? NULL : in_frame.data[i] + in_offset;
+							auto out_offset = sws_index * scale_slice_height_  * out_frame->linesize[i] / ((i > 0 && out_frame->linesize[i] != 0 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P) ? 2 : 1);
+							auto strange_adjustmenst = (i > 0 && scale_slices_ == 8 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P && channel_format_desc_.height == 1080 && (sws_index % 2 != 0) ? out_frame->linesize[i] / 2 : 0);
+							out_data[i] = out_frame->data[i] == NULL ? NULL : out_frame->data[i] + out_offset + strange_adjustmenst;
 						}
-						sws_scale(sws_.at(sws_index).get(), in_data, in_frame->linesize, 0, scale_input_slice_height_, out_data, out_frame->linesize);
+						sws_scale(sws_.at(sws_index).get(), in_data, in_frame.linesize, 0, scale_slice_height_  , out_data, out_frame->linesize);
 					}
 					else
 					{
@@ -586,22 +574,27 @@ namespace caspar {
 						int out_stride[4];
 						for (uint32_t i = 0; i < 4; i++)
 						{
-							in_data_upper[i] = in_frame->data[i] + (sws_index * scale_input_slice_height_ * in_frame->linesize[i]);
-							in_data_lower[i] = in_frame->data[i] + ((sws_index * scale_input_slice_height_ + 1) * in_frame->linesize[i]);;
-							out_data_upper[i] = out_frame->data[i] + (out_frame->data[i] == NULL ? NULL : ((is_imx50_pal_  ? 32 : 0) + (sws_index * scale_input_slice_height_)) * out_frame->linesize[i]);
-							out_data_lower[i] = out_frame->data[i] + (out_frame->data[i] == NULL ? NULL : ((is_imx50_pal_ ? 33 : 1) + (sws_index * scale_input_slice_height_)) * out_frame->linesize[i]);;
-							in_stride[i] = in_frame->linesize[i] * 2;
+							auto in_offset_upper = sws_index * scale_slice_height_ * in_frame.linesize[i];
+							auto in_offset_lower = in_offset_upper + in_frame.linesize[i];
+							in_data_upper[i] = in_frame.data[i] == NULL ? NULL : in_frame.data[i] + in_offset_upper;
+							in_data_lower[i] = in_frame.data[i] == NULL ? NULL : in_frame.data[i] + in_offset_lower;
+							auto out_offset_upper = (sws_index * scale_slice_height_  * out_frame->linesize[i] / ((i > 0 && out_frame->linesize[i] != 0 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P) ? 2 : 1)) + (is_imx50_pal_ ? 32 * out_frame->linesize[i] : 0);
+							auto out_offset_lower = out_offset_upper + out_frame->linesize[i];
+							auto strange_adjustmenst = (i > 0 && scale_slices_ == 8 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P && channel_format_desc_.height == 1080 && (sws_index % 2 != 0) ? out_frame->linesize[i] / 2 : 0);
+							out_data_upper[i] = out_frame->data[i] == NULL ? NULL : out_frame->data[i] + out_offset_upper + strange_adjustmenst;
+							out_data_lower[i] = out_frame->data[i] == NULL ? NULL : out_frame->data[i] + out_offset_lower + strange_adjustmenst;
+							in_stride[i] = in_frame.linesize[i] * 2;
 							out_stride[i] = out_frame->linesize[i] * 2;
 						}
-						sws_scale(sws_.at(sws_index).get(), in_data_upper, in_stride, 0, channel_format_desc_.height / 2, out_data_upper, out_stride);
-						sws_scale(sws_.at(sws_index).get(), in_data_lower, in_stride, 0, channel_format_desc_.height / 2, out_data_lower, out_stride);
+						sws_scale(sws_.at(sws_index).get(), in_data_upper, in_stride, 0, scale_slice_height_  / 2, out_data_upper, out_stride);
+						sws_scale(sws_.at(sws_index).get(), in_data_lower, in_stride, 0, scale_slice_height_  / 2, out_data_lower, out_stride);
 					}
 				});
 				out_frame->height = video_codec_ctx_->height;
 				out_frame->width = video_codec_ctx_->width;
 				out_frame->format = video_codec_ctx_->pix_fmt;
-				out_frame->interlaced_frame = output_format_desc_.field_mode != core::field_mode::progressive;
-				out_frame->top_field_first = output_format_desc_.field_mode == core::field_mode::upper;
+				out_frame->interlaced_frame = channel_format_desc_.field_mode != core::field_mode::progressive;
+				out_frame->top_field_first = channel_format_desc_.field_mode == core::field_mode::upper;
 				out_frame->pts = out_frame_number_++;
 				return out_frame;
 			}
@@ -978,9 +971,7 @@ namespace caspar {
 			auto video_stream_id = params.get(L"VIDEO_STREAM_ID", 0);
 			auto file_tc = params.get(L"IN", L"00:00:00:00");
 			auto file_path_is_complete = boost::filesystem2::path(narrow(filename)).is_complete();
-			auto format = core::video_format_desc::get(params.get(L"FORMAT", L"INVALID"));
 			auto op = output_params(
-				format,
 				narrow(file_path_is_complete ? filename : env::media_folder() + filename),
 				narrow(acodec),
 				narrow(vcodec),
@@ -1013,9 +1004,7 @@ namespace caspar {
 			auto arate = params.get(L"ARATE", 0);
 			auto vrate = params.get(L"VRATE", 0);
 			auto file_path_is_complete = boost::filesystem2::path(narrow(filename)).is_complete();
-			auto format = core::video_format_desc::get(params.get(L"FORMAT", L"INVALID"));
 			auto op = output_params(
-				format,
 				narrow(file_path_is_complete ? filename : env::media_folder() + filename),
 				narrow(acodec),
 				narrow(vcodec),
@@ -1055,9 +1044,7 @@ namespace caspar {
 			auto arate = params.get(L"ARATE", 0);
 			auto vrate = params.get(L"VRATE", 0);
 			auto narrow_aspect_ratio = params.get(L"NARROW", false);
-			auto format = core::video_format_desc::get(params.get(L"FORMAT", L"INVALID"));
 			output_params op(
-				format,
 				file_path_is_complete ? filename : narrow(env::media_folder()) + filename,
 				narrow(acodec),
 				narrow(vcodec),
@@ -1091,9 +1078,7 @@ namespace caspar {
 			auto video_metadata = ptree.get(L"video-metadata", L"");
 			auto audio_stream_id = ptree.get(L"audio_stream_id", 1);
 			auto video_stream_id = ptree.get(L"video_stream_id", 0);
-			auto format = core::video_format_desc::get(ptree.get(L"format", L"INVALID"));
 			output_params op(
-				format,
 				filename,
 				narrow(acodec),
 				narrow(vcodec),
