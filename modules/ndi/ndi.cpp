@@ -48,7 +48,7 @@ namespace caspar {
 			}
 			ndi_lib->NDIlib_destroy();
 			core::register_consumer_factory(create_consumer);
-			core::register_producer_factory(create_producer);
+			core::register_producer_factory([](const safe_ptr<core::frame_factory>& factory, const core::parameters& params) { return ndi::create_producer(factory, params); });
 
 		}
 

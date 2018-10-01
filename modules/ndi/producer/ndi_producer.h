@@ -29,12 +29,23 @@
 #include <vector>
 
 namespace caspar {
-namespace core {
-	class parameters;
+	namespace core {
+		class parameters;
+	}
+	namespace ndi {
+
+		safe_ptr<core::frame_producer> create_producer(
+			const safe_ptr<core::frame_factory>& frame_factory,
+			const core::parameters& params);
+
+		safe_ptr<core::frame_producer> create_producer(
+			const safe_ptr<core::frame_factory>& frame_factory,
+			const core::video_format_desc format_desc,
+			const core::channel_layout channel_layout,
+			const std::wstring ndi_name,
+			const std::wstring ndi_address,
+			const int buffer_depth
+		);
+	}
 }
-namespace ndi {
-	
-safe_ptr<core::frame_producer> create_producer(
-		const safe_ptr<core::frame_factory>& frame_factory,
-		const core::parameters& params);
-}}
+

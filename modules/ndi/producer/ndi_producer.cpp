@@ -390,5 +390,16 @@ safe_ptr<core::frame_producer> create_producer(
 	return make_safe<ndi_producer>(frame_factory, format_desc, audio_layout, source_name, source_address, buffer_depth);
 }
 
+safe_ptr<core::frame_producer> create_producer(const safe_ptr<core::frame_factory>& frame_factory, const core::video_format_desc format_desc, const core::channel_layout channel_layout, const std::wstring ndi_name, const std::wstring ndi_address, const int buffer_depth)
+{
+	return make_safe<ndi_producer>(
+		frame_factory,
+		format_desc,
+		channel_layout,
+		ndi_name,
+		ndi_address,
+		buffer_depth);
+}
+
 }
 }

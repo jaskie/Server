@@ -64,6 +64,7 @@
 #include <modules/newtek/consumer/newtek_ivga_consumer.h>
 #include <modules/ndi/ndi.h>
 #include <modules/ndi/consumer/ndi_consumer.h>
+#include <modules/ndi/producer/ndi_producer.h>
 
 #include <protocol/amcp/AMCPProtocolStrategy.h>
 #include <protocol/cii/CIIProtocolStrategy.h>
@@ -315,6 +316,17 @@ struct server::implementation : boost::noncopyable
 				auto device_index = xml_producer.get().get(L"device", 1);
 				auto timecode_source = xml_producer.get().get(L"timecode-source", L"serial");
 				producer = decklink::create_producer(channel->mixer(), channel->get_video_format_desc(), channel->get_channel_layot(), device_index, timecode_source);
+				channel->stage()->load(layer, producer);
+				channel->stage()->play(layer);
+				return;
+			}
+			xml_producer = pt.get_child_optional(L"ndi");
+			if (xml_producer.is_initialized())
+			{
+				auto name = xml_producer.get().get(L"name", L"");
+				auto address = xml_producer.get().get(L"address", L"");
+				auto buffer_depth = xml_producer.get().get(L"buffer-depth", 2);
+				producer = ndi::create_producer(channel->mixer(), channel->get_video_format_desc(), channel->get_channel_layot(), name, address, buffer_depth);
 				channel->stage()->load(layer, producer);
 				channel->stage()->play(layer);
 				return;
