@@ -9,9 +9,10 @@ This is fork of 2.06 Stable master branch with following fixes and enhacements w
 6. Decklink producer auto-detects input signal format on supported cards and scale it to channel format (works only with the same framerate formats).
 7. Added new transition type: SQUEEZE (both background and foreground layers).
 8. Added transition pause at half of its duration of specified length.
-9. Allows creating a input channel with no initial consumer, but with decklink input open (to record it with ADD FILE, CAPTURE or instantly play with ROUTE command).
+9. Allows creating a input channel with no initial consumer, but with decklink or NDI input open (to record it with ADD FILE, CAPTURE or instantly play with ROUTE command).
 10. Added deck control, with new CAPTURE and RECORDER commands (see wiki).
 11. Added native Newtek NDI (http://ndi.newtek.com) consumer able to stream with or without alpha channel.
+12. Added NDI producer to play a NDI source (can be added using AMCP command or from casparcg.config).
 
 --------------------------------------
 |        Original readme below       |
