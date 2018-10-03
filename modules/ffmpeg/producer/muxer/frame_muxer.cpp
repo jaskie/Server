@@ -350,6 +350,9 @@ struct frame_muxer::implementation : boost::noncopyable
 			display_mode_ = display_mode::simple;
 		}
 
+		auto out_pix_fmts = std::vector<AVPixelFormat>();
+		out_pix_fmts.push_back(AV_PIX_FMT_BGRA);
+
 		filter_.reset (new filter(
 			frame->width,
 			frame->height,
@@ -357,7 +360,7 @@ struct frame_muxer::implementation : boost::noncopyable
 			in_fps_,
 			boost::rational<int>(frame->sample_aspect_ratio.num, frame->sample_aspect_ratio.den),
 			static_cast<AVPixelFormat>(frame->format),
-			std::vector<AVPixelFormat>(),
+			out_pix_fmts,
 			filter_str));
 
 			CASPAR_LOG(debug) << L"[frame_muxer] " << display_mode_ << L" " << print_mode(frame->width, frame->height, fps, frame->interlaced_frame > 0);
