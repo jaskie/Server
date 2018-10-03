@@ -73,6 +73,7 @@ namespace caspar { namespace ndi {
 	typedef std::unique_ptr<void, std::function<void(NDIlib_recv_instance_t)>> ndi_receiver_ptr_t;
 	typedef std::unique_ptr<SwrContext, std::function<void(SwrContext*)>> swr_ptr_t;
 	typedef std::pair<int64_t, std::shared_ptr<core::audio_buffer>> audio_buffer_item_t;
+	const std::pair<int64_t, std::shared_ptr<AVFrame>> empty_video(0, nullptr);
 
 	swr_ptr_t create_swr(const int out_sample_rate, const int out_nb_channels, const int in_nb_channels, const int in_sample_rate)
 	{
@@ -121,6 +122,8 @@ class ndi_producer : public core::frame_producer
 	safe_ptr<core::frame_factory>															frame_factory_;
 	tbb::concurrent_bounded_queue<safe_ptr<core::basic_frame>>								frame_buffer_;
 	std::queue<audio_buffer_item_t>															audio_buffer_;
+	std::pair<int64_t, std::shared_ptr<AVFrame>>											video_;
+
 	std::vector<float>																		audio_conversion_buffer_;
 	const int64_t																			video_frame_duration_; // in 100 ns
 	int64_t																					frame_pts_;
@@ -145,6 +148,7 @@ public:
 		, executor_(print())
 		, video_frame_duration_(static_cast<int64_t>(format_desc.duration) * 10000000 / format_desc.time_scale)
 		, frame_pts_(0)
+		, video_(0, nullptr)
 	{		
 		if (!ndi_lib_)
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(" NDI library not loaded"));
@@ -155,7 +159,7 @@ public:
 		graph_->set_color("dropped-frame", diagnostics::color(1.0f, 1.0f, 0.3f));
 		graph_->set_color("empty-audio", diagnostics::color(0.3f, 0.9f, 1.0f));
 		graph_->set_color("output-buffer", diagnostics::color(0.0f, 1.0f, 0.0f));
-		graph_->set_color("audio-buffer", diagnostics::color(0.3f, 0.3f, 1.0f));
+		graph_->set_color("audio-sync-buffer", diagnostics::color(0.3f, 0.3f, 1.0f));
 		graph_->set_text(print());
 		diagnostics::register_graph(graph_);
 		executor_.begin_invoke([this]() { receiver_proc(); });
@@ -235,7 +239,10 @@ public:
 		switch (ndi_lib_->NDIlib_recv_capture(ndi_receive_.get(), &video_frame, &audio_frame, NULL, 1000))
 		{
 		case NDIlib_frame_type_video:
-			process_video_sync_and_send_to_muxer(&video_frame);
+			if (video_.first) //we already have unprocessed frame received
+				add_silent_audio();
+			process_received_video(&video_frame);
+			ensure_muxer(video_frame.frame_rate_N, video_frame.frame_rate_D);
 			ndi_lib_->NDIlib_recv_free_video(ndi_receive_.get(), &video_frame);
 			break;
 		case NDIlib_frame_type_audio:
@@ -244,7 +251,7 @@ public:
 				audio_conversion_buffer_.resize(audio_frame.no_samples * audio_frame.no_channels);
 			interleaved_frame.p_data = audio_conversion_buffer_.data();
 			ndi_lib_->NDIlib_util_audio_to_interleaved_32f(&audio_frame, &interleaved_frame);
-			queue_audio(&interleaved_frame);
+			queue_received_audio(&interleaved_frame);
 			ndi_lib_->NDIlib_recv_free_audio(ndi_receive_.get(), &audio_frame);
 			break;
 		case NDIlib_frame_type_error:
@@ -254,9 +261,10 @@ public:
 			CASPAR_LOG(trace) << print() << L" no frame.";
 			break;
 		}
+		sync_and_send_to_muxer();
 	}
 
-	void process_video_sync_and_send_to_muxer(NDIlib_video_frame_t * ndi_video)
+	void process_received_video(NDIlib_video_frame_t * ndi_video)
 	{
 		graph_->set_value("tick-time", tick_timer_.elapsed()*format_desc_.fps*0.5);
 		tick_timer_.restart();
@@ -291,26 +299,20 @@ public:
 		av_frame->interlaced_frame = ndi_video->frame_format_type == NDIlib_frame_format_type_interleaved ? 1 : 0;
 		av_frame->top_field_first = av_frame->interlaced_frame;
 		av_frame->pts = frame_pts_++;
-		
-		if (!muxer_ || in_frame_rate_.denominator() != ndi_video->frame_rate_D || in_frame_rate_.numerator() != ndi_video->frame_rate_N)
+		video_ = std::make_pair(ndi_video->timecode, av_frame);
+	}
+
+	void ensure_muxer(const int frame_rate_num, const int frame_rate_den)
+	{
+		if (!muxer_ || in_frame_rate_.denominator() != frame_rate_den || in_frame_rate_.numerator() != frame_rate_num)
 		{
-			in_frame_rate_ = boost::rational<int>(ndi_video->frame_rate_N, ndi_video->frame_rate_D);
+			in_frame_rate_ = boost::rational<int>(frame_rate_num, frame_rate_den);
 			muxer_.reset(new ffmpeg::frame_muxer(in_frame_rate_, frame_factory_, false, audio_channel_layout_, ""));
-		}				
-		muxer_->push(av_frame);
-		audio_buffer_item_t audio;
-		while (!audio_buffer_.empty())
-		{
-			int64_t frame_timecode = audio_buffer_.front().first;
-			if (frame_timecode > ndi_video->timecode)
-				break;
-			if (frame_timecode <= ndi_video->timecode)
-			{
-				if (frame_timecode > ndi_video->timecode - video_frame_duration_)
-					muxer_->push(audio_buffer_.front().second);
-				audio_buffer_.pop();
-			}
 		}
+	}
+
+	void add_silent_audio()
+	{
 		if (!muxer_->audio_ready())
 		{
 			muxer_->push(std::make_shared<core::audio_buffer>(format_desc_.audio_sample_rate * format_desc_.duration * audio_channel_layout_.num_channels / format_desc_.time_scale, 0));
@@ -318,7 +320,28 @@ public:
 		}
 	}
 
-	void queue_audio(NDIlib_audio_frame_interleaved_32f_t * ndi_audio)
+	void sync_and_send_to_muxer()
+	{
+		if (!muxer_ || !(video_.first))
+			return;
+		muxer_->push(video_.second);
+		audio_buffer_item_t audio;
+		while (!audio_buffer_.empty())
+		{
+			int64_t frame_timecode = audio_buffer_.front().first;
+			if (frame_timecode > video_.first)
+				break;
+			if (frame_timecode <= video_.first)
+			{
+				if (frame_timecode > video_.first - video_frame_duration_)
+					muxer_->push(audio_buffer_.front().second);
+				audio_buffer_.pop();
+			}
+		}
+		video_ = empty_video;
+	}
+
+	void queue_received_audio(NDIlib_audio_frame_interleaved_32f_t * ndi_audio)
 	{
 		if (!swr_ || ndi_audio->sample_rate != in_audio_sample_rate_ || ndi_audio->no_channels != in_audio_nb_channels_)
 		{
@@ -339,7 +362,7 @@ public:
 		audio_buffer_.push(audio_buffer_item_t(ndi_audio->timecode, buffer));
 		while (audio_buffer_.size() > 10)
 			audio_buffer_.pop();
-		graph_->set_value("audio-buffer", static_cast<float>(audio_buffer_.size()) / 10.0f);
+		graph_->set_value("audio-sync-buffer", static_cast<float>(audio_buffer_.size()) / 10.0f);
 	}
 				
 	virtual safe_ptr<core::basic_frame> receive(int hints) override
