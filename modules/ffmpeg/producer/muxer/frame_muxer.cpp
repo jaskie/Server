@@ -72,7 +72,7 @@ struct frame_muxer::implementation : boost::noncopyable
 	std::queue<core::audio_buffer>					audio_streams_;
 	std::queue<safe_ptr<basic_frame>>				frame_buffer_;
 	display_mode::type								display_mode_;
-	const double									in_fps_;
+	const boost::rational<int>						in_fps_;
 	const video_format_desc							format_desc_;
 	bool											auto_transcode_;
 	bool											auto_deinterlace_;
@@ -88,7 +88,7 @@ struct frame_muxer::implementation : boost::noncopyable
 	const core::channel_layout						audio_channel_layout_;
 		
 	implementation(
-			double in_fps,
+			boost::rational<int> in_fps,
 			const safe_ptr<core::frame_factory>& frame_factory,
 			const std::string& filter_str,
 			bool thumbnail_mode,
@@ -316,10 +316,10 @@ struct frame_muxer::implementation : boost::noncopyable
 		display_mode_ = display_mode::simple;
 
 		auto mode = get_mode(*frame);
-		if(mode == core::field_mode::progressive && frame->height < 720 && in_fps_ < 50.0) // SD frames are interlaced. Probably incorrect meta-data. Fix it.
+		if(mode == core::field_mode::progressive && frame->height < 720 && boost::rational_cast<double>(in_fps_) < 50.0) // SD frames are interlaced. Probably incorrect meta-data. Fix it.
 			mode = core::field_mode::upper;
 
-		auto fps  = in_fps_;
+		double fps = boost::rational_cast<double>(in_fps_);
 
 		display_mode_ = get_display_mode(mode, fps, format_desc_.field_mode, format_desc_.fps);
 			
@@ -341,6 +341,9 @@ struct frame_muxer::implementation : boost::noncopyable
 		else if (display_mode_ == display_mode::scale_interlaced)
 			filter_str = append_filter(filter_str, (boost::format("SCALE=w=%1%:h=%2%:interl=1") %format_desc_.width %format_desc_.height).str());
 
+		if (in_fps_ != boost::rational<int>(format_desc_.time_scale, format_desc_.duration))
+			filter_str = append_filter(filter_str, (boost::format("FPS=%1%/%2%") % format_desc_.time_scale %format_desc_.duration).str());
+
 		if(display_mode_ == display_mode::invalid)
 		{
 			CASPAR_LOG(debug) << L"[frame_muxer] Auto-transcode: Failed to detect display-mode.";
@@ -350,14 +353,14 @@ struct frame_muxer::implementation : boost::noncopyable
 		filter_.reset (new filter(
 			frame->width,
 			frame->height,
-			boost::rational<int>(1000000, static_cast<int>(in_fps_ * 1000000)),
-			boost::rational<int>(static_cast<int>(in_fps_ * 1000000), 1000000),
+			boost::rational<int>(in_fps_.denominator(), in_fps_.numerator()),
+			in_fps_,
 			boost::rational<int>(frame->sample_aspect_ratio.num, frame->sample_aspect_ratio.den),
 			static_cast<AVPixelFormat>(frame->format),
 			std::vector<AVPixelFormat>(),
 			filter_str));
 
-			CASPAR_LOG(debug) << L"[frame_muxer] " << display_mode_ << L" " << print_mode(frame->width, frame->height, in_fps_, frame->interlaced_frame > 0);
+			CASPAR_LOG(debug) << L"[frame_muxer] " << display_mode_ << L" " << print_mode(frame->width, frame->height, fps, frame->interlaced_frame > 0);
 	}
 	
 	void clear()
@@ -377,7 +380,7 @@ struct frame_muxer::implementation : boost::noncopyable
 };
 
 frame_muxer::frame_muxer(
-		double in_fps,
+		boost::rational<int> in_fps,
 		const safe_ptr<core::frame_factory>& frame_factory,
 		bool thumbnail_mode,
 		const core::channel_layout& audio_channel_layout,

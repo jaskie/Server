@@ -129,7 +129,6 @@ public:
 				const auto samples = reinterpret_cast<uint32_t*>(*out);
 				return std::make_shared<core::audio_buffer>(samples, samples + n_samples*codec_context_->channels);
 			}
-			av_freep(&out[0]);
 		}
 		return nullptr;
 	}

@@ -112,6 +112,7 @@ class decklink_producer : boost::noncopyable, public IDeckLinkInputCallback
 	const BMDTimecodeFormat										timecode_source_;
 	BMDTimeValue												frame_duration_;
 	BMDTimeScale												time_scale_;
+	int64_t														frame_pts_;
 
 public:
 	decklink_producer(
@@ -131,7 +132,7 @@ public:
 		, filter_(filter)
 		, format_desc_(format_desc)
 		, audio_cadence_(format_desc.audio_cadence)
-		, muxer_(format_desc.fps, frame_factory, false, audio_channel_layout, narrow(filter))
+		, muxer_(boost::rational<int>(format_desc.time_scale, format_desc.duration), frame_factory, false, audio_channel_layout, narrow(filter))
 		, sync_buffer_(format_desc.audio_cadence.size())
 		, frame_factory_(frame_factory)
 		, audio_channel_layout_(audio_channel_layout)
@@ -139,6 +140,7 @@ public:
 		, current_display_mode_(get_display_mode(input_, format_desc_.format, bmdFormat8BitYUV, bmdVideoInputFlagDefault))
 		, frame_duration_(format_desc_.duration)
 		, time_scale_(format_desc_.time_scale)
+		, frame_pts_(0)
 	{		
 		hints_ = 0;
 		frame_buffer_.set_capacity(buffer_depth);
@@ -258,6 +260,7 @@ public:
 			auto fieldDominance = current_display_mode_->GetFieldDominance();
 			av_frame->interlaced_frame	= fieldDominance == bmdLowerFieldFirst || fieldDominance == bmdUpperFieldFirst;
 			av_frame->top_field_first	= fieldDominance == bmdUpperFieldFirst;
+			av_frame->pts = frame_pts_++;
 			IDeckLinkTimecode * decklink_timecode_bcd = NULL;
 			int frame_timecode = std::numeric_limits<int>().max();
 			if (SUCCEEDED(video->GetTimecode(timecode_source_, &decklink_timecode_bcd)) && decklink_timecode_bcd)

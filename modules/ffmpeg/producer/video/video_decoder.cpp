@@ -66,6 +66,7 @@ struct video_decoder::implementation : boost::noncopyable
 	tbb::atomic<int64_t>					seek_pts_;
 	tbb::atomic<bool>						invert_field_order_;
 	tbb::atomic<uint32_t>					frame_decoded_;
+	int64_t									frame_number_;
 public:
 	explicit implementation(input input, bool invert_field_order)
 		: input_(input)
@@ -75,7 +76,7 @@ public:
 		, height_(codec_context_->height)
 		, stream_(input_.format_context()->streams[stream_index_])
 		, stream_start_pts_(stream_->start_time)
-		, nb_frames_(static_cast<uint32_t>(calc_nb_frames(stream_)))		
+		, nb_frames_(static_cast<uint32_t>(calc_nb_frames(stream_)))
 	{
 		invert_field_order_ = invert_field_order;
 		seek_pts_ = 0;
@@ -92,8 +93,7 @@ public:
 				return 0;
 			else
 			{
-				AVRational r_frame_rate = av_stream_get_r_frame_rate(stream);
-				return (stream->duration * stream->time_base.num * r_frame_rate.num) / (stream->time_base.den * r_frame_rate.den);
+				return (stream->duration * stream->time_base.num * stream->r_frame_rate.num) / (stream->time_base.den * stream->r_frame_rate.den);
 			}				
 	}
 
@@ -124,10 +124,10 @@ public:
 
 		if(decoded_frame->repeat_pict > 0)
 			CASPAR_LOG(warning) << "[video_decoder] Field repeat_pict not implemented.";
-		int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(decoded_frame.get());
-		if (frame_time_stamp < seek_pts_)
+		if (decoded_frame->best_effort_timestamp < seek_pts_)
 			return nullptr;
 		frame_decoded_++;
+		decoded_frame->pts = av_rescale(frame_number_++, stream_->time_base.num * stream_->r_frame_rate.num, stream_->time_base.num * stream_->r_frame_rate.num);
 		return decoded_frame;
 	}
 
@@ -149,6 +149,11 @@ public:
 		return nb_frames_ == 0 ? frame_decoded_ : nb_frames_;
 	}
 
+	boost::rational<int> frame_rate() const
+	{
+		return boost::rational<int>(stream_->r_frame_rate.num, stream_->r_frame_rate.den);
+	}
+
 	std::wstring print() const
 	{		
 		return L"[video-decoder] " + widen(codec_context_->codec->long_name);
@@ -164,4 +169,5 @@ bool	video_decoder::is_progressive() const{return impl_->is_progressive_;}
 std::wstring video_decoder::print() const{return impl_->print();}
 void video_decoder::seek(uint64_t time, uint32_t frame) { impl_->seek(time, frame);}
 void video_decoder::invert_field_order(bool invert) {impl_-> invert_field_order(invert);}
+boost::rational<int> video_decoder::frame_rate() const { return impl_->frame_rate(); };
 }}

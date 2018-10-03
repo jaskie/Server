@@ -23,6 +23,7 @@
 
 #include <common/memory/safe_ptr.h>
 #include <boost/noncopyable.hpp>
+#include <boost/rational.hpp>
 #include "../input/input.h"
 
 struct AVFormatContext;
@@ -51,6 +52,7 @@ public:
 	std::wstring print()	const;
 	void seek(uint64_t time, uint32_t frame);
 	void invert_field_order(bool invert);
+	boost::rational<int> frame_rate() const;
 
 private:
 	struct implementation;

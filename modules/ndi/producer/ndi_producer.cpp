@@ -49,6 +49,7 @@
 #include <boost/foreach.hpp>
 #include <boost/timer.hpp>
 #include <boost/circular_buffer.hpp>
+#include <boost/rational.hpp>
 #include <queue>
 
 #if defined(_MSC_VER)
@@ -110,18 +111,19 @@ class ndi_producer : public core::frame_producer
 	swr_ptr_t																				swr_;
 	int																						in_audio_sample_rate_;
 	int																						in_audio_nb_channels_;
+	boost::rational<int>																	in_frame_rate_;
 
 	const std::wstring																		source_name_;
 	const std::wstring																		source_address_;
 
-	ffmpeg::frame_muxer																		muxer_;
+	std::unique_ptr<ffmpeg::frame_muxer>													muxer_;
 			
 	safe_ptr<core::frame_factory>															frame_factory_;
 	tbb::concurrent_bounded_queue<safe_ptr<core::basic_frame>>								frame_buffer_;
 	std::queue<audio_buffer_item_t>															audio_buffer_;
 	std::vector<float>																		audio_conversion_buffer_;
 	const int64_t																			video_frame_duration_; // in 100 ns
-
+	int64_t																					frame_pts_;
 	core::channel_layout																	audio_channel_layout_;
 	executor																				executor_;
 
@@ -137,12 +139,12 @@ public:
 		: source_name_(source_name)
 		, source_address_(source_address)
 		, format_desc_(format_desc)
-		, muxer_(format_desc.fps, frame_factory, false, audio_channel_layout, "")
 		, frame_factory_(frame_factory)
 		, audio_channel_layout_(audio_channel_layout)
 		, ndi_lib_(load_ndi())
 		, executor_(print())
 		, video_frame_duration_(static_cast<int64_t>(format_desc.duration) * 10000000 / format_desc.time_scale)
+		, frame_pts_(0)
 	{		
 		if (!ndi_lib_)
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(" NDI library not loaded"));
@@ -206,7 +208,9 @@ public:
 		try
 		{
 			read_next_frame();
-			if (auto frame = muxer_.poll())
+			if (!muxer_)
+				return;
+			while (auto frame = muxer_->poll())
 			{
 				auto safe_frame = make_safe_ptr(frame);
 				while (!frame_buffer_.try_push(safe_frame))
@@ -220,7 +224,7 @@ public:
 		catch (...)
 		{
 			CASPAR_LOG_CURRENT_EXCEPTION();
-			muxer_.clear();
+			muxer_->clear();
 		}
 	}
 	
@@ -286,8 +290,14 @@ public:
 		av_frame->pict_type = AV_PICTURE_TYPE_I;
 		av_frame->interlaced_frame = ndi_video->frame_format_type == NDIlib_frame_format_type_interleaved ? 1 : 0;
 		av_frame->top_field_first = av_frame->interlaced_frame;
-
-		muxer_.push(av_frame);
+		av_frame->pts = frame_pts_++;
+		
+		if (!muxer_ || in_frame_rate_.denominator() != ndi_video->frame_rate_D || in_frame_rate_.numerator() != ndi_video->frame_rate_N)
+		{
+			in_frame_rate_ = boost::rational<int>(ndi_video->frame_rate_N, ndi_video->frame_rate_D);
+			muxer_.reset(new ffmpeg::frame_muxer(in_frame_rate_, frame_factory_, false, audio_channel_layout_, ""));
+		}				
+		muxer_->push(av_frame);
 		audio_buffer_item_t audio;
 		while (!audio_buffer_.empty())
 		{
@@ -297,13 +307,13 @@ public:
 			if (frame_timecode <= ndi_video->timecode)
 			{
 				if (frame_timecode > ndi_video->timecode - video_frame_duration_)
-					muxer_.push(audio_buffer_.front().second);
+					muxer_->push(audio_buffer_.front().second);
 				audio_buffer_.pop();
 			}
 		}
-		if (!muxer_.audio_ready())
+		if (!muxer_->audio_ready())
 		{
-			muxer_.push(std::make_shared<core::audio_buffer>(format_desc_.audio_sample_rate * format_desc_.duration * audio_channel_layout_.num_channels / format_desc_.time_scale, 0));
+			muxer_->push(std::make_shared<core::audio_buffer>(format_desc_.audio_sample_rate * format_desc_.duration * audio_channel_layout_.num_channels / format_desc_.time_scale, 0));
 			graph_->set_tag("empty-audio");
 		}
 	}

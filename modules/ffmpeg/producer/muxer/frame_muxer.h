@@ -28,6 +28,7 @@
 #include <core/mixer/audio/audio_mixer.h>
 
 #include <boost/noncopyable.hpp>
+#include <boost/rational.hpp>
 
 #include <vector>
 
@@ -50,7 +51,7 @@ class frame_muxer : boost::noncopyable
 {
 public:
 	frame_muxer(
-			double in_fps,
+			boost::rational<int> in_fps,
 			const safe_ptr<core::frame_factory>& frame_factory,
 			bool thumbnail_mode,
 			const core::channel_layout& audio_channel_layout,
