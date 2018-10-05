@@ -107,23 +107,25 @@ namespace caspar {
 			const int									audio_bitrate_;
 			const int									video_bitrate_;
 			const std::string							file_timecode_;
+			const std::string							filter_;
 			
 			output_params(
-				const std::string& filename, 
-				const std::string& audio_codec, 
-				const std::string& video_codec, 
-				const std::string& output_metadata,
-				const std::string& audio_metadata,
-				const std::string& video_metadata,
+				const std::string filename, 
+				const std::string audio_codec, 
+				const std::string video_codec, 
+				const std::string output_metadata,
+				const std::string audio_metadata,
+				const std::string video_metadata,
 				const int audio_stream_id,
 				const int video_stream_id,
-				const std::string& options,
-				const std::string& pixel_format,
+				const std::string options,
+				const std::string pixel_format,
 				const bool is_stream,
 				const bool is_narrow, 
 				const int a_rate, 
 				const int v_rate, 
-				const std::string& file_tc)
+				const std::string file_tc,
+				const std::string filter)
 				: video_codec_(std::move(video_codec))
 				, audio_codec_(std::move(audio_codec))
 				, output_metadata_(std::move(output_metadata))
@@ -140,6 +142,7 @@ namespace caspar {
 				, video_bitrate_(v_rate)
 				, file_name_(std::move(filename))
 				, file_timecode_(std::move(file_tc))
+				, filter_(std::move(filter))
 			{ }
 			
 		};
@@ -216,6 +219,17 @@ namespace caspar {
 
 				current_encoding_delay_ = 0;
 				out_frame_number_ = 0;
+				if (!params.filter_.empty())
+					filter_.reset(new filter(
+						channel_format_desc.width,
+						channel_format_desc.height,
+						boost::rational<int>(channel_format_desc.time_scale, channel_format_desc.duration),
+						boost::rational<int>(channel_format_desc.duration, channel_format_desc.time_scale),
+						boost::rational<int>(1, 1),
+						AV_PIX_FMT_BGRA,
+						std::vector<AVPixelFormat>(),
+						params.filter_
+						));
 								
 				if (boost::filesystem::exists(output_params_.file_name_))
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("File already exists: " + params.file_name_));
@@ -226,77 +240,7 @@ namespace caspar {
 				diagnostics::register_graph(graph_);
 
 				encode_executor_.set_capacity(16);
-
-				try
-				{
-					AVOutputFormat * format = NULL;
-					if (output_params_.is_stream_)
-					{
-						if (output_params_.file_name_.find("rtmp://") == 0)
-							format = av_guess_format("flv", NULL, NULL);
-						else
-							format = av_guess_format("mpegts", NULL, NULL);
-					}
-					if (!format && is_imx50_pal_)
-						format = av_guess_format("mxf_d10", output_params_.file_name_.c_str(), NULL);
-					if (!format)
-						format = av_guess_format(NULL, output_params_.file_name_.c_str(), NULL);
-					if (!format)
-						BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not guess output format."));
 			
-					format_context_ = AVFormatContextPtr(alloc_output_params_context(output_params_.file_name_, format), [](AVFormatContext * ctx)
-					{
-						if (!(ctx->oformat->flags & AVFMT_NOFILE))
-							LOG_ON_ERROR2(avio_close(ctx->pb), "[ffmpeg_consumer]"); 
-						avformat_free_context(ctx);
-					});
-					
-					AVCodec * video_codec = NULL;
-					AVCodec * audio_codec = NULL;
-					video_codec = output_params_.video_codec_.empty()
-						? output_params_.is_mxf_ ? avcodec_find_encoder_by_name("mpeg2video") : avcodec_find_encoder_by_name("libx264")
-						: avcodec_find_encoder_by_name(output_params_.video_codec_.c_str());
-					audio_codec = output_params_.audio_codec_.empty()
-						? output_params_.is_mxf_ ? avcodec_find_encoder_by_name("pcm_s16le") : avcodec_find_encoder_by_name("aac")
-						: avcodec_find_encoder_by_name(output_params_.audio_codec_.c_str());
-
-					video_stream_ = add_video_stream(video_codec, format);
-
-					if (!key_only)
-						audio_stream_ = add_audio_stream(audio_codec, format);
-
-					LOG_ON_ERROR2(av_dict_set(&video_stream_->metadata, "timecode", output_params_.file_timecode_.c_str(), AV_DICT_DONT_OVERWRITE), "[ffmpeg_consumer]");
-					
-					// Open the output
-					format_context_->metadata = read_parameters(params.output_metadata_);
-					if (format_context_->max_delay <= 0)
-						format_context_->max_delay = AV_TIME_BASE * 7 / 10;
-					format_context_->flags = AVFMT_FLAG_FLUSH_PACKETS | format_context_->flags;
-
-					av_dump_format(format_context_.get(), 0, output_params_.file_name_.c_str(), 1);
-
-					if (!(format_context_->oformat->flags & AVFMT_NOFILE))
-						THROW_ON_ERROR2(avio_open2(&format_context_->pb, output_params_.file_name_.c_str(), AVIO_FLAG_WRITE, NULL, &options_), "[ffmpeg_consumer]");
-
-					THROW_ON_ERROR2(avformat_write_header(format_context_.get(), &options_), "[ffmpeg_consumer]");
-
-					char * unused_options;
-					if (options_
-						&& av_dict_count(options_) > 0
-						&& av_dict_get_string(options_, &unused_options, '=', ',') >= 0)
-					{
-						CASPAR_LOG(warning) << print() << L" Unrecognized FFMpeg options: " << widen(std::string(unused_options));
-						if (unused_options)
-							delete(unused_options);
-						av_dict_free(&options_);
-					}
-					create_sws();
-				}
-				catch (...)
-				{
-					boost::filesystem2::remove(output_params_.file_name_); // Delete the file if exists and consumer not fully initialized
-					throw;
-				}
 				CASPAR_LOG(info) << print() << L" Successfully Initialized.";
 			}
 
@@ -325,6 +269,80 @@ namespace caspar {
 				return L"ffmpeg_consumer[" + widen(output_params_.file_name_) + L"]:" + boost::lexical_cast<std::wstring>(out_frame_number_);
 			}
 
+			void create_output(const AVFrame* frame)
+			{
+				try
+				{
+					AVOutputFormat * format = NULL;
+					if (output_params_.is_stream_)
+					{
+						if (output_params_.file_name_.find("rtmp://") == 0)
+							format = av_guess_format("flv", NULL, NULL);
+						else
+							format = av_guess_format("mpegts", NULL, NULL);
+					}
+					if (!format && is_imx50_pal_)
+						format = av_guess_format("mxf_d10", output_params_.file_name_.c_str(), NULL);
+					if (!format)
+						format = av_guess_format(NULL, output_params_.file_name_.c_str(), NULL);
+					if (!format)
+						BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not guess output format."));
+
+					format_context_ = AVFormatContextPtr(alloc_output_params_context(output_params_.file_name_, format), [](AVFormatContext * ctx)
+					{
+						if (!(ctx->oformat->flags & AVFMT_NOFILE))
+							LOG_ON_ERROR2(avio_close(ctx->pb), "[ffmpeg_consumer]");
+						avformat_free_context(ctx);
+					});
+
+					AVCodec * video_codec = NULL;
+					AVCodec * audio_codec = NULL;
+					video_codec = output_params_.video_codec_.empty()
+						? output_params_.is_mxf_ ? avcodec_find_encoder_by_name("mpeg2video") : avcodec_find_encoder_by_name("libx264")
+						: avcodec_find_encoder_by_name(output_params_.video_codec_.c_str());
+					audio_codec = output_params_.audio_codec_.empty()
+						? output_params_.is_mxf_ ? avcodec_find_encoder_by_name("pcm_s16le") : avcodec_find_encoder_by_name("aac")
+						: avcodec_find_encoder_by_name(output_params_.audio_codec_.c_str());
+
+					video_stream_ = add_video_stream(video_codec, format, frame);
+
+					if (!key_only_)
+						audio_stream_ = add_audio_stream(audio_codec, format);
+
+					LOG_ON_ERROR2(av_dict_set(&video_stream_->metadata, "timecode", output_params_.file_timecode_.c_str(), AV_DICT_DONT_OVERWRITE), "[ffmpeg_consumer]");
+
+					// Open the output
+					format_context_->metadata = read_parameters(output_params_.output_metadata_);
+					if (format_context_->max_delay <= 0)
+						format_context_->max_delay = AV_TIME_BASE * 7 / 10;
+					format_context_->flags = AVFMT_FLAG_FLUSH_PACKETS | format_context_->flags;
+
+					av_dump_format(format_context_.get(), 0, output_params_.file_name_.c_str(), 1);
+
+					if (!(format_context_->oformat->flags & AVFMT_NOFILE))
+						THROW_ON_ERROR2(avio_open2(&format_context_->pb, output_params_.file_name_.c_str(), AVIO_FLAG_WRITE, NULL, &options_), "[ffmpeg_consumer]");
+
+					THROW_ON_ERROR2(avformat_write_header(format_context_.get(), &options_), "[ffmpeg_consumer]");
+
+					char * unused_options;
+					if (options_
+						&& av_dict_count(options_) > 0
+						&& av_dict_get_string(options_, &unused_options, '=', ',') >= 0)
+					{
+						CASPAR_LOG(warning) << print() << L" Unrecognized FFMpeg options: " << widen(std::string(unused_options));
+						if (unused_options)
+							delete(unused_options);
+						av_dict_free(&options_);
+					}
+					create_sws();
+				}
+				catch (...)
+				{
+					boost::filesystem2::remove(output_params_.file_name_); // Delete the file if exists and consumer not fully initialized
+					throw;
+				}
+			}
+
 			void create_sws()
 			{
 				for (size_t i = 0; i < scale_slices_; i++)
@@ -346,7 +364,7 @@ namespace caspar {
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Cannot initialize the conversion context"));
 			}
 
-			AVStream* add_video_stream(AVCodec * encoder, AVOutputFormat * format)
+			AVStream* add_video_stream(const AVCodec * encoder, const AVOutputFormat * format, const AVFrame * frame)
 			{
 
 				if (!encoder)
@@ -357,14 +375,14 @@ namespace caspar {
 				video_codec_ctx_->refcounted_frames = 0;
 				video_codec_ctx_->codec_id = encoder->id;
 				video_codec_ctx_->codec_type = AVMEDIA_TYPE_VIDEO;
-				video_codec_ctx_->width = channel_format_desc_.width;
-				video_codec_ctx_->height = channel_format_desc_.height;
+				video_codec_ctx_->width = frame->width;
+				video_codec_ctx_->height = frame->height;
 				video_codec_ctx_->time_base = av_make_q(channel_format_desc_.duration, channel_format_desc_.time_scale);
 				video_codec_ctx_->framerate = av_inv_q(video_codec_ctx_->time_base);
-				video_codec_ctx_->flags |= channel_format_desc_.field_mode == core::field_mode::progressive ? 0 : (AV_CODEC_FLAG_INTERLACED_ME | AV_CODEC_FLAG_INTERLACED_DCT);
+				if (frame->interlaced_frame)
+					video_codec_ctx_->flags |= (AV_CODEC_FLAG_INTERLACED_ME | AV_CODEC_FLAG_INTERLACED_DCT);
 
-				if (video_codec_ctx_->pix_fmt == AV_PIX_FMT_NONE)
-					video_codec_ctx_->pix_fmt = AV_PIX_FMT_YUV420P;
+				video_codec_ctx_->pix_fmt = static_cast<AVPixelFormat>(frame->format);
 
 				if (video_codec_ctx_->codec_id == AV_CODEC_ID_PRORES)
 				{
@@ -467,9 +485,9 @@ namespace caspar {
 				st->id = output_params_.video_stream_id_;
 
 				picture_buf_.resize(av_image_get_buffer_size(video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 32));
-				AVFrame frame;
-				av_image_fill_arrays(frame.data, frame.linesize, picture_buf_.data(), video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 32);
-				av_image_fill_black(frame.data, frame.linesize, video_codec_ctx_->pix_fmt, video_codec_ctx_->color_range, video_codec_ctx_->width, video_codec_ctx_->height);
+				AVFrame black_frame = {0};
+				av_image_fill_arrays(black_frame.data, black_frame.linesize, picture_buf_.data(), video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 32);
+				av_image_fill_black(black_frame.data, black_frame.linesize, video_codec_ctx_->pix_fmt, video_codec_ctx_->color_range, video_codec_ctx_->width, video_codec_ctx_->height);
 
 				return st;
 			}
@@ -601,6 +619,8 @@ namespace caspar {
 
 			void encode_video(std::shared_ptr<AVFrame> frame)
 			{
+				if (!video_codec_ctx_)
+					create_output(frame.get());
 				AVPacket pkt = { 0 };
 				av_init_packet(&pkt);
 				int got_packet;
@@ -971,6 +991,7 @@ namespace caspar {
 			auto video_stream_id = params.get(L"VIDEO_STREAM_ID", 0);
 			auto file_tc = params.get(L"IN", L"00:00:00:00");
 			auto file_path_is_complete = boost::filesystem2::path(narrow(filename)).is_complete();
+			auto filter = params.get_original(L"FILTER");
 			auto op = output_params(
 				narrow(file_path_is_complete ? filename : env::media_folder() + filename),
 				narrow(acodec),
@@ -986,7 +1007,8 @@ namespace caspar {
 				narrow_aspect_ratio,
 				arate,
 				vrate,
-				narrow(file_tc));
+				narrow(file_tc),
+				narrow(filter));
 			return make_safe<ffmpeg_consumer_proxy>(op, false, recorder, tc_in, tc_out, static_cast<unsigned int>(tc_out - tc_in));
 		}
 
@@ -1004,6 +1026,7 @@ namespace caspar {
 			auto arate = params.get(L"ARATE", 0);
 			auto vrate = params.get(L"VRATE", 0);
 			auto file_path_is_complete = boost::filesystem2::path(narrow(filename)).is_complete();
+			auto filter = params.get_original(L"FILTER");
 			auto op = output_params(
 				narrow(file_path_is_complete ? filename : env::media_folder() + filename),
 				narrow(acodec),
@@ -1019,7 +1042,8 @@ namespace caspar {
 				narrow_aspect_ratio,
 				arate,
 				vrate,
-				std::string("00:00:00:00"));
+				std::string("00:00:00:00"),
+				narrow(filter));
 			return make_safe<ffmpeg_consumer_proxy>(op, false, recorder, 0, std::numeric_limits<int>().max(), frame_limit);
 		}
 
@@ -1044,6 +1068,8 @@ namespace caspar {
 			auto arate = params.get(L"ARATE", 0);
 			auto vrate = params.get(L"VRATE", 0);
 			auto narrow_aspect_ratio = params.get(L"NARROW", false);
+			auto filter = params.get_original(L"FILTER");
+
 			output_params op(
 				file_path_is_complete ? filename : narrow(env::media_folder()) + filename,
 				narrow(acodec),
@@ -1059,7 +1085,8 @@ namespace caspar {
 				narrow_aspect_ratio,
 				arate,
 				vrate,
-				std::string("00:00:00:00"));
+				std::string("00:00:00:00"),
+				narrow(filter));
 			return make_safe<ffmpeg_consumer_proxy>(op, separate_key);
 		}
 
@@ -1078,6 +1105,8 @@ namespace caspar {
 			auto video_metadata = ptree.get(L"video-metadata", L"");
 			auto audio_stream_id = ptree.get(L"audio_stream_id", 1);
 			auto video_stream_id = ptree.get(L"video_stream_id", 0);
+			auto filter = ptree.get(L"filter", L"");
+
 			output_params op(
 				filename,
 				narrow(acodec),
@@ -1093,7 +1122,8 @@ namespace caspar {
 				ptree.get(L"narrow", false),
 				arate,
 				vrate,
-				std::string("00:00:00:00"));
+				std::string("00:00:00:00"),
+				narrow(filter));
 			return make_safe<ffmpeg_consumer_proxy>(op, separate_key);
 		}
 
