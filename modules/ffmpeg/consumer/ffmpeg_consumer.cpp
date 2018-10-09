@@ -87,6 +87,18 @@ namespace caspar {
 			return result;
 		}
 
+		AVPixelFormat get_pixel_format(AVDictionary ** options)
+		{
+			auto pix_fmt_de = av_dict_get(*options, "pix_fmt", NULL, 0);
+			auto pix_fmt = AV_PIX_FMT_NONE;
+			if (pix_fmt_de)
+			{
+				pix_fmt = av_get_pix_fmt(pix_fmt_de->value);
+				av_dict_set(options, "pix_fmt", NULL, 0);
+			}
+			return pix_fmt;
+		}
+
 		static const std::string			MXF = ".MXF";
 
 		struct output_params
@@ -100,7 +112,6 @@ namespace caspar {
 			const int									audio_stream_id_;
 			const int									video_stream_id_;
 			const std::string							options_;
-			const std::string							pixel_format_;
 			const bool									is_mxf_;
 			const bool									is_narrow_;
 			const bool									is_stream_;
@@ -119,7 +130,6 @@ namespace caspar {
 				const int audio_stream_id,
 				const int video_stream_id,
 				const std::string options,
-				const std::string pixel_format,
 				const bool is_stream,
 				const bool is_narrow, 
 				const int a_rate, 
@@ -134,7 +144,6 @@ namespace caspar {
 				, audio_stream_id_(audio_stream_id)
 				, video_stream_id_(video_stream_id)
 				, options_(std::move(options))
-				, pixel_format_(std::move(pixel_format))
 				, is_narrow_(is_narrow)
 				, is_stream_(is_stream)
 				, is_mxf_(std::equal(MXF.rbegin(), MXF.rend(), boost::to_upper_copy(filename).rbegin()))
@@ -173,6 +182,7 @@ namespace caspar {
 			AVCodecContextPtr						audio_codec_ctx_;
 			AVCodecContextPtr						video_codec_ctx_;
 			std::shared_ptr<filter>					filter_;
+			const AVPixelFormat						out_pixel_format_;
 
 			SwrContextPtr							swr_;
 
@@ -215,21 +225,47 @@ namespace caspar {
 				, is_imx50_pal_(output_params_.is_mxf_ && channel_format_desc.format == core::video_format::pal)
 				, scale_slices_(getScaleSlices(channel_format_desc.height, channel_format_desc.field_mode != caspar::core::field_mode::progressive))
 				, scale_slice_height_(channel_format_desc.height / scale_slices_)
+				, out_pixel_format_(get_pixel_format(&options_))
 			{
 
 				current_encoding_delay_ = 0;
 				out_frame_number_ = 0;
-				if (!params.filter_.empty())
+				
+				if (params.filter_.empty())
+				{
+					AVRational sample_aspect_ratio;
+					switch (channel_format_desc_.format) {
+					case caspar::core::video_format::pal:
+						sample_aspect_ratio = output_params_.is_narrow_ ? av_make_q(16, 15) : av_make_q(64, 45);
+						break;
+					case caspar::core::video_format::ntsc:
+						sample_aspect_ratio = output_params_.is_narrow_ ? av_make_q(8, 9) : av_make_q(32, 27);
+						break;
+					default:
+						sample_aspect_ratio = av_make_q(1, 1);
+						break;
+					}
+
+					create_output(channel_format_desc.width, channel_format_desc.height, channel_format_desc.field_mode != core::field_mode::progressive, out_pixel_format_, av_make_q(channel_format_desc.time_scale, channel_format_desc.duration), sample_aspect_ratio);
+					create_sws();
+				}
+				else
+				{
+					auto pix_fmts = std::vector<AVPixelFormat>();
+					if (out_pixel_format_ != AV_PIX_FMT_NONE)
+						pix_fmts.push_back(out_pixel_format_);
 					filter_.reset(new filter(
 						channel_format_desc.width,
 						channel_format_desc.height,
-						boost::rational<int>(channel_format_desc.time_scale, channel_format_desc.duration),
-						boost::rational<int>(channel_format_desc.duration, channel_format_desc.time_scale),
-						boost::rational<int>(1, 1),
+						av_make_q(channel_format_desc.time_scale, channel_format_desc.duration),
+						av_make_q(channel_format_desc.duration, channel_format_desc.time_scale),
+						av_make_q(1, 1),
 						AV_PIX_FMT_BGRA,
-						std::vector<AVPixelFormat>(),
+						pix_fmts,
 						params.filter_
-						));
+					));
+					//create_output(filter_->out_width(), filter_->out_height(), channel_format_desc.field_mode != core::field_mode::progressive, pix_fmt, filter_->out_frame_rate(), filter_->out_sample_aspect_ratio());
+				}
 								
 				if (boost::filesystem::exists(output_params_.file_name_))
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("File already exists: " + params.file_name_));
@@ -239,7 +275,7 @@ namespace caspar {
 				graph_->set_text(print());
 				diagnostics::register_graph(graph_);
 
-				encode_executor_.set_capacity(16);
+				encode_executor_.set_capacity(4);
 			
 				CASPAR_LOG(info) << print() << L" Successfully Initialized.";
 			}
@@ -269,7 +305,7 @@ namespace caspar {
 				return L"ffmpeg_consumer[" + widen(output_params_.file_name_) + L"]:" + boost::lexical_cast<std::wstring>(out_frame_number_);
 			}
 
-			void create_output(const AVFrame* frame)
+			void create_output(const int width, const int height, const bool is_interlaced, const AVPixelFormat pix_fmt, const AVRational framerate, const AVRational sample_aspect_ratio)
 			{
 				try
 				{
@@ -304,7 +340,8 @@ namespace caspar {
 						? output_params_.is_mxf_ ? avcodec_find_encoder_by_name("pcm_s16le") : avcodec_find_encoder_by_name("aac")
 						: avcodec_find_encoder_by_name(output_params_.audio_codec_.c_str());
 
-					video_stream_ = add_video_stream(video_codec, format, frame);
+
+					video_stream_ = add_video_stream(video_codec, format, width, height, is_interlaced, pix_fmt, framerate, sample_aspect_ratio);
 
 					if (!key_only_)
 						audio_stream_ = add_audio_stream(audio_codec, format);
@@ -334,7 +371,6 @@ namespace caspar {
 							delete(unused_options);
 						av_dict_free(&options_);
 					}
-					create_sws();
 				}
 				catch (...)
 				{
@@ -364,7 +400,7 @@ namespace caspar {
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Cannot initialize the conversion context"));
 			}
 
-			AVStream* add_video_stream(const AVCodec * encoder, const AVOutputFormat * format, const AVFrame * frame)
+			AVStream* add_video_stream(const AVCodec * encoder, const AVOutputFormat * format, const int width, const int height, const bool is_interlaced, const AVPixelFormat pix_fmt, const AVRational framerate, const AVRational sample_aspect_ratio)
 			{
 
 				if (!encoder)
@@ -375,14 +411,12 @@ namespace caspar {
 				video_codec_ctx_->refcounted_frames = 0;
 				video_codec_ctx_->codec_id = encoder->id;
 				video_codec_ctx_->codec_type = AVMEDIA_TYPE_VIDEO;
-				video_codec_ctx_->width = frame->width;
-				video_codec_ctx_->height = frame->height;
-				video_codec_ctx_->time_base = av_make_q(channel_format_desc_.duration, channel_format_desc_.time_scale);
-				video_codec_ctx_->framerate = av_inv_q(video_codec_ctx_->time_base);
-				if (frame->interlaced_frame)
+				video_codec_ctx_->width = width;
+				video_codec_ctx_->height = height;
+				video_codec_ctx_->time_base = av_inv_q(framerate);
+				video_codec_ctx_->framerate = framerate;
+				if (is_interlaced)
 					video_codec_ctx_->flags |= (AV_CODEC_FLAG_INTERLACED_ME | AV_CODEC_FLAG_INTERLACED_DCT);
-
-				video_codec_ctx_->pix_fmt = static_cast<AVPixelFormat>(frame->format);
 
 				if (video_codec_ctx_->codec_id == AV_CODEC_ID_PRORES)
 				{
@@ -444,27 +478,16 @@ namespace caspar {
 
 				if (output_params_.video_bitrate_ != 0)
 					video_codec_ctx_->bit_rate = output_params_.video_bitrate_ * 1000;
-				if (!output_params_.pixel_format_.empty())
-					video_codec_ctx_->pix_fmt = av_get_pix_fmt(output_params_.pixel_format_.c_str());
 
 				video_codec_ctx_->max_b_frames = 0; // b-frames not supported.
-
-				AVRational sample_aspect_ratio;
-				switch (channel_format_desc_.format) {
-				case caspar::core::video_format::pal:
-					sample_aspect_ratio = output_params_.is_narrow_ ? av_make_q(16, 15) : av_make_q(64, 45);
-					break;
-				case caspar::core::video_format::ntsc:
-					sample_aspect_ratio = output_params_.is_narrow_ ? av_make_q(8, 9) : av_make_q(32, 27);
-					break;
-				default:
-					sample_aspect_ratio = av_make_q(1, 1);
-					break;
-				}
 				
+								
 				if (format->flags & AVFMT_GLOBALHEADER)
 					video_codec_ctx_->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 				video_codec_ctx_->sample_aspect_ratio = sample_aspect_ratio;
+
+				if (video_codec_ctx_->pix_fmt == AV_PIX_FMT_NONE)
+					video_codec_ctx_->pix_fmt = pix_fmt == AV_PIX_FMT_NONE ? AV_PIX_FMT_YUV420P : pix_fmt;
 
 				if (tbb_avcodec_open(video_codec_ctx_.get(), encoder, &options_, true) < 0)
 				{
@@ -546,9 +569,8 @@ namespace caspar {
 				return st;
 			}
 
-			std::shared_ptr<AVFrame> convert_video(core::read_frame& frame)
+			std::shared_ptr<AVFrame> fast_convert_video(core::read_frame& frame)
 			{
-
 				AVFrame in_frame;
 				if (key_only_)
 				{
@@ -564,7 +586,7 @@ namespace caspar {
 
 				std::shared_ptr<AVFrame> out_frame(av_frame_alloc(), [](AVFrame* frame) { av_frame_free(&frame); });
 
-				av_image_fill_arrays(out_frame->data, out_frame->linesize, picture_buf_.data(), video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 32);
+				av_image_fill_arrays(out_frame->data, out_frame->linesize, picture_buf_.data(), video_codec_ctx_->pix_fmt, channel_format_desc_.width, channel_format_desc_.height, 32);
 
 				tbb::parallel_for(0u, scale_slices_, [&](const size_t& sws_index) 
 				{
@@ -608,8 +630,8 @@ namespace caspar {
 						sws_scale(sws_.at(sws_index).get(), in_data_lower, in_stride, 0, scale_slice_height_  / 2, out_data_lower, out_stride);
 					}
 				});
-				out_frame->height = video_codec_ctx_->height;
-				out_frame->width = video_codec_ctx_->width;
+				out_frame->height = channel_format_desc_.height;
+				out_frame->width = channel_format_desc_.width;
 				out_frame->format = video_codec_ctx_->pix_fmt;
 				out_frame->interlaced_frame = channel_format_desc_.field_mode != core::field_mode::progressive;
 				out_frame->top_field_first = channel_format_desc_.field_mode == core::field_mode::upper;
@@ -617,10 +639,31 @@ namespace caspar {
 				return out_frame;
 			}
 
+			void send_frame_to_filter(core::read_frame& frame)
+			{
+				std::shared_ptr<AVFrame> in_frame(av_frame_alloc(), [](AVFrame* frame) { av_frame_free(&frame); });
+				in_frame->width = channel_format_desc_.width;
+				in_frame->height = channel_format_desc_.height;
+				in_frame->format = AV_PIX_FMT_BGRA;
+				in_frame->interlaced_frame = channel_format_desc_.field_mode != core::field_mode::progressive;
+				in_frame->top_field_first = channel_format_desc_.field_mode == core::field_mode::upper;
+				in_frame->pts = out_frame_number_++;
+				if (key_only_)
+				{
+					key_picture_buf_.resize(frame.image_data().size());
+					in_frame->linesize[0] = channel_format_desc_.width * 4; //AV_PIX_FMT_BGRA
+					in_frame->data[0] = key_picture_buf_.data();
+					fast_memshfl(in_frame->data[0], frame.image_data().begin(), frame.image_data().size(), 0x0F0F0F0F, 0x0B0B0B0B, 0x07070707, 0x03030303);
+				}
+				else
+				{
+					av_image_fill_arrays(in_frame->data, in_frame->linesize, const_cast<uint8_t*>(frame.image_data().begin()), AV_PIX_FMT_BGRA, channel_format_desc_.width, channel_format_desc_.height, 32);
+				}
+				filter_->push(in_frame);
+			}
+
 			void encode_video(std::shared_ptr<AVFrame> frame)
 			{
-				if (!video_codec_ctx_)
-					create_output(frame.get());
 				AVPacket pkt = { 0 };
 				av_init_packet(&pkt);
 				int got_packet;
@@ -630,26 +673,26 @@ namespace caspar {
 				av_packet_rescale_ts(&pkt, video_codec_ctx_->time_base, video_stream_->time_base);
 				pkt.stream_index = video_stream_->index;
 				THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), &pkt), "[video_encoder]");
-
 			}
 
 			void process_video_frame(core::read_frame& frame)
 			{
-				auto av_frame = convert_video(frame);
-				if (filter_)
+				if (filter_) //filtered path (slow one)
 				{
-					filter_->push(av_frame);
-					auto converted = filter_->poll();
-					if (converted)
+					send_frame_to_filter(frame);
+					std::shared_ptr<AVFrame> converted = filter_->poll();
+					while (converted)
 					{
-						converted->pict_type = av_frame->pict_type;
-						converted->pts = av_frame->pts;
-						converted->interlaced_frame = false;
+						converted->pts = out_frame_number_++;
+						converted->format = filter_->out_pixel_format();
+						converted->sample_aspect_ratio = filter_->out_sample_aspect_ratio();
 						encode_video(converted);
-					}
+						converted = filter_->poll();
+					};
 				}
-				else
+				else // fast, multithreaded conversion
 				{
+					auto av_frame = fast_convert_video(frame);
 					encode_video(av_frame);
 				}
 			}
@@ -801,7 +844,6 @@ namespace caspar {
 				} 
 			}
 
-
 			bool flush_stream(bool video)
 			{
 				std::shared_ptr<AVPacket> pkt(av_packet_alloc(), [](AVPacket *p) { av_packet_free(&p); });
@@ -829,6 +871,11 @@ namespace caspar {
 				pkt->stream_index = stream->index;
 				THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), pkt.get()), "[flush_stream]");
 				return false;
+			}
+
+			size_t buffer_depth() const
+			{
+				return encode_executor_.capacity();
 			}
 
 		};
@@ -961,7 +1008,7 @@ namespace caspar {
 
 			virtual size_t buffer_depth() const override
 			{
-				return 1;
+				return consumer_ ? consumer_->buffer_depth() : 1;
 			}
 
 			virtual int index() const override
@@ -984,7 +1031,6 @@ namespace caspar {
 			auto output_metadata = params.get_original(L"OUTPUT_METADATA");
 			auto audio_metadata = params.get_original(L"AUDIO_METADATA");
 			auto video_metadata = params.get_original(L"VIDEO_METADATA");
-			auto pixel_format = params.get_original(L"PIXEL_FORMAT");
 			auto arate = params.get(L"ARATE", 0);
 			auto vrate = params.get(L"VRATE", 0);
 			auto audio_stream_id = params.get(L"AUDIO_STREAM_ID", 1);
@@ -1002,7 +1048,6 @@ namespace caspar {
 				audio_stream_id,
 				video_stream_id,
 				narrow(options),
-				narrow(pixel_format),
 				false,
 				narrow_aspect_ratio,
 				arate,
@@ -1022,7 +1067,6 @@ namespace caspar {
 			auto video_metadata = params.get_original(L"VIDEO_METADATA");
 			auto audio_stream_id = params.get(L"AUDIO_STREAM_ID", 1);
 			auto video_stream_id = params.get(L"VIDEO_STREAM_ID", 0);
-			auto pixel_format = params.get_original(L"PIXEL_FORMAT");
 			auto arate = params.get(L"ARATE", 0);
 			auto vrate = params.get(L"VRATE", 0);
 			auto file_path_is_complete = boost::filesystem2::path(narrow(filename)).is_complete();
@@ -1037,7 +1081,6 @@ namespace caspar {
 				audio_stream_id,
 				video_stream_id,
 				narrow(options),
-				narrow(pixel_format),
 				false,
 				narrow_aspect_ratio,
 				arate,
@@ -1064,7 +1107,6 @@ namespace caspar {
 			auto video_metadata = params.get_original(L"VIDEO_METADATA");
 			auto audio_stream_id = params.get(L"AUDIO_STREAM_ID", 1);
 			auto video_stream_id = params.get(L"VIDEO_STREAM_ID", 0);
-			auto pixel_format = params.get_original(L"PIXEL_FORMAT");
 			auto arate = params.get(L"ARATE", 0);
 			auto vrate = params.get(L"VRATE", 0);
 			auto narrow_aspect_ratio = params.get(L"NARROW", false);
@@ -1080,7 +1122,6 @@ namespace caspar {
 				audio_stream_id,
 				video_stream_id,
 				narrow(options),
-				narrow(pixel_format),
 				is_stream,
 				narrow_aspect_ratio,
 				arate,
@@ -1099,7 +1140,6 @@ namespace caspar {
 			auto vrate = ptree.get(L"vrate", 0);
 			auto arate = ptree.get(L"arate", 0);
 			auto options = ptree.get(L"options", L"");
-			auto pixel_format = ptree.get(L"pixel-format", L"");
 			auto output_metadata = ptree.get(L"output-metadata", L"");
 			auto audio_metadata = ptree.get(L"audio-metadata", L"");
 			auto video_metadata = ptree.get(L"video-metadata", L"");
@@ -1117,7 +1157,6 @@ namespace caspar {
 				audio_stream_id,
 				video_stream_id,
 				narrow(options),
-				narrow(pixel_format),
 				true,
 				ptree.get(L"narrow", false),
 				arate,

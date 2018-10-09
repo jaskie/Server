@@ -25,12 +25,12 @@
 
 #include <boost/noncopyable.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
-#include <boost/rational.hpp>
 
 #include <string>
 #include <vector>
 
 struct AVFrame;
+struct AVRational;
 enum AVPixelFormat;
 
 namespace caspar { namespace ffmpeg {
@@ -46,9 +46,9 @@ public:
 	filter(
 		int in_width,
 		int in_height,
-		boost::rational<int> in_time_base,
-		boost::rational<int> in_frame_rate,
-		boost::rational<int> in_sample_aspect_ratio,
+		AVRational in_time_base,
+		AVRational in_frame_rate,
+		AVRational in_sample_aspect_ratio,
 		AVPixelFormat in_pix_fmt,
 		std::vector<AVPixelFormat> out_pix_fmts,
 		const std::string& filtergraph);
@@ -60,6 +60,12 @@ public:
 	std::vector<safe_ptr<AVFrame>> poll_all();
 	void clear();
 	bool is_frame_format_changed(const std::shared_ptr<AVFrame>& frame);
+	int out_width();
+	int out_height();
+	AVPixelFormat out_pixel_format();
+	AVRational out_frame_rate();
+	AVRational out_time_base();
+	AVRational out_sample_aspect_ratio();
 
 	std::string filter_str() const;
 			

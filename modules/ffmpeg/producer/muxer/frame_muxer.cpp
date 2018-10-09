@@ -356,9 +356,9 @@ struct frame_muxer::implementation : boost::noncopyable
 		filter_.reset (new filter(
 			frame->width,
 			frame->height,
-			boost::rational<int>(in_fps_.denominator(), in_fps_.numerator()),
-			in_fps_,
-			boost::rational<int>(frame->sample_aspect_ratio.num, frame->sample_aspect_ratio.den),
+			av_make_q(in_fps_.denominator(), in_fps_.numerator()),
+			av_make_q(in_fps_.numerator(), in_fps_.denominator()),
+			frame->sample_aspect_ratio,
 			static_cast<AVPixelFormat>(frame->format),
 			out_pix_fmts,
 			filter_str));

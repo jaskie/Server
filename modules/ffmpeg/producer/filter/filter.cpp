@@ -37,7 +37,6 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/foreach.hpp>
 #include <boost/format.hpp>
-#include <boost/rational.hpp>
 
 #include <cstdio>
 #include <sstream>
@@ -73,37 +72,37 @@ struct filter::implementation
 	std::shared_ptr<AVFilterGraph>	video_graph_;	
     AVFilterContext*				video_graph_in_;
     AVFilterContext*				video_graph_out_;
-	std::vector<AVPixelFormat>		pix_fmts_;
-	const AVPixelFormat				pix_format_;
-	const int						width_;
-	const int						height_;
-	const boost::rational<int>		in_time_base_;
-	const boost::rational<int>		in_frame_rate_;
-	const boost::rational<int>		in_sample_aspect_ratio_;
+	std::vector<AVPixelFormat>		out_pix_fmts_;
+	const AVPixelFormat				in_pix_format_;
+	const int						in_width_;
+	const int						in_height_;
+	const AVRational		in_time_base_;
+	const AVRational		in_frame_rate_;
+	const AVRational		in_sample_aspect_ratio_;
 	std::queue<std::shared_ptr<AVFrame>>	fast_path_;
 
 	implementation(
 		int in_width,
 		int in_height,
-		boost::rational<int> in_time_base,
-		boost::rational<int> in_frame_rate,
-		boost::rational<int> in_sample_aspect_ratio,
+		AVRational in_time_base,
+		AVRational in_frame_rate,
+		AVRational in_sample_aspect_ratio,
 		AVPixelFormat in_pix_fmt,
 		std::vector<AVPixelFormat> out_pix_fmts,
 		const std::string& filtergraph
 		) 
 		: filtergraph_(boost::to_lower_copy(filtergraph))
-		, pix_format_(in_pix_fmt)
-		, width_(in_width)
-		, height_(in_height)
+		, in_pix_format_(in_pix_fmt)
+		, in_width_(in_width)
+		, in_height_(in_height)
 		, in_time_base_(in_time_base)
 		, in_frame_rate_(in_frame_rate)
 		, in_sample_aspect_ratio_(in_sample_aspect_ratio)
-		, pix_fmts_(out_pix_fmts)
+		, out_pix_fmts_(out_pix_fmts)
 	{
-		if(pix_fmts_.empty())
+		if(out_pix_fmts_.empty())
 		{
-			pix_fmts_ = boost::assign::list_of
+			out_pix_fmts_ = boost::assign::list_of
 				(AV_PIX_FMT_YUVA420P)
 				(AV_PIX_FMT_YUV444P)
 				(AV_PIX_FMT_YUV422P)
@@ -115,7 +114,7 @@ struct filter::implementation
 				(AV_PIX_FMT_ABGR)
 				(AV_PIX_FMT_GRAY8);
 		}		
-		pix_fmts_.push_back(AV_PIX_FMT_NONE);
+		out_pix_fmts_.push_back(AV_PIX_FMT_NONE);
 
 		configure_filtergraph();
 	}
@@ -137,11 +136,11 @@ struct filter::implementation
 		video_graph_->thread_type = AVFILTER_THREAD_SLICE;
 				
 		const auto vsrc_options = (boost::format("video_size=%1%x%2%:pix_fmt=%3%:time_base=%4%/%5%:pixel_aspect=%6%/%7%:frame_rate=%8%/%9%")
-			% width_ % height_
-			% pix_format_
-			% in_time_base_.numerator() % in_time_base_.denominator()
-			% in_sample_aspect_ratio_.numerator() % in_sample_aspect_ratio_.denominator()
-			% in_frame_rate_.numerator() % in_frame_rate_.denominator()).str();
+			% in_width_ % in_height_
+			% in_pix_format_
+			% in_time_base_.num % in_time_base_.den
+			% in_sample_aspect_ratio_.num % in_sample_aspect_ratio_.den
+			% in_frame_rate_.num % in_frame_rate_.den).str();
 
 		AVFilterContext* filt_vsrc = nullptr;			
 		FF(avfilter_graph_create_filter(
@@ -167,7 +166,7 @@ struct filter::implementation
 		FF(av_opt_set_int_list(
 			filt_vsink, 
 			"pix_fmts", 
-			pix_fmts_.data(), 
+			out_pix_fmts_.data(), 
 			-1,
 			AV_OPT_SEARCH_CHILDREN));
 
@@ -296,17 +295,47 @@ struct filter::implementation
 
 	bool is_frame_format_changed(const std::shared_ptr<AVFrame>& frame)
 	{
-		return pix_format_ != frame->format || width_ != frame->width || height_ != frame->height;
+		return in_pix_format_ != frame->format || in_width_ != frame->width || in_height_ != frame->height;
 	}
 
+	int out_width()
+	{
+		return fast_path() ? in_width_ : av_buffersink_get_w(video_graph_out_);
+	}
+
+	int out_height()
+	{
+		return fast_path() ? in_height_ : av_buffersink_get_h(video_graph_out_);
+	}
+
+	AVPixelFormat out_pixel_format()
+	{
+		return fast_path() ? in_pix_format_ : static_cast<AVPixelFormat>(av_buffersink_get_format(video_graph_out_));
+	}
+
+	AVRational out_frame_rate()
+	{
+		return fast_path() ? in_frame_rate_ : av_buffersink_get_frame_rate(video_graph_out_);
+	}
+
+	AVRational out_time_base()
+	{
+		return fast_path() ? in_time_base_ : av_buffersink_get_time_base(video_graph_out_);
+	}
+
+	AVRational out_sample_aspect_ratio()
+	{
+		return fast_path() ? in_sample_aspect_ratio_ : av_buffersink_get_sample_aspect_ratio(video_graph_out_);
+	}
+	
 };
 
 filter::filter(
 		int in_width,
 		int in_height,
-		boost::rational<int> in_time_base,
-		boost::rational<int> in_frame_rate,
-		boost::rational<int> in_sample_aspect_ratio,
+		AVRational in_time_base,
+		AVRational in_frame_rate,
+		AVRational in_sample_aspect_ratio,
 		AVPixelFormat in_pix_fmt,
 		std::vector<AVPixelFormat> out_pix_fmts,
 		const std::string& filtergraph) 
@@ -333,5 +362,10 @@ std::vector<safe_ptr<AVFrame>> filter::poll_all()
 }
 void filter::clear() { impl_->clear(); }
 bool filter::is_frame_format_changed(const std::shared_ptr<AVFrame>& frame) { return impl_->is_frame_format_changed(frame);}
-
+int filter::out_width() { return impl_->out_width(); }
+int filter::out_height() { return impl_->out_height(); }
+AVPixelFormat filter::out_pixel_format() { return impl_->out_pixel_format(); }
+AVRational filter::out_frame_rate() { return impl_->out_frame_rate(); }
+AVRational filter::out_time_base() { return impl_->out_time_base(); }
+AVRational filter::out_sample_aspect_ratio() { return impl_->out_sample_aspect_ratio(); }
 }}
