@@ -416,6 +416,7 @@ namespace caspar {
 				video_codec_ctx_->width = width;
 				video_codec_ctx_->height = height;
 				video_codec_ctx_->time_base = time_base;
+
 				if (!video_filter_ && channel_format_desc_.field_mode != core::field_mode::progressive)
 					video_codec_ctx_->flags |= (AV_CODEC_FLAG_INTERLACED_ME | AV_CODEC_FLAG_INTERLACED_DCT);
 
@@ -451,7 +452,7 @@ namespace caspar {
 				else if (video_codec_ctx_->codec_id == AV_CODEC_ID_H264)
 				{
 					video_codec_ctx_->bit_rate = (video_filter_ ? video_filter_->out_height() : channel_format_desc_.height) * 14 * 1000; // about 8Mbps for SD, 14 for HD
-					if (strcmp(encoder->name, "libx264") == 0)
+					if (strcmp(encoder->name, "libx264") == 0 && !av_dict_get(options_, "preset", NULL, 0))
 						LOG_ON_ERROR2(av_opt_set(video_codec_ctx_->priv_data, "preset", "veryfast", NULL), "[ffmpeg_consumer]");
 				}
 				else if (video_codec_ctx_->codec_id == AV_CODEC_ID_QTRLE)
@@ -568,7 +569,7 @@ namespace caspar {
 
 			std::shared_ptr<AVFrame> fast_convert_video(core::read_frame& frame)
 			{
-				AVFrame in_frame;
+				AVFrame in_frame = { 0 };
 				if (key_only_)
 				{
 					key_picture_buf_.resize(frame.image_data().size());
