@@ -135,12 +135,11 @@ struct filter::implementation
 		video_graph_->nb_threads  = 0;
 		video_graph_->thread_type = AVFILTER_THREAD_SLICE;
 				
-		const auto vsrc_options = (boost::format("video_size=%1%x%2%:pix_fmt=%3%:time_base=%4%/%5%:pixel_aspect=%6%/%7%:frame_rate=%8%/%9%")
+		const auto vsrc_options = (boost::format("video_size=%1%x%2%:pix_fmt=%3%:time_base=%4%/%5%:pixel_aspect=%6%/%7%")
 			% in_width_ % in_height_
 			% in_pix_format_
 			% in_time_base_.num % in_time_base_.den
-			% in_sample_aspect_ratio_.num % in_sample_aspect_ratio_.den
-			% in_frame_rate_.num % in_frame_rate_.den).str();
+			% in_sample_aspect_ratio_.num % in_sample_aspect_ratio_.den).str();
 
 		AVFilterContext* filt_vsrc = nullptr;			
 		FF(avfilter_graph_create_filter(
