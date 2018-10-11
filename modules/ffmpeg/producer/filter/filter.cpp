@@ -132,8 +132,6 @@ struct filter::implementation
 			{
 				avfilter_graph_free(&p);
 			});
-		video_graph_->nb_threads  = 0;
-		video_graph_->thread_type = AVFILTER_THREAD_SLICE;
 				
 		const auto vsrc_options = (boost::format("video_size=%1%x%2%:pix_fmt=%3%:time_base=%4%/%5%:pixel_aspect=%6%/%7%")
 			% in_width_ % in_height_
