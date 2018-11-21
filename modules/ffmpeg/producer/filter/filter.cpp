@@ -312,7 +312,12 @@ struct filter::implementation
 
 	AVRational out_frame_rate()
 	{
-		return fast_path() ? in_frame_rate_ : av_buffersink_get_frame_rate(video_graph_out_);
+		if (fast_path())
+			return in_frame_rate_;
+		AVRational frame_rate = av_buffersink_get_frame_rate(video_graph_out_);
+		if (frame_rate.num != 0)
+			return frame_rate;
+		return av_inv_q(out_time_base());
 	}
 
 	AVRational out_time_base()

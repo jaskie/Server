@@ -76,12 +76,13 @@ namespace caspar {
 			return result.checksum();
 		}
 
-		int get_scale_slice_count(int height, bool interlaced)
+		int get_scale_slice_count(const core::video_format_desc& format)
 		{
+			bool interlaced = format.field_mode != caspar::core::field_mode::progressive;
 			int result = 1;
-			int max = height <= 575 ? 2 : 16;
+			int max = format.height <= 576 ? 2 : 16;
 			while (result < max
-				&& height  % (result * (interlaced  ? 4 : 2)) == 0)
+				&& format.height  % (result * (interlaced  ? 4 : 2)) == 0)
 				result *= 2;
 			return result;
 		}
@@ -196,6 +197,7 @@ namespace caspar {
 			AVDictionary *							options_;
 			const output_params						output_params_;
 			const core::video_format_desc			channel_format_desc_;
+			const int								height_;
 			const AVRational						channel_sample_aspect_ratio_;
 
 			const safe_ptr<diagnostics::graph>		graph_;
@@ -247,14 +249,18 @@ namespace caspar {
 				, audio_stream_(nullptr)
 				, video_stream_(nullptr)
 				, is_imx50_pal_(output_params_.is_mxf_ && channel_format_desc.format == core::video_format::pal)
-				, scale_slices_(get_scale_slice_count(channel_format_desc.height, channel_format_desc.field_mode != caspar::core::field_mode::progressive))
-				, scale_slice_height_(channel_format_desc.height / scale_slices_)
+				, scale_slices_(get_scale_slice_count(channel_format_desc_))
+				, height_(channel_format_desc.format == core::video_format::ntsc ? 480 : channel_format_desc.height)
+				, scale_slice_height_(height_ / scale_slices_)
 				, out_pixel_format_(get_pixel_format(&options_))
 				, channel_sample_aspect_ratio_(get_channel_sample_aspect_ratio(channel_format_desc.format, params.is_narrow_))
 			{
 
 				current_encoding_delay_ = 0;
 				out_frame_number_ = 0;
+
+				if (boost::filesystem::exists(output_params_.file_name_))
+					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("File already exists: " + params.file_name_));
 
 				AVCodec * video_codec = NULL;
 				AVCodec * audio_codec = NULL;
@@ -267,7 +273,7 @@ namespace caspar {
 								
 				if (params.filter_.empty())
 				{
-					create_output(video_codec, audio_codec, channel_format_desc.width, channel_format_desc.height, out_pixel_format_, av_make_q(channel_format_desc.duration, channel_format_desc.time_scale), channel_sample_aspect_ratio_);
+					create_output(video_codec, audio_codec, channel_format_desc.width, channel_format_desc.height, out_pixel_format_, av_make_q(channel_format_desc.time_scale, channel_format_desc.duration), av_make_q(channel_format_desc.duration, channel_format_desc.time_scale), channel_sample_aspect_ratio_);
 					create_sws();
 				}
 				else
@@ -284,12 +290,9 @@ namespace caspar {
 						pix_fmts,
 						params.filter_
 					));
-					create_output(video_codec, audio_codec, video_filter_->out_width(), video_filter_->out_height(), video_filter_->out_pixel_format(), video_filter_->out_time_base(), video_filter_->out_sample_aspect_ratio());
+					create_output(video_codec, audio_codec, video_filter_->out_width(), video_filter_->out_height(), video_filter_->out_pixel_format(), video_filter_->out_frame_rate(), video_filter_->out_time_base(), video_filter_->out_sample_aspect_ratio());
 				}
 								
-				if (boost::filesystem::exists(output_params_.file_name_))
-					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("File already exists: " + params.file_name_));
-
 				graph_->set_color("frame-time", diagnostics::color(0.1f, 1.0f, 0.1f));
 				graph_->set_color("dropped-frame", diagnostics::color(1.0f, 0.1f, 0.1f));
 				graph_->set_text(print());
@@ -325,7 +328,7 @@ namespace caspar {
 				return L"ffmpeg_consumer[" + widen(output_params_.file_name_) + L"]:" + boost::lexical_cast<std::wstring>(out_frame_number_);
 			}
 
-			void create_output(const AVCodec* video_codec, const AVCodec * audio_codec, const int width, const int height, const AVPixelFormat pix_fmt, const AVRational time_base, const AVRational sample_aspect_ratio)
+			void create_output(const AVCodec* video_codec, const AVCodec * audio_codec, const int width, const int height, const AVPixelFormat pix_fmt, const AVRational frame_rate, const AVRational time_base, const AVRational sample_aspect_ratio)
 			{
 				try
 				{
@@ -351,12 +354,12 @@ namespace caspar {
 						avformat_free_context(ctx);
 					});
 
-					add_video_stream(video_codec, format, width, height, pix_fmt, time_base, sample_aspect_ratio);
+					add_video_stream(video_codec, format, width, height, pix_fmt, frame_rate, time_base, sample_aspect_ratio);
 
 					if (!key_only_)
 						add_audio_stream(audio_codec, format);
 
-					LOG_ON_ERROR2(av_dict_set(&video_stream_->metadata, "timecode", output_params_.file_timecode_.c_str(), AV_DICT_DONT_OVERWRITE), "[ffmpeg_consumer]");
+					LOG_ON_ERROR2(av_dict_set(&video_stream_->metadata, "timecode", output_params_.file_timecode_.c_str(), NULL), "[ffmpeg_consumer]");
 
 					// Open the output
 					format_context_->metadata = read_parameters(output_params_.output_metadata_);
@@ -383,6 +386,7 @@ namespace caspar {
 				}
 				catch (...)
 				{
+					format_context_.reset();
 					boost::filesystem2::remove(output_params_.file_name_); // Delete the file if exists and consumer not fully initialized
 					throw;
 				}
@@ -409,7 +413,7 @@ namespace caspar {
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Cannot initialize the conversion context"));
 			}
 
-			void add_video_stream(const AVCodec * encoder, const AVOutputFormat * format, const int width, const int height, const AVPixelFormat pix_fmt, const AVRational time_base, const AVRational sample_aspect_ratio)
+			void add_video_stream(const AVCodec * encoder, const AVOutputFormat * format, const int width, const int height, const AVPixelFormat pix_fmt, const AVRational frame_rate, const AVRational time_base, const AVRational sample_aspect_ratio)
 			{
 
 				if (!encoder)
@@ -423,6 +427,10 @@ namespace caspar {
 				video_codec_ctx_->width = width;
 				video_codec_ctx_->height = height;
 				video_codec_ctx_->time_base = time_base;
+				video_codec_ctx_->framerate = frame_rate;
+
+				if (channel_format_desc_.format == core::video_format::ntsc && height == 486)
+					video_codec_ctx_->height = 480;
 
 				if (!video_filter_ && channel_format_desc_.field_mode != core::field_mode::progressive)
 					video_codec_ctx_->flags |= (AV_CODEC_FLAG_INTERLACED_ME | AV_CODEC_FLAG_INTERLACED_DCT);
@@ -458,7 +466,7 @@ namespace caspar {
 				}
 				else if (video_codec_ctx_->codec_id == AV_CODEC_ID_H264)
 				{
-					video_codec_ctx_->bit_rate = (video_filter_ ? video_filter_->out_height() : channel_format_desc_.height) * 14 * 1000; // about 8Mbps for SD, 14 for HD
+					video_codec_ctx_->bit_rate = (video_filter_ ? video_filter_->out_height() : height_) * 14 * 1000; // about 8Mbps for SD, 14 for HD
 					LOG_ON_ERROR2(av_dict_set(&options_, "preset", "veryfast", AV_DICT_DONT_OVERWRITE), "[ffmpeg_consumer]");
 				}
 				else if (video_codec_ctx_->codec_id == AV_CODEC_ID_QTRLE)
@@ -476,11 +484,16 @@ namespace caspar {
 							// IMX50 encoding parameters
 							video_codec_ctx_->bit_rate = 50 * 1000000;
 							video_codec_ctx_->height = 608;
-							video_codec_ctx_->rc_max_rate = video_codec_ctx_->bit_rate;
+							video_codec_ctx_->codec_tag = strtol("mx5p", NULL, 0);
 							video_codec_ctx_->rc_min_rate = video_codec_ctx_->bit_rate;
+							video_codec_ctx_->rc_max_rate = video_codec_ctx_->bit_rate;
 							video_codec_ctx_->rc_buffer_size = 2000000;
 							video_codec_ctx_->rc_initial_buffer_occupancy = 2000000;
 							video_codec_ctx_->gop_size = 1;
+							video_codec_ctx_->field_order = AV_FIELD_TT;
+							video_codec_ctx_->qmin = 1;
+							video_codec_ctx_->qmax = 3;
+							video_codec_ctx_->flags |= (AV_CODEC_FLAG_INTERLACED_DCT | AV_CODEC_FLAG_LOW_DELAY);
 						}
 					}
 				}
@@ -509,10 +522,12 @@ namespace caspar {
 				video_stream_->metadata = read_parameters(output_params_.video_metadata_);
 				video_stream_->id = output_params_.video_stream_id_;
 				video_stream_->sample_aspect_ratio = sample_aspect_ratio;
-				
-				picture_buf_.resize(av_image_get_buffer_size(video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 32));
+				video_stream_->time_base = time_base;
+				video_stream_->avg_frame_rate = frame_rate;
+
+				picture_buf_.resize(av_image_get_buffer_size(video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 16));
 				AVFrame black_frame = {0};
-				av_image_fill_arrays(black_frame.data, black_frame.linesize, picture_buf_.data(), video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 32);
+				av_image_fill_arrays(black_frame.data, black_frame.linesize, picture_buf_.data(), video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 16);
 				av_image_fill_black(black_frame.data, black_frame.linesize, video_codec_ctx_->pix_fmt, video_codec_ctx_->color_range, video_codec_ctx_->width, video_codec_ctx_->height);
 			}
 
@@ -581,12 +596,12 @@ namespace caspar {
 				}
 				else
 				{
-					av_image_fill_arrays(in_frame.data, in_frame.linesize, const_cast<uint8_t*>(frame.image_data().begin()), AV_PIX_FMT_BGRA, channel_format_desc_.width, channel_format_desc_.height, 32);
+					av_image_fill_arrays(in_frame.data, in_frame.linesize, const_cast<uint8_t*>(frame.image_data().begin()), AV_PIX_FMT_BGRA, channel_format_desc_.width, channel_format_desc_.height, 16);
 				}
 
 				std::shared_ptr<AVFrame> out_frame(av_frame_alloc(), [](AVFrame* frame) { av_frame_free(&frame); });
 
-				av_image_fill_arrays(out_frame->data, out_frame->linesize, picture_buf_.data(), video_codec_ctx_->pix_fmt, channel_format_desc_.width, channel_format_desc_.height, 32);
+				av_image_fill_arrays(out_frame->data, out_frame->linesize, picture_buf_.data(), video_codec_ctx_->pix_fmt, video_codec_ctx_->width, video_codec_ctx_->height, 16);
 
 				tbb::parallel_for(0u, scale_slices_, [&](const size_t& sws_index) 
 				{
@@ -599,7 +614,7 @@ namespace caspar {
 							auto in_offset = sws_index * scale_slice_height_ * in_frame.linesize[i];
 							in_data[i] = in_frame.data[i] == NULL ? NULL : in_frame.data[i] + in_offset;
 							auto out_offset = sws_index * scale_slice_height_  * out_frame->linesize[i] / ((i > 0 && out_frame->linesize[i] != 0 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P) ? 2 : 1);
-							auto strange_adjustmenst = (i > 0 && scale_slices_ % 8 == 0 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P && channel_format_desc_.height % 1080 == 0 && (sws_index % 2 != 0) ? out_frame->linesize[i] / 2 : 0);
+							auto strange_adjustmenst = (i > 0 && scale_slices_ % 8 == 0 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P && height_ % 1080 == 0 && (sws_index % 2 != 0) ? out_frame->linesize[i] / 2 : 0);
 							out_data[i] = out_frame->data[i] == NULL ? NULL : out_frame->data[i] + out_offset + strange_adjustmenst;
 						}
 						sws_scale(sws_.at(sws_index).get(), in_data, in_frame.linesize, 0, scale_slice_height_  , out_data, out_frame->linesize);
@@ -620,7 +635,7 @@ namespace caspar {
 							in_data_lower[i] = in_frame.data[i] == NULL ? NULL : in_frame.data[i] + in_offset_lower;
 							auto out_offset_upper = (sws_index * scale_slice_height_  * out_frame->linesize[i] / ((i > 0 && out_frame->linesize[i] != 0 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P) ? 2 : 1)) + (is_imx50_pal_ ? 32 * out_frame->linesize[i] : 0);
 							auto out_offset_lower = out_offset_upper + out_frame->linesize[i];
-							auto strange_adjustmenst = (i > 0 && scale_slices_ % 8 == 0 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P && channel_format_desc_.height % 1080 == 0 && (sws_index % 2 != 0) ? out_frame->linesize[i] / 2 : 0);
+							auto strange_adjustmenst = (i > 0 && scale_slices_ % 8 == 0 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P && height_ % 1080 == 0 && (sws_index % 2 != 0) ? out_frame->linesize[i] / 2 : 0);
 							out_data_upper[i] = out_frame->data[i] == NULL ? NULL : out_frame->data[i] + out_offset_upper + strange_adjustmenst;
 							out_data_lower[i] = out_frame->data[i] == NULL ? NULL : out_frame->data[i] + out_offset_lower + strange_adjustmenst;
 							in_stride[i] = in_frame.linesize[i] * 2;
@@ -630,8 +645,8 @@ namespace caspar {
 						sws_scale(sws_.at(sws_index).get(), in_data_lower, in_stride, 0, scale_slice_height_  / 2, out_data_lower, out_stride);
 					}
 				});
-				out_frame->height = channel_format_desc_.height;
-				out_frame->width = channel_format_desc_.width;
+				out_frame->height = video_codec_ctx_->height;
+				out_frame->width = video_codec_ctx_->width;
 				out_frame->format = video_codec_ctx_->pix_fmt;
 				out_frame->interlaced_frame = channel_format_desc_.field_mode != core::field_mode::progressive;
 				out_frame->top_field_first = channel_format_desc_.field_mode == core::field_mode::upper;
@@ -643,7 +658,7 @@ namespace caspar {
 			{
 				std::shared_ptr<AVFrame> av_frame(av_frame_alloc(), [](AVFrame* frame) { av_frame_free(&frame); });
 				av_frame->width = channel_format_desc_.width;
-				av_frame->height = channel_format_desc_.height;
+				av_frame->height = height_;
 				av_frame->format = AV_PIX_FMT_BGRA;
 				av_frame->sample_aspect_ratio = channel_sample_aspect_ratio_;
 				av_frame->interlaced_frame = channel_format_desc_.field_mode != core::field_mode::progressive;
@@ -658,7 +673,7 @@ namespace caspar {
 				}
 				else
 				{
-					av_image_fill_arrays(av_frame->data, av_frame->linesize, const_cast<uint8_t*>(read_frame.image_data().begin()), AV_PIX_FMT_BGRA, channel_format_desc_.width, channel_format_desc_.height, 32);
+					av_image_fill_arrays(av_frame->data, av_frame->linesize, const_cast<uint8_t*>(read_frame.image_data().begin()), AV_PIX_FMT_BGRA, channel_format_desc_.width, height_, 16);
 				}
 				video_filter_->push(av_frame);
 			}
@@ -673,7 +688,7 @@ namespace caspar {
 					return;
 				av_packet_rescale_ts(&pkt, video_codec_ctx_->time_base, video_stream_->time_base);
 				pkt.stream_index = video_stream_->index;
-				av_packet_make_refcounted(&pkt);
+				THROW_ON_ERROR2(av_packet_make_refcounted(&pkt), "[ffmpeg_consumer]");
 				THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), &pkt), "[ffmpeg_consumer]");
 			}
 
@@ -782,7 +797,7 @@ namespace caspar {
 						return;
 					av_packet_rescale_ts(&pkt, audio_codec_ctx_->time_base, audio_stream_->time_base);
 					pkt.stream_index = audio_stream_->index;
-					av_packet_make_refcounted(&pkt);
+					THROW_ON_ERROR2(av_packet_make_refcounted(&pkt), "[ffmpeg_consumer]");
 					THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), &pkt), "[ffmpeg_consumer]");
 				}
 			}
@@ -836,9 +851,9 @@ namespace caspar {
 
 			bool flush_stream(bool video)
 			{
-				std::shared_ptr<AVPacket> pkt(av_packet_alloc(), [](AVPacket *p) { av_packet_free(&p); });
+				AVPacket pkt = { 0 };
 
-				av_init_packet(pkt.get());
+				av_init_packet(&pkt);
 				
 				auto stream = video ? video_stream_ : audio_stream_;
 				auto codec_ctx_time_base = (video ? video_codec_ctx_ : audio_codec_ctx_)->time_base;
@@ -847,16 +862,16 @@ namespace caspar {
 				
 				int got_packet;
 				if (video)
-					THROW_ON_ERROR2(avcodec_encode_video2(video_codec_ctx_.get(), pkt.get(), NULL, &got_packet), "[ffmpeg_consumer]");
+					THROW_ON_ERROR2(avcodec_encode_video2(video_codec_ctx_.get(), &pkt, NULL, &got_packet), "[ffmpeg_consumer]");
 				else
-					THROW_ON_ERROR2(avcodec_encode_audio2(audio_codec_ctx_.get(), pkt.get(), NULL, &got_packet), "[ffmpeg_consumer]");
+					THROW_ON_ERROR2(avcodec_encode_audio2(audio_codec_ctx_.get(), &pkt, NULL, &got_packet), "[ffmpeg_consumer]");
 
 				if (got_packet == 0)
 					return true;
-
-				av_packet_rescale_ts(pkt.get(), codec_ctx_time_base, audio_stream_->time_base);
-				pkt->stream_index = stream->index;
-				THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), pkt.get()), "[ffmpeg_consumer]");
+				av_packet_rescale_ts(&pkt, codec_ctx_time_base, stream->time_base);
+				pkt.stream_index = stream->index;
+				THROW_ON_ERROR2(av_packet_make_refcounted(&pkt), "[ffmpeg_consumer]");
+				THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), &pkt), "[ffmpeg_consumer]");
 				return false;
 			}
 					
