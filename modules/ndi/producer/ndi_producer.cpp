@@ -242,7 +242,7 @@ public:
 			if (video_.first) //we already have unprocessed frame received
 				add_silent_audio();
 			process_received_video(&video_frame);
-			ensure_muxer(video_frame.frame_rate_N, video_frame.frame_rate_D);
+			ensure_muxer(boost::rational<int>(video_frame.frame_rate_N, video_frame.frame_rate_D));
 			ndi_lib_->NDIlib_recv_free_video(ndi_receive_.get(), &video_frame);
 			break;
 		case NDIlib_frame_type_audio:
@@ -302,11 +302,11 @@ public:
 		video_ = std::make_pair(ndi_video->timecode, av_frame);
 	}
 
-	void ensure_muxer(const int frame_rate_num, const int frame_rate_den)
+	void ensure_muxer(const boost::rational<int> in_frame_rate)
 	{
-		if (!muxer_ || in_frame_rate_.denominator() != frame_rate_den || in_frame_rate_.numerator() != frame_rate_num)
+		if (!muxer_ || in_frame_rate_ != in_frame_rate_)
 		{
-			in_frame_rate_ = boost::rational<int>(frame_rate_num, frame_rate_den);
+			in_frame_rate_ = in_frame_rate;
 			muxer_.reset(new ffmpeg::frame_muxer(in_frame_rate_, frame_factory_, false, audio_channel_layout_, ""));
 		}
 	}
