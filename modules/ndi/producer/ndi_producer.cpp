@@ -322,19 +322,27 @@ public:
 
 	void sync_and_send_to_muxer()
 	{
-		if (!muxer_ || !(video_.first))
+		if (!video_.second)
 			return;
 		muxer_->push(video_.second);
 		audio_buffer_item_t audio;
 		while (!audio_buffer_.empty())
 		{
 			int64_t frame_timecode = audio_buffer_.front().first;
-			if (frame_timecode > video_.first)
-				break;
-			if (frame_timecode <= video_.first)
+			if (video_.first)
 			{
-				if (frame_timecode > video_.first - video_frame_duration_)
-					muxer_->push(audio_buffer_.front().second);
+				if (frame_timecode > video_.first)
+					break;
+				if (frame_timecode <= video_.first)
+				{
+					if (frame_timecode > video_.first - video_frame_duration_)
+						muxer_->push(audio_buffer_.front().second);
+					audio_buffer_.pop();
+				}
+			}
+			else
+			{
+				muxer_->push(audio_buffer_.front().second);
 				audio_buffer_.pop();
 			}
 		}

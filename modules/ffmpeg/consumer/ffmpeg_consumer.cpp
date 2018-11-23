@@ -614,7 +614,7 @@ namespace caspar {
 							auto in_offset = sws_index * scale_slice_height_ * in_frame.linesize[i];
 							in_data[i] = in_frame.data[i] == NULL ? NULL : in_frame.data[i] + in_offset;
 							auto out_offset = sws_index * scale_slice_height_  * out_frame->linesize[i] / ((i > 0 && out_frame->linesize[i] != 0 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P) ? 2 : 1);
-							auto strange_adjustmenst = (i > 0 && scale_slices_ % 8 == 0 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P && height_ % 1080 == 0 && (sws_index % 2 != 0) ? out_frame->linesize[i] / 2 : 0);
+							auto strange_adjustmenst = (i > 0 && scale_slices_ % 8 == 0 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P && (height_ == 720 || height_ % 1080 == 0) && (sws_index % 2 != 0) ? out_frame->linesize[i] / 2 : 0);
 							out_data[i] = out_frame->data[i] == NULL ? NULL : out_frame->data[i] + out_offset + strange_adjustmenst;
 						}
 						sws_scale(sws_.at(sws_index).get(), in_data, in_frame.linesize, 0, scale_slice_height_  , out_data, out_frame->linesize);
@@ -635,7 +635,7 @@ namespace caspar {
 							in_data_lower[i] = in_frame.data[i] == NULL ? NULL : in_frame.data[i] + in_offset_lower;
 							auto out_offset_upper = (sws_index * scale_slice_height_  * out_frame->linesize[i] / ((i > 0 && out_frame->linesize[i] != 0 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P) ? 2 : 1)) + (is_imx50_pal_ ? 32 * out_frame->linesize[i] : 0);
 							auto out_offset_lower = out_offset_upper + out_frame->linesize[i];
-							auto strange_adjustmenst = (i > 0 && scale_slices_ % 8 == 0 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P && height_ % 1080 == 0 && (sws_index % 2 != 0) ? out_frame->linesize[i] / 2 : 0);
+							auto strange_adjustmenst = (i > 0 && scale_slices_ % 8 == 0 && video_codec_ctx_->pix_fmt == AV_PIX_FMT_YUV420P && (height_ == 720 || height_ % 1080 == 0) && (sws_index % 2 != 0) ? out_frame->linesize[i] / 2 : 0);
 							out_data_upper[i] = out_frame->data[i] == NULL ? NULL : out_frame->data[i] + out_offset_upper + strange_adjustmenst;
 							out_data_lower[i] = out_frame->data[i] == NULL ? NULL : out_frame->data[i] + out_offset_lower + strange_adjustmenst;
 							in_stride[i] = in_frame.linesize[i] * 2;
