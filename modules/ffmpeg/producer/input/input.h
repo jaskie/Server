@@ -54,7 +54,7 @@ public:
 	bool try_pop_video(std::shared_ptr<AVPacket>& packet);
 	bool eof() const;
 
-	bool seek(int64_t target_time);
+	void seek(int64_t target_time);
 	safe_ptr<AVFormatContext> format_context();
 
 private:

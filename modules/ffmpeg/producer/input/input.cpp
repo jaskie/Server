@@ -253,16 +253,14 @@ struct input::implementation : boost::noncopyable
 		return context;
 	}
 
-	bool seek(int64_t target_time)
+	void seek(int64_t target_time)
 	{
-		return executor_.begin_invoke([=]() -> bool
+		executor_.begin_invoke([=]() 
 		{
 			if (audio_buffer_.size() > 0 || video_buffer_.size() > 0)
 			{
 				audio_buffer_.clear();
 				video_buffer_.clear();
-				audio_buffer_.try_push(flush_packet());
-				video_buffer_.try_push(flush_packet());
 				LOG_ON_ERROR2(avformat_flush(format_context_.get()), "FFMpeg input avformat_flush");
 			}
 			graph_->set_value("audio-buffer-count", (static_cast<double>(audio_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
@@ -271,13 +269,11 @@ struct input::implementation : boost::noncopyable
 				CASPAR_LOG(trace) << print() << " Seeking: " << target_time / 1000 << " ms";
 			flush_av_packet_count_ = FLUSH_AV_PACKET_COUNT;
 			is_eof_ = false;
-			if (av_seek_frame(format_context_.get(), -1, target_time - AV_TIME_BASE, AVSEEK_FLAG_BACKWARD) < 0)
-				CASPAR_LOG(warning) << print() << "av_seek_frame failed"; // trial and error correction of unknown reason
+			if (av_seek_frame(format_context_.get(), -1, target_time, AVSEEK_FLAG_BACKWARD) < 0)
+				CASPAR_LOG(error) << print() << " Seek failed";
 			tick();
-			return true;
-		}, high_priority).get();
-	}
-		
+		}, high_priority);
+	}		
 };
 
 input::input(const safe_ptr<diagnostics::graph> graph, const std::wstring& filename, bool thumbnail_mode)
@@ -286,7 +282,7 @@ bool input::eof() const {return impl_->is_eof();}
 bool input::try_pop_audio(std::shared_ptr<AVPacket>& packet){return impl_->try_pop_audio(packet);}
 bool input::try_pop_video(std::shared_ptr<AVPacket>& packet) { return impl_->try_pop_video(packet); }
 safe_ptr<AVFormatContext> input::format_context(){return impl_->format_context_;}
-bool input::seek(int64_t target_time){return impl_->seek(target_time);}
+void input::seek(int64_t target_time){impl_->seek(target_time);}
 safe_ptr<AVCodecContext> input::open_audio_codec(int& index) { return impl_->open_audio_codec(index);}
 safe_ptr<AVCodecContext> input::open_video_codec(int& index) { return impl_->open_video_codec(index); }
 
