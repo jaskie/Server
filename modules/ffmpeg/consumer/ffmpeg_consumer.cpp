@@ -428,6 +428,8 @@ namespace caspar {
 				video_codec_ctx_->height = height;
 				video_codec_ctx_->time_base = time_base;
 				video_codec_ctx_->framerate = frame_rate;
+				video_codec_ctx_->max_b_frames = 0; // b-frames not supported.
+
 
 				if (channel_format_desc_.format == core::video_format::ntsc && height == 486)
 					video_codec_ctx_->height = 480;
@@ -467,7 +469,10 @@ namespace caspar {
 				else if (video_codec_ctx_->codec_id == AV_CODEC_ID_H264)
 				{
 					video_codec_ctx_->bit_rate = (video_filter_ ? video_filter_->out_height() : height_) * 14 * 1000; // about 8Mbps for SD, 14 for HD
-					LOG_ON_ERROR2(av_dict_set(&options_, "preset", "veryfast", AV_DICT_DONT_OVERWRITE), "[ffmpeg_consumer]");
+					video_codec_ctx_->gop_size = 30;
+					video_codec_ctx_->max_b_frames = 2;
+					if (strcmp(video_codec_ctx_->codec->name, "libx264") == 0)
+						LOG_ON_ERROR2(av_dict_set(&options_, "preset", "veryfast", AV_DICT_DONT_OVERWRITE), "[ffmpeg_consumer]");
 				}
 				else if (video_codec_ctx_->codec_id == AV_CODEC_ID_QTRLE)
 				{
@@ -501,9 +506,6 @@ namespace caspar {
 				if (output_params_.video_bitrate_ != 0)
 					video_codec_ctx_->bit_rate = output_params_.video_bitrate_ * 1000;
 
-				video_codec_ctx_->max_b_frames = 0; // b-frames not supported.
-				
-								
 				if (format->flags & AVFMT_GLOBALHEADER)
 					video_codec_ctx_->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 				video_codec_ctx_->sample_aspect_ratio = sample_aspect_ratio;
