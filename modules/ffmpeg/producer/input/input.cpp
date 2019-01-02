@@ -61,7 +61,6 @@ extern "C"
 #endif
 
 static const size_t MAX_BUFFER_COUNT    = 500;
-static const size_t MAX_BUFFER_COUNT_RT = 3;
 static const size_t MIN_BUFFER_COUNT    = 50;
 static const int32_t FLUSH_AV_PACKET_COUNT = 0x150;
 
@@ -102,10 +101,12 @@ struct input::implementation : boost::noncopyable
 				disable_logging_for_thread();
 			});
 		is_eof_			= false;
+		video_buffer_.set_capacity(MAX_BUFFER_COUNT);
+		audio_buffer_.set_capacity(MAX_BUFFER_COUNT);
 		video_stream_index_ = -1;
 		audio_stream_index_ = -1;
 		graph_->set_color("audio-buffer-count", diagnostics::color(0.7f, 0.4f, 0.4f));
-		graph_->set_color("video-buffer-count", diagnostics::color(1.0f, 1.0f, 0.0f));	
+		graph_->set_color("video-buffer-count", diagnostics::color(1.0f, 1.0f, 0.0f));
 	}
 
 	safe_ptr<AVCodecContext> open_audio_codec(int& index)
@@ -177,12 +178,7 @@ struct input::implementation : boost::noncopyable
 	}
 
 
-	std::ptrdiff_t get_max_buffer_count() const
-	{
-		return thumbnail_mode_ ? 1 : MAX_BUFFER_COUNT;
-	}
-
-	std::ptrdiff_t get_min_buffer_count() const
+	int get_min_buffer_count() const
 	{
 		return thumbnail_mode_ ? 0 : MIN_BUFFER_COUNT;
 	}
@@ -224,13 +220,23 @@ struct input::implementation : boost::noncopyable
 						if (packet->stream_index == video_stream_index_ && packet->size > 0)
 						{
 							THROW_ON_ERROR2(av_dup_packet(packet.get()), print());
-							video_buffer_.try_push(packet);
+							if (!video_buffer_.try_push(packet))
+							{
+								video_buffer_.clear();
+								video_buffer_.push(packet);
+								CASPAR_LOG(warning) << print() << " Video packet queue cleared due to overflow.";
+							}
 							graph_->set_value("video-buffer-count", (static_cast<double>(video_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
 						}
 						if (packet->stream_index == audio_stream_index_ && packet->size > 0)
 						{
 							THROW_ON_ERROR2(av_dup_packet(packet.get()), print());
-							audio_buffer_.try_push(packet);
+							if (!audio_buffer_.try_push(packet))
+							{
+								audio_buffer_.clear();
+								audio_buffer_.push(packet);
+								CASPAR_LOG(warning) << print() << " Audio packet queue cleared due to overflow.";
+							}
 							graph_->set_value("audio-buffer-count", (static_cast<double>(audio_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
 						}
 					}
@@ -255,14 +261,11 @@ struct input::implementation : boost::noncopyable
 
 	void seek(int64_t target_time)
 	{
-		executor_.begin_invoke([=]() 
+		executor_.invoke([this, target_time]()
 		{
-			if (audio_buffer_.size() > 0 || video_buffer_.size() > 0)
-			{
-				audio_buffer_.clear();
-				video_buffer_.clear();
-				LOG_ON_ERROR2(avformat_flush(format_context_.get()), "FFMpeg input avformat_flush");
-			}
+			audio_buffer_.clear();
+			video_buffer_.clear();
+			LOG_ON_ERROR2(avformat_flush(format_context_.get()), "FFMpeg input avformat_flush");
 			graph_->set_value("audio-buffer-count", (static_cast<double>(audio_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
 			graph_->set_value("video-buffer-count", (static_cast<double>(video_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
 			if (!thumbnail_mode_)
@@ -273,7 +276,7 @@ struct input::implementation : boost::noncopyable
 				CASPAR_LOG(error) << print() << " Seek failed";
 			tick();
 		}, high_priority);
-	}		
+	}
 };
 
 input::input(const safe_ptr<diagnostics::graph> graph, const std::wstring& filename, bool thumbnail_mode)
