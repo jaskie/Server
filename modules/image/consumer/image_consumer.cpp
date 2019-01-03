@@ -32,6 +32,7 @@
 #include <core/consumer/frame_consumer.h>
 #include <core/video_format.h>
 #include <core/mixer/read_frame.h>
+#include <core/mixer/audio/audio_util.h>
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/thread.hpp>
@@ -74,7 +75,7 @@ public:
 	{
 	}
 
-	virtual void initialize(const core::video_format_desc& format_desc, int) override
+	virtual void initialize(const core::video_format_desc& format_desc, const core::channel_layout& audio_channel_layout, int) override
 	{
 		format_desc_ = format_desc;
 	}

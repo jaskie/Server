@@ -34,6 +34,7 @@
 #include <core/parameters/parameters.h>
 #include <core/consumer/frame_consumer.h>
 #include <core/mixer/read_frame.h>
+#include <core/mixer/audio/audio_util.h>
 #include <core/video_format.h>
 
 #include <boost/date_time/posix_time/posix_time.hpp>
@@ -99,8 +100,9 @@ namespace caspar {
 
 		struct ndi_consumer : public boost::noncopyable
 		{
+			const int														channel_index_;
 			const core::video_format_desc									format_desc_;
-			const core::channel_layout										channel_layout_;
+			const core::channel_layout&										channel_layout_;
 			const std::wstring												ndi_name_;
 			const bool														is_alpha_;
 			const bool														is_blocking_;
@@ -122,8 +124,9 @@ namespace caspar {
 
 			// frame_consumer
 
-			ndi_consumer(const core::video_format_desc& format_desc, const core::channel_layout& channel_layout, const std::string& ndi_name, const std::string& groups, const bool is_alpha, const bool is_blocking)
-				: channel_layout_(channel_layout)
+			ndi_consumer(const int channel_index, const core::video_format_desc& format_desc, const core::channel_layout& channel_layout, const std::string& ndi_name, const std::string& groups, const bool is_alpha, const bool is_blocking)
+				: channel_index_(channel_index)
+				, channel_layout_(channel_layout)
 				, format_desc_(format_desc)
 				, ndi_name_(widen(ndi_name))
 				, is_alpha_(is_alpha)
@@ -242,7 +245,7 @@ namespace caspar {
 
 			std::wstring print() const
 			{
-				return L"NewTek NDI[" + ndi_name_ + L"]";
+				return L"NewTek NDI[" + std::to_wstring(static_cast<long long>(channel_index_)) + L":" + ndi_name_ + L"]";
 			}
 		};
 
@@ -251,26 +254,25 @@ namespace caspar {
 		{
 			const int								index_;
 			std::unique_ptr<ndi_consumer>			consumer_;
-			const core::channel_layout				channel_layout_;
 			const std::string						ndi_name_;
 			const std::string						groups_;
 			const bool								is_alpha_;
 			const bool								is_blocking_;
+			int										channel_index_;
 
 		public:
 
-			ndi_consumer_proxy(core::channel_layout channel_layout, const std::string& ndi_name, const std::string& groups, const bool is_alpha, const bool is_blocking)
+			ndi_consumer_proxy(const std::string& ndi_name, const std::string& groups, const bool is_alpha, const bool is_blocking)
 				: index_(NDI_CONSUMER_BASE_INDEX + crc16(ndi_name))
-				, channel_layout_(channel_layout)
 				, ndi_name_(ndi_name)
 				, groups_(groups)
 				, is_alpha_(is_alpha)
 				, is_blocking_(is_blocking)
 			{	}
 
-			virtual void initialize(const core::video_format_desc& format_desc, int) override
+			virtual void initialize(const core::video_format_desc& format_desc, const core::channel_layout& audio_channel_layout, int channel_index) override
 			{
-				consumer_.reset(new ndi_consumer(format_desc, channel_layout_, ndi_name_, groups_, is_alpha_, is_blocking_));
+				consumer_.reset(new ndi_consumer(channel_index_, format_desc, audio_channel_layout, ndi_name_, groups_, is_alpha_, is_blocking_));
 			}
 
 			virtual bool has_synchronization_clock() const override
@@ -290,9 +292,7 @@ namespace caspar {
 
 			virtual boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame) override
 			{
-				if (consumer_)
-					return consumer_->send(frame);
-				return wrap_as_future(true);
+				return consumer_->send(frame);
 			}
 
 			virtual std::wstring print() const override
@@ -327,10 +327,7 @@ namespace caspar {
 			std::string groups = narrow(params.get(L"GROUPS", L""));
 			bool is_alpha = params.get(L"ALPHA", true);
 			bool is_blocking = params.get(L"BLOCKING", false);
-			auto channel_layout = core::default_channel_layout_repository()
-				.get_by_name(
-					params.get(L"CHANNEL_LAYOUT", L"STEREO"));
-			return make_safe<ndi_consumer_proxy>(channel_layout, ndi_name, groups, is_alpha, is_blocking);
+			return make_safe<ndi_consumer_proxy>(ndi_name, groups, is_alpha, is_blocking);
 		}
 
 		safe_ptr<core::frame_consumer> create_ndi_consumer(const boost::property_tree::wptree& ptree)
@@ -339,11 +336,7 @@ namespace caspar {
 			auto groups = narrow(ptree.get(L"groups", L""));
 			bool is_alpha = ptree.get(L"alpha", true);
 			bool is_blocking = ptree.get(L"blocking", false);
-			auto channel_layout =
-				core::default_channel_layout_repository()
-				.get_by_name(
-					boost::to_upper_copy(ptree.get(L"channel-layout", L"STEREO")));
-			return make_safe<ndi_consumer_proxy>(channel_layout, ndi_name, groups, is_alpha, is_blocking);
+			return make_safe<ndi_consumer_proxy>(ndi_name, groups, is_alpha, is_blocking);
 		}
 
 	}

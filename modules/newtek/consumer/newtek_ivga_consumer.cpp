@@ -27,6 +27,7 @@
 #include <core/parameters/parameters.h>
 #include <core/video_format.h>
 #include <core/mixer/read_frame.h>
+#include <core/mixer/audio/audio_util.h>
 
 #include <common/utility/assert.h>
 #include <common/concurrency/executor.h>
@@ -76,7 +77,7 @@ public:
 
 	// frame_consumer
 	
-	virtual void initialize(const core::video_format_desc& format_desc, int channel_index) override
+	virtual void initialize(const core::video_format_desc& format_desc, const core::channel_layout& audio_channel_layout, int channel_index) override
 	{
 		air_send_.reset(
 			airsend::create(

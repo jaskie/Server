@@ -57,10 +57,9 @@ public:
 	safe_ptr<mixer>	mixer();
 	safe_ptr<output> output();
 	
-	video_format_desc get_video_format_desc() const;
-	void set_video_format_desc(const video_format_desc& format_desc);
+	const video_format_desc& get_video_format_desc() const;
 
-	channel_layout get_channel_layot() const;
+	const channel_layout& get_channel_layuot() const;
 	
 	boost::property_tree::wptree info() const;
 	boost::property_tree::wptree delay_info() const;

@@ -39,6 +39,7 @@
 #include <core/parameters/parameters.h>
 #include <core/video_format.h>
 #include <core/mixer/read_frame.h>
+#include <core/mixer/audio/audio_util.h>
 #include <core/consumer/frame_consumer.h>
 
 #include <boost/timer.hpp>
@@ -478,7 +479,7 @@ public:
 
 	// frame_consumer
 
-	virtual void initialize(const core::video_format_desc& format_desc, int channel_index) override
+	virtual void initialize(const core::video_format_desc& format_desc, const core::channel_layout&, int channel_index) override
 	{
 		consumer_.reset();
 		consumer_.reset(new ogl_consumer(config_, format_desc, channel_index));

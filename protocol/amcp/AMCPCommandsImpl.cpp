@@ -2174,33 +2174,6 @@ bool ByeCommand::DoExecute()
 	return true;
 }
 
-bool SetCommand::DoExecute()
-{
-	std::wstring name = _parameters[0];
-	std::transform(name.begin(), name.end(), name.begin(), toupper);
-
-	std::wstring value = _parameters[1];
-	std::transform(value.begin(), value.end(), value.begin(), toupper);
-
-	if(name == TEXT("MODE"))
-	{
-		auto format_desc = core::video_format_desc::get(value);
-		if(format_desc.format != core::video_format::invalid)
-		{
-			GetChannel()->set_video_format_desc(format_desc);
-			SetReplyString(TEXT("202 SET MODE OK\r\n"));
-		}
-		else
-			SetReplyString(TEXT("501 SET MODE FAILED\r\n"));
-	}
-	else
-	{
-		this->SetReplyString(TEXT("403 SET ERROR\r\n"));
-	}
-
-	return true;
-}
-
 bool KillCommand::DoExecute()
 {
 	GetShutdownServerNow().set_value(false); // False for not attempting to restart.

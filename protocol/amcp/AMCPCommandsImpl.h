@@ -247,12 +247,6 @@ class ByeCommand : public AMCPCommandBase<false, 0>
 	bool DoExecute();
 };
 
-class SetCommand : public AMCPCommandBase<true, 2>
-{
-	std::wstring print() const { return L"SetCommand";}
-	bool DoExecute();
-};
-
 class KillCommand : public AMCPCommandBase<false, 0>
 {
 	std::wstring print() const { return L"KillCommand";}

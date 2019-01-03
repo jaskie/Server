@@ -912,7 +912,7 @@ namespace caspar {
 				frames_left_ = frame_limit;
 			}
 
-			virtual void initialize(const core::video_format_desc& format_desc, int)
+			virtual void initialize(const core::video_format_desc& format_desc, const core::channel_layout& audio_channel_layout, int)
 			{
 				consumer_.reset(new ffmpeg_consumer(
 					format_desc,
