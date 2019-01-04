@@ -89,6 +89,7 @@ bool is_valid_file(const std::wstring filename);
 bool try_get_duration(const std::wstring filename, std::int64_t& duration, boost::rational<std::int64_t>& time_base);
 int64_t ffmpeg_time_from_frame_number(int32_t frame_number, double fps);
 int32_t frame_number_from_ffmpeg_time(int64_t time, double fps);
+std::vector<int> parse_list(const std::string& list);
 
 core::channel_layout get_audio_channel_layout(const AVCodecContext& context, const std::wstring& custom_channel_order);
 std::int64_t create_channel_layout_bitmask(int num_channels);

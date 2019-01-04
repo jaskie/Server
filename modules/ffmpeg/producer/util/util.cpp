@@ -45,6 +45,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/tokenizer.hpp>
 
 #if defined(_MSC_VER)
 #pragma warning (push)
@@ -586,6 +587,15 @@ int64_t ffmpeg_time_from_frame_number(int32_t frame_number, double fps)
 int32_t frame_number_from_ffmpeg_time(int64_t time, double fps)
 {
 	return static_cast<std::int32_t>(time * fps / AV_TIME_BASE);
+}
+
+std::vector<int> parse_list(const std::string& list)
+{
+	auto result_list = std::vector<int>();
+	boost::tokenizer<> tok(list);
+	for (boost::tokenizer<>::iterator i = tok.begin(); i != tok.end(); i++)
+		result_list.push_back(boost::lexical_cast<int>(*i));
+	return result_list;
 }
 
 }}
