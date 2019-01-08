@@ -413,12 +413,12 @@ safe_ptr<core::frame_producer> create_producer(
 		const safe_ptr<core::frame_factory>& frame_factory,
 		const core::parameters& params)
 {
-	if(params.empty() || !boost::iequals(params[0], "ndi"))
+	if(params.empty() || !boost::iequals(params[0], "[ndi]"))
 		return core::frame_producer::empty();
 	auto source_address = params.get(L"ADDRESS", L"");
 	auto source_name = params.get(L"NAME", L"");
 	if (source_name.empty() && source_address.empty())
-		source_name = params.get(L"NDI", L"");
+		source_name = params.get(L"[NDI]", L"");
 	if (source_name.empty() && source_address.empty())
 		return core::frame_producer::empty();
 	auto buffer_depth = params.get(L"BUFFER", 2);
