@@ -522,6 +522,8 @@ namespace caspar {
 
 				if (video_codec_ctx_->pix_fmt == AV_PIX_FMT_NONE)
 					video_codec_ctx_->pix_fmt = pix_fmt == AV_PIX_FMT_NONE ? AV_PIX_FMT_YUV420P : pix_fmt;
+				if (video_codec_ctx_->thread_type & FF_THREAD_FRAME)
+					video_codec_ctx_->thread_count = 16;
 
 				THROW_ON_ERROR2(avcodec_open2(video_codec_ctx_.get(), encoder, &options_), "[ffmpeg_consumer]");
 
