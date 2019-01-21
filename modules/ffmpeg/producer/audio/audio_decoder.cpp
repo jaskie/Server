@@ -56,8 +56,7 @@ struct audio_decoder::implementation : boost::noncopyable
 	static const int BUFFER_SIZE = 480000 * 2;
 	input 														input_;
 	const safe_ptr<AVCodecContext>								codec_context_;
-	int															stream_index_;
-	const AVStream*												stream_;
+	AVStream*													stream_;
 	caspar::core::video_format_desc								format_;
 	const std::shared_ptr<SwrContext>							swr_;
 	core::channel_layout										channel_layout_;
@@ -68,11 +67,10 @@ struct audio_decoder::implementation : boost::noncopyable
 public:
 	explicit implementation(input input, caspar::core::video_format_desc format, const std::wstring& custom_channel_order)
 		: input_(input)
-		, codec_context_(input.open_audio_codec(stream_index_))
+		, codec_context_(input.open_audio_codec(&stream_))
 		, format_(format)
 		, channel_layout_(get_audio_channel_layout(*codec_context_, custom_channel_order))
 		, swr_(alloc_resampler())
-		, stream_(input_.format_context()->streams[stream_index_])
 		, stream_start_pts_(stream_->start_time)
 		, buffer_(BUFFER_SIZE)
 	{

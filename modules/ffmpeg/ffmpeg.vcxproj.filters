@@ -61,6 +61,9 @@
     <ClCompile Include="producer\ffmpeg_producer.cpp">
       <Filter>source\producer</Filter>
     </ClCompile>
+    <ClCompile Include="tbb_avcodec.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="producer\ffmpeg_producer.h">
@@ -99,6 +102,9 @@
     </ClInclude>
     <ClInclude Include="producer\muxer\display_mode.h">
       <Filter>source\producer\muxer</Filter>
+    </ClInclude>
+    <ClInclude Include="tbb_avcodec.h">
+      <Filter>source</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

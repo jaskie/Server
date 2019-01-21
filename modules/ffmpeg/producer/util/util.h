@@ -73,8 +73,6 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 safe_ptr<AVPacket> create_packet();
 safe_ptr<AVFrame> create_frame();
 
-safe_ptr<AVCodecContext> open_codec(safe_ptr<AVFormatContext> context,  enum AVMediaType type, int& index);
-
 bool is_sane_fps(AVRational time_base);
 AVRational fix_time_base(AVRational time_base);
 

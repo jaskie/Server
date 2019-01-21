@@ -21,46 +21,12 @@
 
 #pragma once
 
-#include <common/memory/safe_ptr.h>
-
-#include <memory>
-#include <string>
-#include <cstdint>
-
-#include <boost/noncopyable.hpp>
-#include <boost/thread/future.hpp>
-
-struct AVFormatContext;
-struct AVPacket;
+struct AVCodecContext;
+struct AVCodec;
+struct AVDictionary;
 
 namespace caspar {
-
-namespace diagnostics {
-
-class graph;
+	
+int tbb_avcodec_open(AVCodecContext *avctx, const AVCodec *codec, AVDictionary ** options);
 
 }
-	 
-namespace ffmpeg {
-
-class input
-{
-public:
-	explicit input(const safe_ptr<diagnostics::graph> graph, const std::wstring& filename, bool thumbnail_mode);
-	safe_ptr<AVCodecContext> open_audio_codec(AVStream** stream);
-	safe_ptr<AVCodecContext> open_video_codec(AVStream** stream);
-
-	bool try_pop_audio(std::shared_ptr<AVPacket>& packet);
-	bool try_pop_video(std::shared_ptr<AVPacket>& packet);
-	bool eof() const;
-
-	void seek(int64_t target_time);
-	safe_ptr<AVFormatContext> format_context();
-
-private:
-	struct implementation;
-	std::shared_ptr<implementation> impl_;
-};
-
-	
-}}

@@ -56,8 +56,7 @@ struct video_decoder::implementation : boost::noncopyable
 	input 									input_;
 	const safe_ptr<AVCodecContext>			codec_context_;
 	const AVCodec*							codec_;
-	int										stream_index_;
-	const AVStream*							stream_;
+	AVStream*								stream_;
 	const uint32_t							nb_frames_;
 	const size_t							width_;
 	const size_t							height_;
@@ -70,11 +69,10 @@ struct video_decoder::implementation : boost::noncopyable
 public:
 	explicit implementation(input input, bool invert_field_order)
 		: input_(input)
-		, codec_context_(input.open_video_codec(stream_index_))
+		, codec_context_(input.open_video_codec(&stream_))
 		, codec_(codec_context_->codec)
 		, width_(codec_context_->width)
 		, height_(codec_context_->height)
-		, stream_(input_.format_context()->streams[stream_index_])
 		, stream_start_pts_(stream_->start_time)
 		, nb_frames_(static_cast<uint32_t>(calc_nb_frames(stream_)))
 	{

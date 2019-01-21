@@ -22,6 +22,7 @@
 #include "../StdAfx.h"
 
 #include "../ffmpeg_error.h"
+#include "../tbb_avcodec.h"
 #include "../ffmpeg.h"
 #include "../producer/filter/filter.h"
 #include "../producer/util/util.h"
@@ -519,13 +520,15 @@ namespace caspar {
 				if (format->flags & AVFMT_GLOBALHEADER)
 					video_codec_ctx_->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 				video_codec_ctx_->sample_aspect_ratio = sample_aspect_ratio;
-
 				if (video_codec_ctx_->pix_fmt == AV_PIX_FMT_NONE)
 					video_codec_ctx_->pix_fmt = pix_fmt == AV_PIX_FMT_NONE ? AV_PIX_FMT_YUV420P : pix_fmt;
-				if (video_codec_ctx_->thread_type & FF_THREAD_FRAME)
-					video_codec_ctx_->thread_count = 16;
 
-				THROW_ON_ERROR2(avcodec_open2(video_codec_ctx_.get(), encoder, &options_), "[ffmpeg_consumer]");
+				if (tbb_avcodec_open(video_codec_ctx_.get(), encoder, &options_) < 0)
+				{
+					CASPAR_LOG(debug) << print() << L" Multithreaded avcodec_open2 failed";
+					video_codec_ctx_->thread_count = 1;
+					THROW_ON_ERROR2(avcodec_open2(video_codec_ctx_.get(), encoder, &options_), "[ffmpeg_consumer]");
+				}
 
 				video_stream_ = avformat_new_stream(format_context_.get(), NULL);
 				if (!video_stream_)
@@ -585,9 +588,8 @@ namespace caspar {
 
 				audio_is_planar_ = av_sample_fmt_is_planar(audio_codec_ctx_->sample_fmt) != 0;
 
-				
 				THROW_ON_ERROR2(avcodec_open2(audio_codec_ctx_.get(), encoder, &options_), "[ffmpeg_consumer]");
-			
+
 				audio_stream_ = avformat_new_stream(format_context_.get(), NULL);
 				if (!audio_stream_)
 					BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not allocate audio-stream") << boost::errinfo_api_function("avformat_new_stream"));

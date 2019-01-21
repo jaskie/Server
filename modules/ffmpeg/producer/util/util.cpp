@@ -47,20 +47,6 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 
-#if defined(_MSC_VER)
-#pragma warning (push)
-#pragma warning (disable : 4244)
-#endif
-extern "C" 
-{
-	#include <libswscale/swscale.h>
-	#include <libavcodec/avcodec.h>
-	#include <libavformat/avformat.h>
-}
-#if defined(_MSC_VER)
-#pragma warning (pop)
-#endif
-
 namespace caspar { namespace ffmpeg {
 		
 std::shared_ptr<core::audio_buffer> flush_audio()
@@ -426,14 +412,6 @@ double read_fps(AVFormatContext& context, double fail_value)
 	return fail_value;	
 }
 
-
-safe_ptr<AVCodecContext> open_codec(safe_ptr<AVFormatContext> context, enum AVMediaType type, int& index)
-{	
-	AVCodec* decoder;
-	index = THROW_ON_ERROR2(av_find_best_stream(context.get(), type, -1, -1, &decoder, 0), "[open_codec}");
-	THROW_ON_ERROR2(avcodec_open2(context->streams[index]->codec, decoder, NULL), "[open_codec]");
-	return safe_ptr<AVCodecContext>(context->streams[index]->codec, avcodec_close);
-}
 
 std::wstring print_mode(size_t width, size_t height, double fps, bool interlaced)
 {
