@@ -13,7 +13,7 @@ This is fork of 2.06 Stable master branch with following fixes and enhacements w
 10. Added deck control, with new CAPTURE and RECORDER commands (see wiki).
 11. Added native Newtek NDI (http://ndi.newtek.com) consumer able to stream with or without alpha channel.
 12. Added NDI producer to play a NDI source (can be added using AMCP command or from casparcg.config).
-13. It's possible to produce perfectly stable CBR MPEG-TS UDP stream. Refer to wiki page if it's required.
+13. It's possible to produce perfectly stable CBR MPEG-TS UDP stream. Refer to wiki page if it's required here: https://github.com/jaskie/Server/wiki/Creating-perfectly-stable-CBR-MPEG-transport-stream.
 
 --------------------------------------
 |        Original readme below       |
