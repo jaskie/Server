@@ -103,7 +103,7 @@ int tbb_avcodec_open(AVCodecContext* avctx, const AVCodec* codec, AVDictionary**
 	if(((codec->capabilities & AV_CODEC_CAP_SLICE_THREADS) && (avctx->thread_type & FF_THREAD_SLICE)
 	  ||  (codec->capabilities & AV_CODEC_CAP_FRAME_THREADS)) && (avctx->thread_type & FF_THREAD_FRAME)) 
 	{
-		thread_init(avctx, codec->id != AV_CODEC_ID_PRORES); // do not enable execute2 for prores codec as it cause crash
+		thread_init(avctx, codec->id != AV_CODEC_ID_PRORES && codec->id != AV_CODEC_ID_DNXHD); // do not enable execute2 for ProRes and DNxHD codec as they cause crash
 	}	
 	avctx->refcounted_frames = 0;
 	return avcodec_open2(avctx, codec, options); 
