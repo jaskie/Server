@@ -109,25 +109,29 @@ public:
 
 	std::shared_ptr<core::audio_buffer> decode(std::shared_ptr<AVPacket> pkt)
 	{
-		int got_frame = 0;
-		safe_ptr<AVFrame> frame = create_frame();
-		int ret = avcodec_decode_audio4(codec_context_.get(), frame.get(), &got_frame, pkt.get());
-		int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(frame.get());
-		if (ret >= 0 && got_frame && frame_time_stamp >= seek_pts_)
+		try
 		{
-			const uint8_t **in = const_cast<const uint8_t**>(frame->extended_data);
-			uint8_t* out[] =  { reinterpret_cast<uint8_t*>(buffer_.data()) };
-			int n_samples = swr_convert(swr_.get(),
-				out,
-				BUFFER_SIZE / codec_context_->channels,
-				in,
-				frame->nb_samples);
-			if (n_samples > 0)
+			int got_frame = 0;
+			safe_ptr<AVFrame> frame = create_frame();
+			int ret = avcodec_decode_audio4(codec_context_.get(), frame.get(), &got_frame, pkt.get());
+			int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(frame.get());
+			if (ret >= 0 && got_frame && frame_time_stamp >= seek_pts_)
 			{
-				const auto samples = reinterpret_cast<uint32_t*>(*out);
-				return std::make_shared<core::audio_buffer>(samples, samples + n_samples*codec_context_->channels);
+				const uint8_t **in = const_cast<const uint8_t**>(frame->extended_data);
+				uint8_t* out[] = { reinterpret_cast<uint8_t*>(buffer_.data()) };
+				int n_samples = swr_convert(swr_.get(),
+					out,
+					BUFFER_SIZE / codec_context_->channels,
+					in,
+					frame->nb_samples);
+				if (n_samples > 0)
+				{
+					const auto samples = reinterpret_cast<uint32_t*>(*out);
+					return std::make_shared<core::audio_buffer>(samples, samples + n_samples*codec_context_->channels);
+				}
 			}
 		}
+		catch (...) {}
 		return nullptr;
 	}
 
