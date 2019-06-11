@@ -73,6 +73,7 @@ struct mixer::implementation : boost::noncopyable
 	safe_ptr<ogl_device>			ogl_;
 	channel_layout					audio_channel_layout_;
 	bool							straighten_alpha_;
+	bool							use_software_scaler_;
 	
 	audio_mixer	audio_mixer_;
 	image_mixer image_mixer_;
@@ -274,6 +275,8 @@ void mixer::clear_blend_mode(int index) { impl_->clear_blend_mode(index); }
 void mixer::clear_blend_modes() { impl_->clear_blend_modes(); }
 void mixer::set_straight_alpha_output(bool value) { impl_->set_straight_alpha_output(value); }
 bool mixer::get_straight_alpha_output() { return impl_->get_straight_alpha_output(); }
+void caspar::core::mixer::set_use_software_scaler(bool value) { impl_->use_software_scaler_ = value; }
+bool caspar::core::mixer::get_use_software_scaler() const { return impl_->use_software_scaler_; }
 float mixer::get_master_volume() { return impl_->get_master_volume(); }
 void mixer::set_master_volume(float volume) { impl_->set_master_volume(volume); }
 void mixer::set_video_format_desc(const video_format_desc& format_desc){impl_->set_video_format_desc(format_desc);}

@@ -231,6 +231,8 @@ struct server::implementation : boost::noncopyable
 			channels_.back()->monitor_output().attach_parent(monitor_subject_);
 			channels_.back()->mixer()->set_straight_alpha_output(
 				xml_channel.second.get(L"straight-alpha-output", false));
+			channels_.back()->mixer()->set_use_software_scaler(
+				xml_channel.second.get(L"use-software-scaler", false));
 
 			auto consumers = xml_channel.second.get_child_optional(L"consumers");
 			if (consumers.is_initialized())

@@ -62,6 +62,11 @@ std::wstring get_cg_version()
 			{
 				return core::video_format_desc::get(L"PAL");
 			}
+
+			virtual bool get_use_software_scaler() const 
+			{
+				return false;
+			}
 		};
 
 		std::vector<std::wstring> params;

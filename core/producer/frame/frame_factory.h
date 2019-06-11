@@ -43,6 +43,7 @@ struct frame_factory : boost::noncopyable
 			const channel_layout& audio_channel_layout = channel_layout::stereo()) = 0;	
 
 	virtual video_format_desc get_video_format_desc() const = 0; // nothrow
+	virtual bool get_use_software_scaler() const = 0;
 };
 
 }}

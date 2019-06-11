@@ -338,11 +338,12 @@ struct frame_muxer::implementation : boost::noncopyable
 			filter_str = append_filter(filter_str, "YADIF=0:-1");
 		else if(display_mode_ == display_mode::deinterlace_bob)
 			filter_str = append_filter(filter_str, "YADIF=1:-1");
-		else if (display_mode_ == display_mode::scale_interlaced)
+		if (display_mode_ == display_mode::scale_interlaced || (frame_factory_->get_use_software_scaler() && (format_desc_.width != static_cast<uint32_t>(frame->width) || format_desc_.height != static_cast<uint32_t>(frame->height))))
 			filter_str = append_filter(filter_str, (boost::format("SCALE=w=%1%:h=%2%:interl=1") %format_desc_.width %format_desc_.height).str());
 
 		if (in_fps_ != boost::rational<int>(format_desc_.time_scale, format_desc_.duration))
 			filter_str = append_filter(filter_str, (boost::format("FPS=%1%/%2%") % format_desc_.time_scale %format_desc_.duration).str());
+
 
 		if(display_mode_ == display_mode::invalid)
 		{
@@ -352,6 +353,9 @@ struct frame_muxer::implementation : boost::noncopyable
 
 		auto out_pix_fmts = std::vector<AVPixelFormat>();
 		out_pix_fmts.push_back(AV_PIX_FMT_BGRA);
+
+		/*if (frame->format != AV_PIX_FMT_BGRA && filter_str.empty())
+			filter_str = append_filter(filter_str, (boost::format("SCALE=w=%1%:h=%2%:interl=0") % format_desc_.width % format_desc_.height).str());*/
 
 		filter_.reset (new filter(
 			frame->width,
