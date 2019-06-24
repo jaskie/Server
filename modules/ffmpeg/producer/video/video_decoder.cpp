@@ -64,7 +64,6 @@ struct video_decoder::implementation : boost::noncopyable
 	const int64_t							stream_start_pts_;
 	tbb::atomic<int64_t>					seek_pts_;
 	tbb::atomic<bool>						invert_field_order_;
-	tbb::atomic<uint32_t>					frame_decoded_;
 	int64_t									frame_number_;
 public:
 	explicit implementation(input input, bool invert_field_order)
@@ -78,7 +77,6 @@ public:
 	{
 		invert_field_order_ = invert_field_order;
 		seek_pts_ = 0;
-		frame_decoded_ = 0;
 		CASPAR_LOG(trace) << "Codec: " << codec_->long_name;
 	}
 
@@ -124,8 +122,6 @@ public:
 			CASPAR_LOG(warning) << "[video_decoder] Field repeat_pict not implemented.";
 		if (decoded_frame->best_effort_timestamp < seek_pts_)
 			return nullptr;
-		frame_decoded_++;
-		decoded_frame->pts = av_rescale(frame_number_++, stream_->time_base.num * stream_->r_frame_rate.num, stream_->time_base.num * stream_->r_frame_rate.num);
 		return decoded_frame;
 	}
 
@@ -134,7 +130,6 @@ public:
 		avcodec_flush_buffers(codec_context_.get());
 		seek_pts_ = stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_
 			+ (time * stream_->time_base.den / (AV_TIME_BASE * stream_->time_base.num));
-		frame_decoded_ = frame;
 	}
 
 	void invert_field_order (bool invert)
@@ -144,13 +139,19 @@ public:
 
 	uint32_t nb_frames()
 	{
-		return nb_frames_ == 0 ? frame_decoded_ : nb_frames_;
+		return nb_frames_;
 	}
 
 	boost::rational<int> frame_rate() const
 	{
 		return boost::rational<int>(stream_->r_frame_rate.num, stream_->r_frame_rate.den);
 	}
+
+	boost::rational<int> time_base() const
+	{
+		return boost::rational<int>(stream_->time_base.num, stream_->time_base.den);
+	}
+
 
 	std::wstring print() const
 	{		
@@ -168,4 +169,5 @@ std::wstring video_decoder::print() const{return impl_->print();}
 void video_decoder::seek(uint64_t time, uint32_t frame) { impl_->seek(time, frame);}
 void video_decoder::invert_field_order(bool invert) {impl_-> invert_field_order(invert);}
 boost::rational<int> video_decoder::frame_rate() const { return impl_->frame_rate(); };
+boost::rational<int> video_decoder::time_base() const { return impl_->time_base(); };
 }}

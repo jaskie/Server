@@ -53,7 +53,8 @@ public:
 	void seek(uint64_t time, uint32_t frame);
 	void invert_field_order(bool invert);
 	boost::rational<int> frame_rate() const;
-
+	boost::rational<int> time_base() const;
+	
 private:
 	struct implementation;
 	safe_ptr<implementation> impl_;

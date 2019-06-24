@@ -73,6 +73,7 @@ struct frame_muxer::implementation : boost::noncopyable
 	std::queue<safe_ptr<basic_frame>>				frame_buffer_;
 	display_mode::type								display_mode_;
 	const boost::rational<int>						in_fps_;
+	const boost::rational<int>						in_timebase_;
 	const video_format_desc							format_desc_;
 	bool											auto_transcode_;
 	bool											auto_deinterlace_;
@@ -89,6 +90,7 @@ struct frame_muxer::implementation : boost::noncopyable
 		
 	implementation(
 			boost::rational<int> in_fps,
+			boost::rational<int> in_timebase,
 			const safe_ptr<core::frame_factory>& frame_factory,
 			const std::string& filter_str,
 			bool thumbnail_mode,
@@ -96,6 +98,7 @@ struct frame_muxer::implementation : boost::noncopyable
 			)
 		: display_mode_(display_mode::invalid)
 		, in_fps_(in_fps)
+		, in_timebase_(in_timebase)
 		, format_desc_(frame_factory->get_video_format_desc())
 		, auto_transcode_(env::properties().get(L"configuration.auto-transcode", true))
 		, auto_deinterlace_(env::properties().get(L"configuration.auto-deinterlace", true))
@@ -341,9 +344,10 @@ struct frame_muxer::implementation : boost::noncopyable
 		if (display_mode_ == display_mode::scale_interlaced || (frame_factory_->get_use_software_scaler() && (format_desc_.width != static_cast<uint32_t>(frame->width) || format_desc_.height != static_cast<uint32_t>(frame->height))))
 			filter_str = append_filter(filter_str, (boost::format("SCALE=w=%1%:h=%2%:interl=1") %format_desc_.width %format_desc_.height).str());
 
-		if (in_fps_ != boost::rational<int>(format_desc_.time_scale, format_desc_.duration))
-			filter_str = append_filter(filter_str, (boost::format("FPS=%1%/%2%") % format_desc_.time_scale %format_desc_.duration).str());
-
+		if (in_fps_ != boost::rational<int>(format_desc_.time_scale, format_desc_.duration) && display_mode_ != display_mode::interlace)
+			filter_str = append_filter(filter_str, (boost::format("FPS=%1%/%2%") %format_desc_.time_scale %format_desc_.duration).str());
+		if (in_fps_ != boost::rational<int>(format_desc_.time_scale * 2, format_desc_.duration) && display_mode_ == display_mode::interlace)
+			filter_str = append_filter(filter_str, (boost::format("FPS=%1%/%2%") %(format_desc_.time_scale * 2) %format_desc_.duration).str());
 
 		if(display_mode_ == display_mode::invalid)
 		{
@@ -360,7 +364,7 @@ struct frame_muxer::implementation : boost::noncopyable
 		filter_.reset (new filter(
 			frame->width,
 			frame->height,
-			av_make_q(in_fps_.denominator(), in_fps_.numerator()),
+			av_make_q(in_timebase_.numerator(), in_timebase_.denominator()),
 			av_make_q(in_fps_.numerator(), in_fps_.denominator()),
 			frame->sample_aspect_ratio,
 			static_cast<AVPixelFormat>(frame->format),
@@ -388,11 +392,12 @@ struct frame_muxer::implementation : boost::noncopyable
 
 frame_muxer::frame_muxer(
 		boost::rational<int> in_fps,
+		boost::rational<int> in_timebase,
 		const safe_ptr<core::frame_factory>& frame_factory,
 		bool thumbnail_mode,
 		const core::channel_layout& audio_channel_layout,
 		const std::string& filter)
-	: impl_(new implementation(in_fps, frame_factory, filter, thumbnail_mode, audio_channel_layout)){}
+	: impl_(new implementation(in_fps, in_timebase, frame_factory, filter, thumbnail_mode, audio_channel_layout)){}
 void frame_muxer::push(const std::shared_ptr<AVFrame>& video_frame, int hints, int frame_timecode){impl_->push(video_frame, hints, frame_timecode);}
 void frame_muxer::push(const std::shared_ptr<core::audio_buffer>& audio_samples){return impl_->push(audio_samples);}
 void frame_muxer::clear(){return impl_->clear();}
