@@ -27,7 +27,6 @@
 #include "../../ffmpeg/producer/filter/filter.h"
 #include "../../ffmpeg/producer/util/util.h"
 #include "../../ffmpeg/producer/muxer/frame_muxer.h"
-#include "../../ffmpeg/producer/muxer/display_mode.h"
 
 #include <common/concurrency/executor.h>
 #include <common/diagnostics/graph.h>

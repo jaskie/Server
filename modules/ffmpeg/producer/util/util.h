@@ -76,17 +76,15 @@ safe_ptr<AVFrame> create_frame();
 bool is_sane_fps(AVRational time_base);
 AVRational fix_time_base(AVRational time_base);
 
-double read_fps(AVFormatContext& context, double fail_value);
-
-std::wstring print_mode(size_t width, size_t height, double fps, bool interlaced);
+std::wstring print_mode(size_t width, size_t height, boost::rational<int> fps, bool interlaced);
 
 std::wstring probe_stem(const std::wstring stem, const std::vector<std::wstring>& invalid_exts);
 std::wstring probe_stem(const std::wstring stem);
 bool is_valid_file(const std::wstring filename, const std::vector<std::wstring>& invalid_exts);
 bool is_valid_file(const std::wstring filename);
 bool try_get_duration(const std::wstring filename, std::int64_t& duration, boost::rational<std::int64_t>& time_base);
-int64_t ffmpeg_time_from_frame_number(int32_t frame_number, double fps);
-int32_t frame_number_from_ffmpeg_time(int64_t time, double fps);
+int64_t ffmpeg_time_from_frame_number(int32_t frame_number, int fps_num, int fps_den);
+int64_t frame_number_from_ffmpeg_time(int64_t time, int fps_num, int fps_den);
 std::vector<int> parse_list(const std::string& list);
 
 core::channel_layout get_audio_channel_layout(const AVCodecContext& context, const std::wstring& custom_channel_order);

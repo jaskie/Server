@@ -21,8 +21,6 @@
 
 #pragma once
 
-#include "display_mode.h"
-
 #include <common/memory/safe_ptr.h>
 
 #include <core/mixer/audio/audio_mixer.h>

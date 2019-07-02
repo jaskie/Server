@@ -110,7 +110,7 @@ struct ffmpeg_producer : public core::frame_producer
 	core::channel_layout										audio_channel_layout_;
 	const std::wstring											custom_channel_order_;	
 
-	const double												fps_;
+	const boost::rational<int>									out_fps_;
 	uint32_t													start_;
 	const uint32_t												length_;
 	const bool													thumbnail_mode_;
@@ -133,7 +133,7 @@ public:
 		, format_desc_(frame_factory->get_video_format_desc())
 		, initial_logger_disabler_(temporary_disable_logging_for_thread(thumbnail_mode))
 		, input_(graph_, filename_, thumbnail_mode)
-		, fps_(read_fps(*input_.format_context().get(), format_desc_.fps))
+		, out_fps_(boost::rational<int>(format_desc_.time_scale, format_desc_.duration))
 		, length_(length)
 		, thumbnail_mode_(thumbnail_mode)
 		, alpha_mode_(alpha_mode)
@@ -244,11 +244,11 @@ public:
 	{
 		monitor_subject_	<< core::monitor::message("/profiler/time")		% frame_timer_.elapsed() % (1.0/format_desc_.fps);			
 								
-		monitor_subject_	<< core::monitor::message("/file/time")			% (file_frame_number()/fps_) 
-																			% (file_nb_frames()/fps_)
+		monitor_subject_	<< core::monitor::message("/file/time")			% (file_frame_number()/out_fps_) 
+																			% (file_nb_frames()/out_fps_)
 							<< core::monitor::message("/file/frame")			% static_cast<int32_t>(file_frame_number())
 																			% static_cast<int32_t>(file_nb_frames())
-							<< core::monitor::message("/file/fps")			% fps_
+							<< core::monitor::message("/file/fps")			% out_fps_
 							<< core::monitor::message("/file/path")			% path_relative_to_media_
 							<< core::monitor::message("/loop")				% loop_;
 	}
@@ -363,7 +363,7 @@ public:
 		info.add(L"width",				video_decoder_ ? video_decoder_->width() : 0);
 		info.add(L"height",				video_decoder_ ? video_decoder_->height() : 0);
 		info.add(L"progressive",		video_decoder_ ? video_decoder_->is_progressive() : false);
-		info.add(L"fps",				fps_);
+		info.add(L"fps",				out_fps_);
 		info.add(L"loop",				loop_);
 		auto nb_frames2 = nb_frames();
 		info.add(L"nb-frames",			nb_frames2 == std::numeric_limits<int64_t>::max() ? -1 : nb_frames2);
@@ -376,7 +376,7 @@ public:
 
 	std::wstring print_mode() const
 	{
-		return video_decoder_ ? ffmpeg::print_mode(video_decoder_->width(), video_decoder_->height(), fps_, !video_decoder_->is_progressive()) : L"";
+		return video_decoder_ ? ffmpeg::print_mode(video_decoder_->width(), video_decoder_->height(), video_decoder_->frame_rate(), !video_decoder_->is_progressive()) : L"";
 	}
 					
 	std::wstring do_call(const std::wstring& param)
@@ -415,7 +415,7 @@ public:
 
 	void seek(uint32_t frame)
 	{
-		int64_t time_to_seek = ffmpeg_time_from_frame_number(frame, fps_);
+		int64_t time_to_seek = ffmpeg_time_from_frame_number(frame, out_fps_.numerator(), out_fps_.denominator());
 		input_.seek(time_to_seek);
 		if (video_decoder_)
 			video_decoder_->seek(time_to_seek, frame);

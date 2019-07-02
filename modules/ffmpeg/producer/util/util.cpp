@@ -222,7 +222,7 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 		auto target_desc = get_pixel_format_desc(static_cast<AVPixelFormat>(target_pix_fmt), width, height);
 
 		write = frame_factory->create_frame(tag, target_desc, audio_channel_layout);
-		write->set_type(get_mode(*decoded_frame));
+		write->set_type(frame_factory->get_video_format_desc().field_mode);
 		write->set_timecode(decoded_frame->display_picture_number);
 
 		std::shared_ptr<SwsContext> sws_context;
@@ -272,7 +272,7 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 	else
 	{
 		write = frame_factory->create_frame(tag, desc, audio_channel_layout);
-		write->set_type(get_mode(*decoded_frame));
+		write->set_type(frame_factory->get_video_format_desc().field_mode);
 		write->set_timecode(decoded_frame->display_picture_number);
 
 		for(int n = 0; n < static_cast<int>(desc.planes.size()); ++n)
@@ -339,7 +339,7 @@ AVRational fix_time_base(AVRational time_base)
 	return time_base;
 }
 
-double read_fps(AVFormatContext& context, double fail_value)
+boost::rational<int> read_fps(AVFormatContext& context, boost::rational<int> fail_value)
 {						
 	auto video_index = av_find_best_stream(&context, AVMEDIA_TYPE_VIDEO, -1, -1, 0, 0);
 	auto audio_index = av_find_best_stream(&context, AVMEDIA_TYPE_AUDIO, -1, -1, 0, 0);
@@ -354,7 +354,7 @@ double read_fps(AVFormatContext& context, double fail_value)
  
 		if(is_sane_fps(frame_rate_time_base))
 		{
-			return static_cast<double>(frame_rate_time_base.den) / static_cast<double>(frame_rate_time_base.num);
+			return boost::rational<int>(frame_rate_time_base.num, frame_rate_time_base.den);
 		}
 
 		AVRational time_base = video_context->time_base;
@@ -364,11 +364,11 @@ double read_fps(AVFormatContext& context, double fail_value)
 			try
 			{
 				auto meta = read_flv_meta_info(context.filename);
-				return boost::lexical_cast<double>(meta["framerate"]);
+				return boost::rational<int>(static_cast<int>(boost::lexical_cast<double>(meta["framerate"])), 1);
 			}
 			catch(...)
 			{
-				return 0.0;
+				return fail_value;
 			}
 		}
 		else
@@ -392,32 +392,16 @@ double read_fps(AVFormatContext& context, double fail_value)
 			}
 		}
 		
-		double fps = static_cast<double>(time_base.den) / static_cast<double>(time_base.num);
-
-		double closest_fps = 0.0;
-		for(int n = 0; n < core::video_format::count; ++n)
-		{
-			auto format = core::video_format_desc::get(static_cast<core::video_format::type>(n));
-
-			double diff1 = std::abs(format.fps - fps);
-			double diff2 = std::abs(closest_fps - fps);
-
-			if(diff1 < diff2)
-				closest_fps = format.fps;
-		}
-	
-		return closest_fps;
+		return boost::rational<int>(time_base.den, time_base.num);
 	}
 
 	return fail_value;	
 }
 
-
-std::wstring print_mode(size_t width, size_t height, double fps, bool interlaced)
+std::wstring print_mode(size_t width, size_t height, boost::rational<int> fps, bool interlaced)
 {
 	std::wostringstream fps_ss;
-	fps_ss << std::fixed << std::setprecision(2) << (!interlaced ? fps : 2.0 * fps);
-
+	fps_ss << std::fixed << std::setprecision(2) << (boost::rational_cast<double>(fps));
 	return boost::lexical_cast<std::wstring>(width) + L"x" + boost::lexical_cast<std::wstring>(height) + (!interlaced ? L"p" : L"i") + fps_ss.str();
 }
 
@@ -469,16 +453,13 @@ bool try_get_duration(const std::wstring filename, std::int64_t& duration, boost
 	if(avformat_find_stream_info(context.get(), nullptr) < 0)
 		return false;
 
-	const auto fps = read_fps(*context, 1.0);
-		
-	const auto rational_fps = boost::rational<std::int64_t>(static_cast<int>(fps * AV_TIME_BASE), AV_TIME_BASE);
-	
-	duration = boost::rational_cast<std::int64_t>(context->duration * rational_fps / AV_TIME_BASE);
-
-	if (rational_fps == 0)
+	auto fps = read_fps(*context, boost::rational<int>(1, 1));
+	if (fps.denominator() == 0)
 		return false;
 
-	time_base = 1/rational_fps;
+	duration = av_rescale(context->duration, fps.denominator(), fps.numerator());
+
+	time_base = boost::rational<std::int64_t>(fps.denominator(), fps.numerator());
 
 	return true;
 }
@@ -557,14 +538,14 @@ std::int64_t create_channel_layout_bitmask(int num_channels)
 	return static_cast<std::int64_t>(result);
 }
 
-int64_t ffmpeg_time_from_frame_number(int32_t frame_number, double fps)
+int64_t ffmpeg_time_from_frame_number(int32_t frame_number, int fps_num, int fps_den)
 {
-	return static_cast<std::int64_t>(frame_number * static_cast<std::int64_t>(AV_TIME_BASE / fps));
+	return av_rescale(frame_number * AV_TIME_BASE, fps_den, fps_num);
 }
 
-int32_t frame_number_from_ffmpeg_time(int64_t time, double fps)
+int64_t frame_number_from_ffmpeg_time(int64_t time, int fps_num, int fps_den)
 {
-	return static_cast<std::int32_t>(time * fps / AV_TIME_BASE);
+	return av_rescale(time, fps_num, fps_den * AV_TIME_BASE);
 }
 
 std::vector<int> parse_list(const std::string& list)

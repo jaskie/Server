@@ -76,8 +76,6 @@ public:
 	void clear_blend_modes();
 	void set_straight_alpha_output(bool value);
 	bool get_straight_alpha_output();
-	void set_use_software_scaler(bool value);
-	virtual bool get_use_software_scaler() const;
 
 	float get_master_volume();
 	void set_master_volume(float volume);

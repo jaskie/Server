@@ -100,9 +100,6 @@
     <ClInclude Include="producer\muxer\frame_muxer.h">
       <Filter>source\producer\muxer</Filter>
     </ClInclude>
-    <ClInclude Include="producer\muxer\display_mode.h">
-      <Filter>source\producer\muxer</Filter>
-    </ClInclude>
     <ClInclude Include="tbb_avcodec.h">
       <Filter>source</Filter>
     </ClInclude>
