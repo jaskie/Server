@@ -498,7 +498,7 @@ public:
 	{
 		if (frame == std::numeric_limits<uint32_t>::max()) 
 			return std::numeric_limits<int64_t>::max();
-		return av_rescale(frame * AV_TIME_BASE, out_fps_.denominator(), out_fps_.numerator());
+		return av_rescale(frame, out_fps_.denominator() * AV_TIME_BASE, out_fps_.numerator());
 	}
 
 };

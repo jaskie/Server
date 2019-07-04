@@ -540,7 +540,7 @@ std::int64_t create_channel_layout_bitmask(int num_channels)
 
 int64_t ffmpeg_time_from_frame_number(int32_t frame_number, int fps_num, int fps_den)
 {
-	return av_rescale(frame_number * AV_TIME_BASE, fps_den, fps_num);
+	return av_rescale(frame_number, fps_den * AV_TIME_BASE, fps_num);
 }
 
 int64_t frame_number_from_ffmpeg_time(int64_t time, int fps_num, int fps_den)

@@ -154,8 +154,7 @@ public:
 	{
 		avcodec_flush_buffers(codec_context_.get());
 		flush_resampler();
-		seek_pts_ = stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_
-			+ (time * stream_->time_base.den / (AV_TIME_BASE * stream_->time_base.num));
+		seek_pts_ = stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_ + (time * stream_->time_base.den / (AV_TIME_BASE * stream_->time_base.num));
 	}
 	
 	std::wstring print() const
