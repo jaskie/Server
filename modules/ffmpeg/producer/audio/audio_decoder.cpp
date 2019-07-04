@@ -71,7 +71,7 @@ public:
 		, format_(format)
 		, channel_layout_(get_audio_channel_layout(*codec_context_, custom_channel_order))
 		, swr_(alloc_resampler())
-		, stream_start_pts_(stream_->start_time)
+		, stream_start_pts_(stream_->start_time == AV_NOPTS_VALUE ? 0 : stream_->start_time)
 		, buffer_(BUFFER_SIZE)
 	{
 		seek_pts_ = 0;
@@ -114,21 +114,26 @@ public:
 			int got_frame = 0;
 			safe_ptr<AVFrame> frame = create_frame();
 			int ret = avcodec_decode_audio4(codec_context_.get(), frame.get(), &got_frame, pkt.get());
-			int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(frame.get());
-			if (ret >= 0 && got_frame && frame_time_stamp >= seek_pts_)
+			if (ret < 0 || !got_frame)
+				return nullptr;
+			if (frame->pts == AV_NOPTS_VALUE)
+				frame->pts = frame->best_effort_timestamp;
+			if (frame->pts != AV_NOPTS_VALUE)
+				frame->pts -= stream_start_pts_;
+			if (frame->pts < seek_pts_)
+				return nullptr;
+
+			const uint8_t **in = const_cast<const uint8_t**>(frame->extended_data);
+			uint8_t* out[] = { reinterpret_cast<uint8_t*>(buffer_.data()) };
+			int n_samples = swr_convert(swr_.get(),
+				out,
+				BUFFER_SIZE / codec_context_->channels,
+				in,
+				frame->nb_samples);
+			if (n_samples > 0)
 			{
-				const uint8_t **in = const_cast<const uint8_t**>(frame->extended_data);
-				uint8_t* out[] = { reinterpret_cast<uint8_t*>(buffer_.data()) };
-				int n_samples = swr_convert(swr_.get(),
-					out,
-					BUFFER_SIZE / codec_context_->channels,
-					in,
-					frame->nb_samples);
-				if (n_samples > 0)
-				{
-					const auto samples = reinterpret_cast<uint32_t*>(*out);
-					return std::make_shared<core::audio_buffer>(samples, samples + n_samples*codec_context_->channels);
-				}
+				const auto samples = reinterpret_cast<uint32_t*>(*out);
+				return std::make_shared<core::audio_buffer>(samples, samples + n_samples*codec_context_->channels);
 			}
 		}
 		catch (...) {}
