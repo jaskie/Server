@@ -267,6 +267,7 @@ struct frame_muxer::implementation : boost::noncopyable
 	{
 		std::string filter_str = narrow(filter_str_);
 
+
 		auto frame_mode = get_mode(*frame);
 		int fixed_height = frame->height;
 		if (fixed_height == 608 && frame->width == 720) // fix for IMX frames with VBI lines
@@ -274,21 +275,40 @@ struct frame_muxer::implementation : boost::noncopyable
 			filter_str = append_filter(filter_str, "crop=720:576:0:32");
 			fixed_height = 576;
 		}
-		if (format_desc_.width != static_cast<uint32_t>(frame->width) || format_desc_.height != static_cast<uint32_t>(fixed_height))
-			filter_str = append_filter(filter_str, (boost::format("scale=w=%1%:h=%2%:interl=1") % format_desc_.width %format_desc_.height).str());
 
-		if (force_deinterlace || (format_desc_.field_mode == field_mode::progressive && frame_mode != field_mode::progressive))
-		{
-			filter_str = append_filter(filter_str, "bwdif");
-			if (in_fps_ != boost::rational<int>(format_desc_.time_scale, format_desc_.duration))
-				filter_str = append_filter(filter_str, (boost::format("fps=fps=%1%/%2%") % format_desc_.time_scale %format_desc_.duration).str());
-		}
+		if (force_deinterlace)
+			filter_str = append_filter(filter_str, "yadif");
 
-		if (format_desc_.field_mode != field_mode::progressive && frame_mode == field_mode::progressive)
+		auto filtered_fps = in_fps_;
+
+		if (filter_str_.empty())
 		{
-			filter_str = append_filter(filter_str, format_desc_.field_mode == field_mode::lower ? "interlace=scan=bff" : "interlace=scan=tff");
-			if (in_fps_ != boost::rational<int>(format_desc_.time_scale * 2, format_desc_.duration))
+			if (format_desc_.field_mode != field_mode::progressive && frame_mode != field_mode::progressive 
+				&& (format_desc_.width > static_cast<uint32_t>(frame->width) || format_desc_.height > static_cast<uint32_t>(fixed_height)))
+			{
+				filter_str = append_filter(filter_str, "bwdif");
+				filter_str = append_filter(filter_str, (boost::format("scale=w=%1%:h=%2%") % format_desc_.width %format_desc_.height).str());
+				filter_str = append_filter(filter_str, format_desc_.field_mode == field_mode::lower ? "interlace=scan=bff" : "interlace=scan=tff");
+			}
+			else
+				if (format_desc_.width != static_cast<uint32_t>(frame->width) || format_desc_.height != static_cast<uint32_t>(fixed_height))
+					filter_str = append_filter(filter_str, (boost::format("scale=w=%1%:h=%2%:interl=1") %format_desc_.width %format_desc_.height).str());
+
+			if (format_desc_.field_mode == field_mode::progressive && frame_mode != field_mode::progressive)
+			{
+				filter_str = append_filter(filter_str, "bwdif");
+				filtered_fps *= 2;
+			}
+
+			if (format_desc_.field_mode != field_mode::progressive && frame_mode == field_mode::progressive && filtered_fps >= boost::rational<int>(format_desc_.time_scale * 2, format_desc_.duration))
+			{
+				filter_str = append_filter(filter_str, format_desc_.field_mode == field_mode::lower ? "interlace=scan=bff" : "interlace=scan=tff");
+				filtered_fps /= 2;
+			}
+
+			if (filtered_fps != boost::rational<int>(format_desc_.time_scale, format_desc_.duration))
 				filter_str = append_filter(filter_str, (boost::format("fps=fps=%1%/%2%") % format_desc_.time_scale %format_desc_.duration).str());
+
 		}
 		auto out_pix_fmts = std::vector<AVPixelFormat>();
 		out_pix_fmts.push_back(AV_PIX_FMT_BGRA);
