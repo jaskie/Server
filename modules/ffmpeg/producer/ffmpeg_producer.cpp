@@ -421,6 +421,7 @@ public:
 		if (audio_decoder_)
 			audio_decoder_->seek(time_to_seek);
 		decoded_frame_time_ = 0;
+		is_eof_ = false;
 	}
 
 
