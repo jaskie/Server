@@ -222,7 +222,7 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 		auto target_desc = get_pixel_format_desc(static_cast<AVPixelFormat>(target_pix_fmt), width, height);
 
 		write = frame_factory->create_frame(tag, target_desc, audio_channel_layout);
-		write->set_type(frame_factory->get_video_format_desc().field_mode);
+		write->set_type(get_mode(*decoded_frame));
 		write->set_timecode(decoded_frame->display_picture_number);
 
 		std::shared_ptr<SwsContext> sws_context;
@@ -272,7 +272,7 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 	else
 	{
 		write = frame_factory->create_frame(tag, desc, audio_channel_layout);
-		write->set_type(frame_factory->get_video_format_desc().field_mode);
+		write->set_type(get_mode(*decoded_frame));
 		write->set_timecode(decoded_frame->display_picture_number);
 
 		for(int n = 0; n < static_cast<int>(desc.planes.size()); ++n)
