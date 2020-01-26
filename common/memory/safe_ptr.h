@@ -106,6 +106,12 @@ public:
         safe_ptr<T>(std::move(other)).swap(*this);
         return *this;
     }
+
+	safe_ptr<T>& operator=(safe_ptr<T>& other)
+	{
+		p_ = other.p_;
+		return *this;
+	}
 	
     T& operator*() const 
     { 

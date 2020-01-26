@@ -71,8 +71,8 @@ struct frame_muxer::implementation : boost::noncopyable
 	std::queue<std::queue<safe_ptr<write_frame>>>	video_streams_;
 	std::queue<core::audio_buffer>					audio_streams_;
 	std::queue<safe_ptr<basic_frame>>				frame_buffer_;
-	display_mode::type								display_mode_;
 	const boost::rational<int>						in_fps_;
+	const boost::rational<int>						in_timebase_;
 	const video_format_desc							format_desc_;
 	bool											auto_transcode_;
 	bool											auto_deinterlace_;
@@ -89,13 +89,14 @@ struct frame_muxer::implementation : boost::noncopyable
 		
 	implementation(
 			boost::rational<int> in_fps,
+			boost::rational<int> in_timebase,
 			const safe_ptr<core::frame_factory>& frame_factory,
 			const std::string& filter_str,
 			bool thumbnail_mode,
 			const core::channel_layout& audio_channel_layout
 			)
-		: display_mode_(display_mode::invalid)
-		, in_fps_(in_fps)
+		: in_fps_(in_fps)
+		, in_timebase_(in_timebase)
 		, format_desc_(frame_factory->get_video_format_desc())
 		, auto_transcode_(env::properties().get(L"configuration.auto-transcode", true))
 		, auto_deinterlace_(env::properties().get(L"configuration.auto-deinterlace", true))
@@ -119,11 +120,12 @@ struct frame_muxer::implementation : boost::noncopyable
 	{		
 		if(!video_frame)
 			return;
+		bool need_update_filter = false;
 
 		if (!filter_ || (video_frame->data[0] && filter_->is_frame_format_changed(video_frame)))
 		{
-			CASPAR_LOG(debug) << L"[frame_muxer] Frame format has changed. Resetting display mode.";
-			display_mode_ = display_mode::invalid;
+			CASPAR_LOG(debug) << L"[frame_muxer] Frame format has changed. Resetting filter mode.";
+			need_update_filter = true;
 		}
 				
 		if (video_frame == flush_video())
@@ -134,7 +136,6 @@ struct frame_muxer::implementation : boost::noncopyable
 		else if(video_frame == empty_video())
 		{
 			video_streams_.back().push(make_safe<core::write_frame>(this, audio_channel_layout_));
-			display_mode_ = display_mode::simple;
 			CASPAR_LOG(trace) << "Muxer::push empty video";
 		}
 		else
@@ -144,7 +145,7 @@ struct frame_muxer::implementation : boost::noncopyable
 			if(auto_deinterlace_ && force_deinterlacing_ != deinterlace_hint)
 			{
 				force_deinterlacing_ = deinterlace_hint;
-				display_mode_ = display_mode::invalid;
+				need_update_filter = true;
 			}
 
 			if(hints & core::frame_producer::ALPHA_HINT)
@@ -154,8 +155,8 @@ struct frame_muxer::implementation : boost::noncopyable
 			if(video_frame->format == CASPAR_PIX_FMT_LUMA) // CASPAR_PIX_FMT_LUMA is not valid for filter, change it to GRAY8
 				video_frame->format = AV_PIX_FMT_GRAY8;
 
-			if(!filter_ || display_mode_ == display_mode::invalid)
-				update_display_mode(video_frame, force_deinterlacing_);
+			if(!filter_ || need_update_filter)
+				update_filter(video_frame, force_deinterlacing_);
 
 			filter_->push(video_frame);
 
@@ -204,86 +205,39 @@ struct frame_muxer::implementation : boost::noncopyable
 	}
 
 	bool video_ready2() const
-	{		
-		switch(display_mode_)
-		{
-		case display_mode::interlace:	
-		case display_mode::half:
-			return video_streams_.front().size() >= 2;
-		default:										
-			return video_streams_.front().size() >= 1;
-		}
+	{
+		return video_streams_.front().size() >= 1;
 	}
 	
 	bool audio_ready2() const
 	{
-		switch(display_mode_)
-		{
-		case display_mode::duplicate:					
-			return audio_streams_.front().size()/2 >= audio_cadence_.front() * audio_channel_layout_.num_channels;
-		default:										
-			return audio_streams_.front().size() >= audio_cadence_.front() * audio_channel_layout_.num_channels;
-		}
+		return audio_streams_.front().size() >= audio_cadence_.front() * audio_channel_layout_.num_channels;
 	}
 		
 	std::shared_ptr<basic_frame> poll()
 	{
-		if(!frame_buffer_.empty())
+		if (!frame_buffer_.empty())
 		{
 			auto frame = frame_buffer_.front();
-			frame_buffer_.pop();	
+			frame_buffer_.pop();
 			return frame;
 		}
 
-		if(video_streams_.size() > 1 && audio_streams_.size() > 1 && (!video_ready2() || !audio_ready2()))
+		if (video_streams_.size() > 1 && audio_streams_.size() > 1 && (!video_ready2() || !audio_ready2()))
 		{
-			if(!video_streams_.front().empty() || !audio_streams_.front().empty())
+			if (!video_streams_.front().empty() || !audio_streams_.front().empty())
 				CASPAR_LOG(trace) << "Truncating: " << video_streams_.front().size() << L" video-frames, " << audio_streams_.front().size() << L" audio-samples.";
 
 			video_streams_.pop();
 			audio_streams_.pop();
 		}
 
-		if(!video_ready2() || !audio_ready2() || display_mode_ == display_mode::invalid)
+		if (!video_ready2() || !audio_ready2())
 			return nullptr;
-				
-		auto frame1				= pop_video();
-		frame1->audio_data()	= pop_audio();
 
-		switch(display_mode_)
-		{
-		case display_mode::simple:						
-		case display_mode::deinterlace_bob:				
-		case display_mode::deinterlace:	
-			{
-				frame_buffer_.push(frame1);
-				break;
-			}
-		case display_mode::interlace:					
-		case display_mode::scale_interlaced:	
-			{				
-				auto frame2 = pop_video();
-				frame_buffer_.push(core::basic_frame::interlace(frame1, frame2, format_desc_.field_mode));	
-				break;
-			}
-		case display_mode::duplicate:	
-			{
-				auto frame2				= make_safe<core::write_frame>(*frame1);
-				frame2->audio_data()	= pop_audio();
-
-				frame_buffer_.push(frame1);
-				frame_buffer_.push(frame2);
-				break;
-			}
-		case display_mode::half:	
-			{				
-				pop_video(); // Throw away
-
-				frame_buffer_.push(frame1);
-				break;
-			}
-		}
-		
+		auto frame1 = pop_video();
+		frame1->audio_data() = pop_audio();
+		frame_buffer_.push(frame1);
 		return frame_buffer_.empty() ? nullptr : poll();
 	}
 	
@@ -309,61 +263,67 @@ struct frame_muxer::implementation : boost::noncopyable
 		return samples;
 	}
 				
-	void update_display_mode(const std::shared_ptr<AVFrame>& frame, bool force_deinterlace)
+	void update_filter(const std::shared_ptr<AVFrame>& frame, bool force_deinterlace)
 	{
 		std::string filter_str = narrow(filter_str_);
 
-		display_mode_ = display_mode::simple;
 
-		auto mode = get_mode(*frame);
-		if(mode == core::field_mode::progressive && frame->height < 720 && boost::rational_cast<double>(in_fps_) < 50.0) // SD frames are interlaced. Probably incorrect meta-data. Fix it.
-			mode = core::field_mode::upper;
-
-		double fps = boost::rational_cast<double>(in_fps_);
-
-		display_mode_ = get_display_mode(mode, fps, format_desc_.field_mode, format_desc_.fps);
-			
-		if((frame->height != 480 || format_desc_.height != 486) && // don't deinterlace for NTSC DV
-				display_mode_ == display_mode::simple && mode != core::field_mode::progressive && format_desc_.field_mode != core::field_mode::progressive && 
-				((size_t)frame->height != format_desc_.height && !(frame->width == 720 && frame->height == 608 && format_desc_.height == 576)))
-			display_mode_ = display_mode::scale_interlaced; // The frame will be scaled	
-
-		// ALWAYS de-interlace, until we have GPU de-interlacing.
-		if(force_deinterlacing_ && frame->interlaced_frame && display_mode_ != display_mode::deinterlace_bob && display_mode_ != display_mode::deinterlace)
-			display_mode_ = display_mode::scale_interlaced;
-		
-		if (frame->height == 608 && frame->width == 720) // fix for IMX frames with VBI lines
-			filter_str = append_filter(filter_str, "CROP=720:576:0:32");
-		if(display_mode_ == display_mode::deinterlace)
-			filter_str = append_filter(filter_str, "YADIF=0:-1");
-		else if(display_mode_ == display_mode::deinterlace_bob)
-			filter_str = append_filter(filter_str, "YADIF=1:-1");
-		else if (display_mode_ == display_mode::scale_interlaced)
-			filter_str = append_filter(filter_str, (boost::format("SCALE=w=%1%:h=%2%:interl=1") %format_desc_.width %format_desc_.height).str());
-
-		if (in_fps_ != boost::rational<int>(format_desc_.time_scale, format_desc_.duration))
-			filter_str = append_filter(filter_str, (boost::format("FPS=%1%/%2%") % format_desc_.time_scale %format_desc_.duration).str());
-
-		if(display_mode_ == display_mode::invalid)
+		auto frame_mode = get_mode(*frame);
+		int fixed_height = frame->height;
+		if (fixed_height == 608 && frame->width == 720) // fix for IMX frames with VBI lines
 		{
-			CASPAR_LOG(debug) << L"[frame_muxer] Auto-transcode: Failed to detect display-mode.";
-			display_mode_ = display_mode::simple;
+			filter_str = append_filter(filter_str, "crop=720:576:0:32");
+			fixed_height = 576;
 		}
 
+		if (force_deinterlace)
+			filter_str = append_filter(filter_str, "yadif");
+
+		auto filtered_fps = in_fps_;
+
+		if (filter_str_.empty())
+		{
+			if (format_desc_.field_mode != field_mode::progressive && frame_mode != field_mode::progressive 
+				&& (format_desc_.width > static_cast<uint32_t>(frame->width) || format_desc_.height > static_cast<uint32_t>(fixed_height)))
+			{
+				filter_str = append_filter(filter_str, "bwdif");
+				filter_str = append_filter(filter_str, (boost::format("scale=w=%1%:h=%2%") % format_desc_.width %format_desc_.height).str());
+				filter_str = append_filter(filter_str, format_desc_.field_mode == field_mode::lower ? "interlace=scan=bff" : "interlace=scan=tff");
+			}
+			else
+				if (format_desc_.width != static_cast<uint32_t>(frame->width) || format_desc_.height != static_cast<uint32_t>(fixed_height))
+					filter_str = append_filter(filter_str, (boost::format("scale=w=%1%:h=%2%:interl=1") %format_desc_.width %format_desc_.height).str());
+
+			if (format_desc_.field_mode == field_mode::progressive && frame_mode != field_mode::progressive)
+			{
+				filter_str = append_filter(filter_str, "bwdif");
+				filtered_fps *= 2;
+			}
+
+			if (format_desc_.field_mode != field_mode::progressive && frame_mode == field_mode::progressive && filtered_fps >= boost::rational<int>(format_desc_.time_scale * 2, format_desc_.duration))
+			{
+				filter_str = append_filter(filter_str, format_desc_.field_mode == field_mode::lower ? "interlace=scan=bff" : "interlace=scan=tff");
+				filtered_fps /= 2;
+			}
+
+			if (filtered_fps != boost::rational<int>(format_desc_.time_scale, format_desc_.duration))
+				filter_str = append_filter(filter_str, (boost::format("fps=fps=%1%/%2%") % format_desc_.time_scale %format_desc_.duration).str());
+
+		}
 		auto out_pix_fmts = std::vector<AVPixelFormat>();
 		out_pix_fmts.push_back(AV_PIX_FMT_BGRA);
-
+		
 		filter_.reset (new filter(
 			frame->width,
 			frame->height,
-			av_make_q(in_fps_.denominator(), in_fps_.numerator()),
+			av_make_q(in_timebase_.numerator(), in_timebase_.denominator()),
 			av_make_q(in_fps_.numerator(), in_fps_.denominator()),
 			frame->sample_aspect_ratio,
 			static_cast<AVPixelFormat>(frame->format),
 			out_pix_fmts,
 			filter_str));
 
-			CASPAR_LOG(debug) << L"[frame_muxer] " << display_mode_ << L" " << print_mode(frame->width, frame->height, fps, frame->interlaced_frame > 0);
+			CASPAR_LOG(debug) << L"[frame_muxer] " << print_mode(frame->width, fixed_height, in_fps_, frame->interlaced_frame > 0);
 	}
 	
 	void clear()
@@ -384,11 +344,12 @@ struct frame_muxer::implementation : boost::noncopyable
 
 frame_muxer::frame_muxer(
 		boost::rational<int> in_fps,
+		boost::rational<int> in_timebase,
 		const safe_ptr<core::frame_factory>& frame_factory,
 		bool thumbnail_mode,
 		const core::channel_layout& audio_channel_layout,
 		const std::string& filter)
-	: impl_(new implementation(in_fps, frame_factory, filter, thumbnail_mode, audio_channel_layout)){}
+	: impl_(new implementation(in_fps, in_timebase, frame_factory, filter, thumbnail_mode, audio_channel_layout)){}
 void frame_muxer::push(const std::shared_ptr<AVFrame>& video_frame, int hints, int frame_timecode){impl_->push(video_frame, hints, frame_timecode);}
 void frame_muxer::push(const std::shared_ptr<core::audio_buffer>& audio_samples){return impl_->push(audio_samples);}
 void frame_muxer::clear(){return impl_->clear();}

@@ -21,12 +21,12 @@
 
 #pragma once
 
-#include <memory>
+struct AVCodecContext;
+struct AVCodec;
+struct AVDictionary;
 
-struct AVFilterContext;
-
-namespace caspar { namespace ffmpeg {
+namespace caspar {
 	
-std::shared_ptr<void> make_parallel_yadif(AVFilterContext* ctx);
+int tbb_avcodec_open(AVCodecContext *avctx, const AVCodec *codec, AVDictionary ** options);
 
-}}
+}

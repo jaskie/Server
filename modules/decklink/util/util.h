@@ -173,6 +173,17 @@ static CComPtr<IDeckLinkDisplayMode> get_display_mode(const T& device, core::vid
 	return get_display_mode(device, get_decklink_video_format(fmt), pix_fmt, flag);
 }
 
+static unsigned int num_decklink_out_channels(int input_channels) 
+{
+	if (input_channels <= 2)
+		return 2;
+
+	if (input_channels <= 8)
+		return 8;
+
+	return 16;
+}
+
 template<typename T>
 static std::wstring get_version(T& iterator)
 {
@@ -372,16 +383,6 @@ struct configuration
 		return base_buffer_depth + (latency == low_latency ? 0 : 1) + (embedded_audio ? 1 : 0);
 	}
 
-	int num_out_channels() const
-	{
-		if (audio_layout.num_channels <= 2)
-			return 2;
-		
-		if (audio_layout.num_channels <= 8)
-			return 8;
-
-		return 16;
-	}
 };
 
 static void set_latency(

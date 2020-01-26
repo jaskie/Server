@@ -340,7 +340,6 @@ AMCPCommandPtr AMCPProtocolStrategy::CommandFactory(const std::wstring& str)
 	else if(s == TEXT("TLS"))			return std::make_shared<TlsCommand>();
 	else if(s == TEXT("VERSION"))		return std::make_shared<VersionCommand>();
 	else if(s == TEXT("BYE"))			return std::make_shared<ByeCommand>();
-	else if(s == TEXT("SET"))			return std::make_shared<SetCommand>();
 	else if(s == TEXT("THUMBNAIL"))		return std::make_shared<ThumbnailCommand>();
 	//else if(s == TEXT("MONITOR"))
 	//{

@@ -131,15 +131,6 @@ void MiscellaneousCommand::Setup(const std::vector<std::wstring>& parameters)
 			xmlData_ = dataStream.str();
 		}
 	}
-
-	// VIDEO MODE V\5\14\MODE
-	if((parameters.size() > 3) && parameters[1] == TEXT("5") && parameters[2] == TEXT("14"))
-	{
-		std::wstring value = parameters[3];
-		std::transform(value.begin(), value.end(), value.begin(), toupper);
-
-		this->pCIIStrategy_->GetChannel()->set_video_format_desc(core::video_format_desc::get(value));
-	}
 }
 
 void MiscellaneousCommand::Execute() 

@@ -178,7 +178,8 @@ struct filter::implementation
 			video_graph_in_ = filt_vsrc;
 			video_graph_out_ = filt_vsink;
 
-			CASPAR_LOG(trace) << L"Filter configured:\n" << avfilter_graph_dump(video_graph_.get(), nullptr);
+			CASPAR_LOG(trace) << L"Filter configured: " << filtergraph_.c_str();
+			CASPAR_LOG(trace) << L"Options: " << vsrc_options.c_str();
 		}
 		catch (...)
 		{

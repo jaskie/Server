@@ -58,6 +58,7 @@ struct blocking_decklink_consumer : boost::noncopyable
 {		
 	const int								channel_index_;
 	const configuration						config_;
+	const unsigned int						num_audio_channels_;
 
 	CComPtr<IDeckLink>						decklink_;
 	CComQIPtr<IDeckLinkOutput>				output_;
@@ -82,9 +83,10 @@ struct blocking_decklink_consumer : boost::noncopyable
 	executor								executor_;
 
 public:
-	blocking_decklink_consumer(const configuration& config, const core::video_format_desc& format_desc, int channel_index) 
+	blocking_decklink_consumer(const configuration& config, const core::video_format_desc& format_desc, int channel_index, int num_audio_channels)
 		: channel_index_(channel_index)
 		, config_(config)
+		, num_audio_channels_(num_decklink_out_channels(num_audio_channels))
 		, decklink_(get_device(config.device_index))
 		, output_(decklink_)
 		, keyer_(decklink_)
@@ -134,7 +136,7 @@ public:
 	
 	void enable_audio()
 	{
-		if(FAILED(output_->EnableAudioOutput(bmdAudioSampleRate48kHz, bmdAudioSampleType32bitInteger, config_.num_out_channels(), bmdAudioOutputStreamContinuous)))
+		if(FAILED(output_->EnableAudioOutput(bmdAudioSampleRate48kHz, bmdAudioSampleType32bitInteger, num_audio_channels_, bmdAudioOutputStreamContinuous)))
 				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Could not enable audio output."));
 				
 		CASPAR_LOG(info) << print() << L" Enabled embedded-audio.";
@@ -159,17 +161,17 @@ public:
 		}
 
 		if (core::needs_rearranging(
-				view, config_.audio_layout, config_.num_out_channels()))
+				view, config_.audio_layout, num_audio_channels_))
 		{
 			std::vector<int32_t> resulting_audio_data;
 			resulting_audio_data.resize(
-					sample_frame_count * config_.num_out_channels());
+					sample_frame_count * num_audio_channels_);
 
 			auto dest_view = core::make_multichannel_view<int32_t>(
 					resulting_audio_data.begin(), 
 					resulting_audio_data.end(),
 					config_.audio_layout,
-					config_.num_out_channels());
+					num_audio_channels_);
 
 			core::rearrange_or_rearrange_and_mix(
 					view, dest_view, core::default_mix_config_repository());
@@ -200,7 +202,7 @@ public:
 	bool try_consume_audio(std::pair<std::vector<int32_t>, size_t>& buffer)
 	{
 		size_t to_offer = (buffer.first.size() - buffer.second)
-				/ config_.num_out_channels();
+				/ num_audio_channels_;
 		auto begin = buffer.first.data() + buffer.second;
 		unsigned int samples_written;
 
@@ -215,7 +217,7 @@ public:
 		if (samples_written == to_offer)
 			return true; // depleted buffer
 
-		size_t consumed = samples_written * config_.num_out_channels();
+		size_t consumed = samples_written * num_audio_channels_;
 		buffer.second += consumed;
 
 
@@ -349,8 +351,8 @@ struct blocking_decklink_consumer_proxy : public core::frame_consumer
 {
 	const configuration						config_;
 	com_context<blocking_decklink_consumer>	context_;
-	std::vector<size_t>						audio_cadence_;
 	core::video_format_desc					format_desc_;
+	int										channel_index_;
 public:
 
 	blocking_decklink_consumer_proxy(const configuration& config)
@@ -371,20 +373,18 @@ public:
 
 	// frame_consumer
 	
-	virtual void initialize(const core::video_format_desc& format_desc, int channel_index) override
+	virtual void initialize(const core::video_format_desc& format_desc, const core::channel_layout& audio_channel_layout, int channel_index) override
 	{
-		context_.reset([&]{return new blocking_decklink_consumer(config_, format_desc, channel_index);});		
-		audio_cadence_ = format_desc.audio_cadence;		
 		format_desc_ = format_desc;
-
-		CASPAR_LOG(info) << print() << L" Successfully Initialized.";	
+		channel_index_ = channel_index;
+		context_.reset([&] {return new blocking_decklink_consumer(config_, format_desc, channel_index, audio_channel_layout.num_channels); });
+		CASPAR_LOG(info) << print() << L" Successfully Initialized.";
 	}
 	
 	virtual boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame) override
 	{
-		CASPAR_VERIFY(audio_cadence_.front() * frame->num_channels() == static_cast<size_t>(frame->audio_data().size()));
-		boost::range::rotate(audio_cadence_, std::begin(audio_cadence_)+1);
-
+		CASPAR_VERIFY(format_desc_.audio_cadence.front() * frame->num_channels() == static_cast<size_t>(frame->audio_data().size()));
+		boost::range::rotate(format_desc_.audio_cadence, std::begin(format_desc_.audio_cadence)+1);
 		return context_->send(frame);
 	}
 	

@@ -47,8 +47,8 @@ class input
 {
 public:
 	explicit input(const safe_ptr<diagnostics::graph> graph, const std::wstring& filename, bool thumbnail_mode);
-	safe_ptr<AVCodecContext> open_audio_codec(int& index);
-	safe_ptr<AVCodecContext> open_video_codec(int& index);
+	safe_ptr<AVCodecContext> open_audio_codec(AVStream** stream);
+	safe_ptr<AVCodecContext> open_video_codec(AVStream** stream);
 
 	bool try_pop_audio(std::shared_ptr<AVPacket>& packet);
 	bool try_pop_video(std::shared_ptr<AVPacket>& packet);

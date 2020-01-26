@@ -27,7 +27,6 @@
 #include "../../ffmpeg/producer/filter/filter.h"
 #include "../../ffmpeg/producer/util/util.h"
 #include "../../ffmpeg/producer/muxer/frame_muxer.h"
-#include "../../ffmpeg/producer/muxer/display_mode.h"
 
 #include <common/concurrency/executor.h>
 #include <common/diagnostics/graph.h>
@@ -307,7 +306,7 @@ public:
 		if (!muxer_ || in_frame_rate_ != in_frame_rate_)
 		{
 			in_frame_rate_ = in_frame_rate;
-			muxer_.reset(new ffmpeg::frame_muxer(in_frame_rate_, frame_factory_, false, audio_channel_layout_, ""));
+			muxer_.reset(new ffmpeg::frame_muxer(in_frame_rate_, boost::rational<int>(in_frame_rate.denominator(), in_frame_rate.numerator()), frame_factory_, false, audio_channel_layout_, ""));
 		}
 	}
 
@@ -413,12 +412,12 @@ safe_ptr<core::frame_producer> create_producer(
 		const safe_ptr<core::frame_factory>& frame_factory,
 		const core::parameters& params)
 {
-	if(params.empty() || !boost::iequals(params[0], "ndi"))
+	if(params.empty() || !boost::iequals(params[0], "[ndi]"))
 		return core::frame_producer::empty();
 	auto source_address = params.get(L"ADDRESS", L"");
 	auto source_name = params.get(L"NAME", L"");
 	if (source_name.empty() && source_address.empty())
-		source_name = params.get(L"NDI", L"");
+		source_name = params.get(L"[NDI]", L"");
 	if (source_name.empty() && source_address.empty())
 		return core::frame_producer::empty();
 	auto buffer_depth = params.get(L"BUFFER", 2);

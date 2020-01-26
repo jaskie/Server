@@ -48,7 +48,7 @@ struct read_frame::implementation : boost::noncopyable
 	safe_ptr<host_buffer>		image_data_;
 	tbb::mutex					mutex_;
 	audio_buffer				audio_data_;
-	channel_layout				audio_channel_layout_;
+	const channel_layout&		audio_channel_layout_;
 	int64_t						created_timestamp_;
 	const int					frame_timecode_;
 
@@ -90,6 +90,8 @@ public:
 	{
 		return boost::iterator_range<const int32_t*>(audio_data_.data(), audio_data_.data() + audio_data_.size());
 	}
+
+
 };
 
 read_frame::read_frame(
@@ -131,8 +133,14 @@ int64_t read_frame::get_age_millis() const
 
 int read_frame::get_timecode() const
 {
-	return impl_ ? impl_->frame_timecode_ : std::numeric_limits<int>().max();
+	return impl_->frame_timecode_;
 }
+
+const channel_layout & read_frame::get_channel_layout() const
+{
+	return impl_->audio_channel_layout_;
+}
+
 
 //#include <tbb/scalable_allocator.h>
 //#include <tbb/parallel_for.h>

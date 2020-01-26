@@ -37,6 +37,8 @@ extern "C"
 #pragma warning (pop)
 #endif
 #include <windows.h>
+#include <tbb/mutex.h>
+
 
 namespace caspar { namespace ndi {
 
@@ -90,6 +92,7 @@ std::shared_ptr<NDIlib_audio_frame_interleaved_32f_t> create_audio_frame(const c
 NDIlib_v2* load_ndi()
 {
 	static NDIlib_v2* ndi_lib_ptr = nullptr;
+	tbb::mutex::scoped_lock lock;
 	if (ndi_lib_ptr == nullptr)
 	{
 

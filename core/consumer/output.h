@@ -38,7 +38,7 @@ class output : public target<std::pair<safe_ptr<read_frame>, std::shared_ptr<voi
 			 , boost::noncopyable
 {
 public:
-	explicit output(const safe_ptr<diagnostics::graph>& graph, const video_format_desc& format_desc, int channel_index);
+	explicit output(const safe_ptr<diagnostics::graph>& graph, const video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index);
 
 	// target
 	
@@ -51,8 +51,6 @@ public:
 	void remove(const safe_ptr<frame_consumer>& consumer);
 	void remove(int index);
 	
-	void set_video_format_desc(const video_format_desc& format_desc);
-
 	boost::unique_future<boost::property_tree::wptree> info() const;
 	boost::unique_future<boost::property_tree::wptree> delay_info() const;
 

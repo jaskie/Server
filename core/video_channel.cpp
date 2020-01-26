@@ -62,7 +62,7 @@ public:
 		, format_desc_(format_desc)
 		, ogl_(ogl)
 		, audio_channel_layout_(audio_channel_layout)
-		, output_(new caspar::core::output(graph_, format_desc, index))
+		, output_(new caspar::core::output(graph_, format_desc, audio_channel_layout, index))
 		, mixer_(new caspar::core::mixer(graph_, output_, format_desc, ogl, audio_channel_layout))
 		, stage_(new caspar::core::stage(graph_, mixer_, format_desc))	
 		, monitor_subject_(make_safe<monitor::subject>("/channel/" + boost::lexical_cast<std::string>(index)))
@@ -85,28 +85,7 @@ public:
 		CASPAR_LOG(info) << print() << " successfully unitialized.";
 	}
 
-	void set_video_format_desc(const video_format_desc& format_desc)
-	{
-		if(format_desc.format == core::video_format::invalid)
-			BOOST_THROW_EXCEPTION(invalid_argument() << msg_info("Invalid video-format"));
-
-		try
-		{
-			output_->set_video_format_desc(format_desc);
-			mixer_->set_video_format_desc(format_desc);
-			stage_->set_video_format_desc(format_desc);
-			ogl_->gc();
-		}
-		catch(...)
-		{
-			output_->set_video_format_desc(format_desc_);
-			mixer_->set_video_format_desc(format_desc_);
-			stage_->set_video_format_desc(format_desc_);
-			throw;
-		}
-		format_desc_ = format_desc;
-	}
-		
+	
 	std::wstring print() const
 	{
 		return L"video_channel[" + boost::lexical_cast<std::wstring>(index_) + L"|" +  format_desc_.name + L"]";
@@ -160,9 +139,8 @@ video_channel::video_channel(int index, const video_format_desc& format_desc, co
 safe_ptr<stage> video_channel::stage() { return impl_->stage_;} 
 safe_ptr<mixer> video_channel::mixer() { return impl_->mixer_;} 
 safe_ptr<output> video_channel::output() { return impl_->output_;} 
-video_format_desc video_channel::get_video_format_desc() const{return impl_->format_desc_;}
-void video_channel::set_video_format_desc(const video_format_desc& format_desc){impl_->set_video_format_desc(format_desc);}
-channel_layout video_channel::get_channel_layot() const { return impl_->audio_channel_layout_; }
+const video_format_desc& video_channel::get_video_format_desc() const {return impl_->format_desc_;}
+const channel_layout& video_channel::get_channel_layuot() const { return impl_->audio_channel_layout_; }
 boost::property_tree::wptree video_channel::info() const{return impl_->info();}
 int video_channel::index() const {return impl_->index_;}
 monitor::subject& video_channel::monitor_output(){return *impl_->monitor_subject_;}

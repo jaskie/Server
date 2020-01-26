@@ -56,8 +56,7 @@ struct audio_decoder::implementation : boost::noncopyable
 	static const int BUFFER_SIZE = 480000 * 2;
 	input 														input_;
 	const safe_ptr<AVCodecContext>								codec_context_;
-	int															stream_index_;
-	const AVStream*												stream_;
+	AVStream*													stream_;
 	caspar::core::video_format_desc								format_;
 	const std::shared_ptr<SwrContext>							swr_;
 	core::channel_layout										channel_layout_;
@@ -68,12 +67,11 @@ struct audio_decoder::implementation : boost::noncopyable
 public:
 	explicit implementation(input input, caspar::core::video_format_desc format, const std::wstring& custom_channel_order)
 		: input_(input)
-		, codec_context_(input.open_audio_codec(stream_index_))
+		, codec_context_(input.open_audio_codec(&stream_))
 		, format_(format)
 		, channel_layout_(get_audio_channel_layout(*codec_context_, custom_channel_order))
 		, swr_(alloc_resampler())
-		, stream_(input_.format_context()->streams[stream_index_])
-		, stream_start_pts_(stream_->start_time)
+		, stream_start_pts_(stream_->start_time == AV_NOPTS_VALUE ? 0 : stream_->start_time)
 		, buffer_(BUFFER_SIZE)
 	{
 		seek_pts_ = 0;
@@ -111,14 +109,22 @@ public:
 
 	std::shared_ptr<core::audio_buffer> decode(std::shared_ptr<AVPacket> pkt)
 	{
-		int got_frame = 0;
-		safe_ptr<AVFrame> frame = create_frame();
-		int ret = avcodec_decode_audio4(codec_context_.get(), frame.get(), &got_frame, pkt.get());
-		int64_t frame_time_stamp = av_frame_get_best_effort_timestamp(frame.get());
-		if (ret >= 0 && got_frame && frame_time_stamp >= seek_pts_)
+		try
 		{
+			int got_frame = 0;
+			safe_ptr<AVFrame> frame = create_frame();
+			int ret = avcodec_decode_audio4(codec_context_.get(), frame.get(), &got_frame, pkt.get());
+			if (ret < 0 || !got_frame)
+				return nullptr;
+			if (frame->pts == AV_NOPTS_VALUE)
+				frame->pts = frame->best_effort_timestamp;
+			if (frame->pts != AV_NOPTS_VALUE)
+				frame->pts -= stream_start_pts_;
+			if (frame->pts < seek_pts_)
+				return nullptr;
+
 			const uint8_t **in = const_cast<const uint8_t**>(frame->extended_data);
-			uint8_t* out[] =  { reinterpret_cast<uint8_t*>(buffer_.data()) };
+			uint8_t* out[] = { reinterpret_cast<uint8_t*>(buffer_.data()) };
 			int n_samples = swr_convert(swr_.get(),
 				out,
 				BUFFER_SIZE / codec_context_->channels,
@@ -130,6 +136,7 @@ public:
 				return std::make_shared<core::audio_buffer>(samples, samples + n_samples*codec_context_->channels);
 			}
 		}
+		catch (...) {}
 		return nullptr;
 	}
 
@@ -147,8 +154,7 @@ public:
 	{
 		avcodec_flush_buffers(codec_context_.get());
 		flush_resampler();
-		seek_pts_ = stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_
-			+ (time * stream_->time_base.den / (AV_TIME_BASE * stream_->time_base.num));
+		seek_pts_ = stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_ + (time * stream_->time_base.den / (AV_TIME_BASE * stream_->time_base.num));
 	}
 	
 	std::wstring print() const

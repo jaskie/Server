@@ -47,13 +47,14 @@ public:
 	std::shared_ptr<AVFrame> poll();
 	size_t	 width()		const;
 	size_t	 height()		const;
-	uint32_t nb_frames()	const;
+	int64_t  duration()	const;
 	bool	 is_progressive() const;
 	std::wstring print()	const;
-	void seek(uint64_t time, uint32_t frame);
+	void seek(int64_t time);
 	void invert_field_order(bool invert);
 	boost::rational<int> frame_rate() const;
-
+	boost::rational<int> time_base() const;
+	
 private:
 	struct implementation;
 	safe_ptr<implementation> impl_;

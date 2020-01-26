@@ -30,6 +30,7 @@
 #include "../video_format.h"
 #include "../mixer/gpu/ogl_device.h"
 #include "../mixer/read_frame.h"
+#include "../mixer/audio/audio_util.h"
 
 #include <common/concurrency/executor.h>
 #include <common/utility/assert.h>
@@ -52,7 +53,8 @@ struct output::implementation
 	monitor::subject								monitor_subject_;
 	boost::timer									consume_timer_;
 
-	video_format_desc								format_desc_;
+	const video_format_desc							format_desc_;
+	const channel_layout							audio_channel_layout_;
 
 	std::map<int, safe_ptr<frame_consumer>>			consumers_;
 	
@@ -64,11 +66,12 @@ struct output::implementation
 	executor										executor_;
 		
 public:
-	implementation(const safe_ptr<diagnostics::graph>& graph, const video_format_desc& format_desc, int channel_index) 
+	implementation(const safe_ptr<diagnostics::graph>& graph, const video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index)
 		: channel_index_(channel_index)
 		, graph_(graph)
 		, monitor_subject_("/output")
 		, format_desc_(format_desc)
+		, audio_channel_layout_(audio_channel_layout)
 		, executor_(L"output")
 	{
 		graph_->set_color("consume-time", diagnostics::color(1.0f, 0.4f, 0.0f, 0.8));
@@ -79,7 +82,7 @@ public:
 		remove(index);
 
 		consumer = create_consumer_cadence_guard(consumer);
-		consumer->initialize(format_desc_, channel_index_);
+		consumer->initialize(format_desc_, audio_channel_layout_, channel_index_);
 
 		executor_.invoke([&]
 		{
@@ -120,32 +123,6 @@ public:
 	void remove(const safe_ptr<frame_consumer>& consumer)
 	{
 		remove(consumer->index());
-	}
-	
-	void set_video_format_desc(const video_format_desc& format_desc)
-	{
-		executor_.invoke([&]
-		{
-			auto it = consumers_.begin();
-			while(it != consumers_.end())
-			{						
-				try
-				{
-					it->second->initialize(format_desc, channel_index_);
-					++it;
-				}
-				catch(...)
-				{
-					CASPAR_LOG_CURRENT_EXCEPTION();
-					CASPAR_LOG(info) << print() << L" " << it->second->print() << L" Removed.";
-					send_to_consumers_delays_.erase(it->first);
-					consumers_.erase(it++);
-				}
-			}
-			
-			format_desc_ = format_desc;
-			frames_.clear();
-		});
 	}
 	
 	std::map<int, uint32_t> buffer_depths_snapshot() const
@@ -261,7 +238,7 @@ public:
 							CASPAR_LOG_CURRENT_EXCEPTION();
 							try
 							{
-								consumer->second->initialize(format_desc_, channel_index_);
+								consumer->second->initialize(format_desc_, audio_channel_layout_, channel_index_);
 								if (!consumer->second->send(frame).get())
 								{
 									CASPAR_LOG(info) << print() << L" " << consumer->second->print() << L" Removed.";
@@ -346,13 +323,12 @@ public:
 	}
 };
 
-output::output(const safe_ptr<diagnostics::graph>& graph, const video_format_desc& format_desc, int channel_index) : impl_(new implementation(graph, format_desc, channel_index)){}
+output::output(const safe_ptr<diagnostics::graph>& graph, const video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index) : impl_(new implementation(graph, format_desc, audio_channel_layout, channel_index)){}
 void output::add(int index, const safe_ptr<frame_consumer>& consumer){impl_->add(index, consumer);}
 void output::add(const safe_ptr<frame_consumer>& consumer){impl_->add(consumer);}
 void output::remove(int index){impl_->remove(index);}
 void output::remove(const safe_ptr<frame_consumer>& consumer){impl_->remove(consumer);}
 void output::send(const std::pair<safe_ptr<read_frame>, std::shared_ptr<void>>& frame) {impl_->send(frame); }
-void output::set_video_format_desc(const video_format_desc& format_desc){impl_->set_video_format_desc(format_desc);}
 boost::unique_future<boost::property_tree::wptree> output::info() const{return impl_->info();}
 boost::unique_future<boost::property_tree::wptree> output::delay_info() const{return impl_->delay_info();}
 bool output::empty() const{return impl_->empty();}

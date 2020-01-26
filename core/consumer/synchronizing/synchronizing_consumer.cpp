@@ -69,9 +69,9 @@ public:
 	}
 	
 	virtual void initialize(
-			const video_format_desc& format_desc, int channel_index) override
+			const video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index) override
 	{
-		get_delegate().initialize(format_desc, channel_index);
+		get_delegate().initialize(format_desc, audio_channel_layout, channel_index);
 	}
 
 	virtual int64_t presentation_frame_age_millis() const
@@ -331,12 +331,12 @@ public:
 		}
 	}
 
-	void initialize(const video_format_desc& format_desc, int channel_index)
+	void initialize(const video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index)
 	{
 		for (uint32_t i = 0; i < consumers_.size(); ++i)
 		{
 			auto& consumer = consumers_.at(i);
-			consumer->initialize(format_desc, channel_index); 
+			consumer->initialize(format_desc, audio_channel_layout, channel_index); 
 			graph_->set_color(
 					narrow(consumer->print()),
 					diag_colors().at(i % diag_colors().size()));
@@ -401,9 +401,9 @@ boost::unique_future<bool> synchronizing_consumer::send(const safe_ptr<read_fram
 	return impl_->send(frame);
 }
 
-void synchronizing_consumer::initialize(const video_format_desc& format_desc, int channel_index)
+void synchronizing_consumer::initialize(const video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index)
 {
-	impl_->initialize(format_desc, channel_index);
+	impl_->initialize(format_desc, audio_channel_layout, channel_index);
 }
 
 int64_t synchronizing_consumer::presentation_frame_age_millis() const

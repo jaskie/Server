@@ -27,6 +27,7 @@
 #include "../util/flv.h"
 #include "../../ffmpeg_error.h"
 #include "../../ffmpeg.h"
+#include "../../tbb_avcodec.h"
 
 #include <core/video_format.h>
 
@@ -109,18 +110,29 @@ struct input::implementation : boost::noncopyable
 		graph_->set_color("video-buffer-count", diagnostics::color(1.0f, 1.0f, 0.0f));
 	}
 
-	safe_ptr<AVCodecContext> open_audio_codec(int& index)
+	safe_ptr<AVCodecContext> open_audio_codec(AVStream** stream)
 	{
-		auto ret = open_codec(format_context_, AVMEDIA_TYPE_AUDIO, index);
+		AVCodec* decoder;
+		int index = THROW_ON_ERROR2(av_find_best_stream(format_context_.get(), AVMEDIA_TYPE_AUDIO, -1, -1, &decoder, 0), print());
+		THROW_ON_ERROR2(avcodec_open2(format_context_->streams[index]->codec, decoder, NULL), print());
 		audio_stream_index_ = index;
-		return ret;
+		*stream = format_context_->streams[index];
+		return safe_ptr<AVCodecContext>(format_context_->streams[index]->codec, avcodec_close);
 	}
 	
-	safe_ptr<AVCodecContext> open_video_codec(int& index)
+	safe_ptr<AVCodecContext> open_video_codec(AVStream** stream)
 	{
-		auto ret = open_codec(format_context_, AVMEDIA_TYPE_VIDEO, index);
+		AVCodec* decoder;
+		int index = THROW_ON_ERROR2(av_find_best_stream(format_context_.get(), AVMEDIA_TYPE_VIDEO, -1, -1, &decoder, 0), print());
+		if (tbb_avcodec_open(format_context_->streams[index]->codec, decoder, NULL) < 0)
+		{
+			CASPAR_LOG(debug) << print() << L" Multithreaded avcodec_open2 failed";
+			format_context_->streams[index]->codec->thread_count = 1;
+			THROW_ON_ERROR2(avcodec_open2(format_context_->streams[index]->codec, decoder, NULL), print());
+		}
 		video_stream_index_ = index;
-		return ret;
+		*stream = format_context_->streams[index]; 
+		return safe_ptr<AVCodecContext>(format_context_->streams[index]->codec, avcodec_close);
 	}
 
 	bool get_flush_av_packet(std::shared_ptr<AVPacket>& packet)
@@ -272,7 +284,7 @@ struct input::implementation : boost::noncopyable
 				CASPAR_LOG(trace) << print() << " Seeking: " << target_time / 1000 << " ms";
 			flush_av_packet_count_ = FLUSH_AV_PACKET_COUNT;
 			is_eof_ = false;
-			if (av_seek_frame(format_context_.get(), -1, target_time, AVSEEK_FLAG_BACKWARD) < 0)
+			if (av_seek_frame(format_context_.get(), -1, target_time - AV_TIME_BASE, AVSEEK_FLAG_BACKWARD) < 0)
 				CASPAR_LOG(error) << print() << " Seek failed";
 			tick();
 		}, high_priority);
@@ -286,7 +298,7 @@ bool input::try_pop_audio(std::shared_ptr<AVPacket>& packet){return impl_->try_p
 bool input::try_pop_video(std::shared_ptr<AVPacket>& packet) { return impl_->try_pop_video(packet); }
 safe_ptr<AVFormatContext> input::format_context(){return impl_->format_context_;}
 void input::seek(int64_t target_time){impl_->seek(target_time);}
-safe_ptr<AVCodecContext> input::open_audio_codec(int& index) { return impl_->open_audio_codec(index);}
-safe_ptr<AVCodecContext> input::open_video_codec(int& index) { return impl_->open_video_codec(index); }
+safe_ptr<AVCodecContext> input::open_audio_codec(AVStream** stream) { return impl_->open_audio_codec(stream);}
+safe_ptr<AVCodecContext> input::open_video_codec(AVStream** stream) { return impl_->open_video_codec(stream); }
 
 }}
