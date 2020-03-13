@@ -461,7 +461,7 @@ safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params)
 
 	config.embedded_audio	= std::find(params.begin(), params.end(), L"EMBEDDED_AUDIO") != params.end();
 	config.key_only			= std::find(params.begin(), params.end(), L"KEY_ONLY")		 != params.end();
-
+	config.audio_layout     = core::default_channel_layout_repository().get_by_name(params.get(L"CHANNEL_LAYOUT", L"STEREO"));
 	return make_safe<decklink_consumer_proxy>(config);
 }
 
@@ -485,6 +485,8 @@ safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptre
 	config.device_index			= ptree.get(L"device",				config.device_index);
 	config.embedded_audio		= ptree.get(L"embedded-audio",		config.embedded_audio);
 	config.base_buffer_depth	= ptree.get(L"buffer-depth",		config.base_buffer_depth);
+	config.audio_layout			= core::default_channel_layout_repository().get_by_name(
+			boost::to_upper_copy(ptree.get(L"channel-layout", L"STEREO")));
 
 	return make_safe<decklink_consumer_proxy>(config);
 }
