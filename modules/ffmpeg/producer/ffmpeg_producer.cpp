@@ -118,12 +118,9 @@ struct ffmpeg_producer : public core::frame_producer
 	const std::string											filter_str_;
 	bool														loop_;
 	bool														is_eof_;
-
 	safe_ptr<core::basic_frame>									last_frame_;
 	
 	std::queue<safe_ptr<core::basic_frame>>						frame_buffer_;
-	int64_t														file_duration_;
-	int64_t														decoded_frame_time_;
 
 		
 public:
@@ -188,7 +185,7 @@ public:
 		if(!video_decoder_ && !audio_decoder_)
 			BOOST_THROW_EXCEPTION(averror_stream_not_found() << msg_info("No streams found"));
 		muxer_.reset(new frame_muxer(video_decoder_->frame_rate(), video_decoder_->time_base(), frame_factory, thumbnail_mode_, audio_channel_layout_, filter_str_));
-		seek(start_time_);
+		seek(start_time_, false);
 		is_eof_ = false;
 		for (int n = 0; n < 32 && frame_buffer_.size() < 4; ++n)
 			try_decode_frame(thumbnail_mode ? core::frame_producer::DEINTERLACE_HINT : alpha_mode ? core::frame_producer::ALPHA_HINT : core::frame_producer::NO_HINT);
@@ -222,7 +219,7 @@ public:
 			if (is_eof_)
 				return last_frame();
 			
-			if (input_.eof())
+			if (decoder_eof())
 			{
 				send_osc();
 				is_eof_ = true;
@@ -249,11 +246,11 @@ public:
 	void send_osc()
 	{
 		monitor_subject_	<< core::monitor::message("/profiler/time")		% frame_timer_.elapsed() % (1.0/format_desc_.fps);			
-								
-		monitor_subject_	<< core::monitor::message("/file/time")			% (decoded_frame_time_) 
-																			% (file_duration_)
-							<< core::monitor::message("/file/frame")		% static_cast<int32_t>(time_to_frame(decoded_frame_time_))
-																			% static_cast<int32_t>(time_to_frame(file_duration_))
+		auto duration = file_duration();
+		monitor_subject_	<< core::monitor::message("/file/time")			% frame_to_time(last_frame_->get_timecode())
+																			% duration
+							<< core::monitor::message("/file/frame")		% static_cast<int32_t>(last_frame_->get_timecode())
+																			% static_cast<int32_t>(time_to_frame(duration))
 							<< core::monitor::message("/file/fps")			% out_fps_
 							<< core::monitor::message("/file/path")			% path_relative_to_media_
 							<< core::monitor::message("/loop")				% loop_;
@@ -264,7 +261,7 @@ public:
 		// Some trial and error and undeterministic stuff here
 		static const int NUM_RETRIES = 32;
 		
-		seek(frame_to_time(file_position));
+		seek(frame_to_time(file_position), false);
 
 		for (int i = 0; i < NUM_RETRIES; ++i)
 		{
@@ -328,18 +325,21 @@ public:
 		if(loop_) 
 			return std::numeric_limits<uint32_t>::max();
 
-		uint32_t nb_frames = time_to_frame(file_duration_);
+		uint32_t nb_frames = time_to_frame(file_duration());
 
-		if (length_ > 0)
+		if (length_ != AV_NOPTS_VALUE)
 			nb_frames = std::min(time_to_frame(length_), nb_frames);
 		return nb_frames;
 	}
 
-	uint64_t file_duration() const
+	int64_t file_duration() const
 	{
 		if (video_decoder_)
-			return std::max(video_decoder_->duration(), file_duration_);
-		return std::numeric_limits<uint32_t>::max();
+			return video_decoder_->duration();
+		else
+			if (audio_decoder_)
+				return audio_decoder_->duration();
+		return AV_NOPTS_VALUE;
 	}
 	
 	virtual boost::unique_future<std::wstring> call(const std::wstring& param) override
@@ -353,7 +353,7 @@ public:
 	{
 		return L"ffmpeg[" + boost::filesystem::wpath(filename_).filename() + L"|" 
 						  + print_mode() + L"|" 
-						  + boost::lexical_cast<std::wstring>(time_to_frame(decoded_frame_time_)) + L"/" + boost::lexical_cast<std::wstring>(time_to_frame(file_duration())) + L"]";
+						  + boost::lexical_cast<std::wstring>(last_frame_->get_timecode()) + L"/" + boost::lexical_cast<std::wstring>(time_to_frame(file_duration())) + L"]";
 	}
 
 	boost::property_tree::wptree info() const override
@@ -361,13 +361,18 @@ public:
 		boost::property_tree::wptree info;
 		info.add(L"type",				L"ffmpeg-producer");
 		info.add(L"filename",			filename_);
-		info.add(L"width",				video_decoder_ ? video_decoder_->width() : 0);
-		info.add(L"height",				video_decoder_ ? video_decoder_->height() : 0);
-		info.add(L"progressive",		video_decoder_ ? video_decoder_->is_progressive() : false);
-		info.add(L"fps",				out_fps_);
-		info.add(L"loop",				loop_);
+		if (video_decoder_)
+		{
+			info.add(L"file-width", video_decoder_ ? video_decoder_->width() : 0);
+			info.add(L"file-height", video_decoder_ ? video_decoder_->height() : 0);
+			info.add(L"file-fps", static_cast<double>(video_decoder_->frame_rate().numerator()) / video_decoder_->frame_rate().denominator());
+			info.add(L"file-progressive", video_decoder_ ? video_decoder_->is_progressive() : false);
+		}
+		info.add(L"fps", static_cast<double>(out_fps_.numerator()) / out_fps_.denominator());
+		info.add(L"loop", loop_);
 		auto nb_frames2 = nb_frames();
-		info.add(L"nb-frames",			nb_frames2 == std::numeric_limits<int64_t>::max() ? -1 : nb_frames2);
+		info.add(L"nb-frames",			nb_frames2 == std::numeric_limits<uint32_t>::max() ? -1 : nb_frames2);
+		info.add(L"frame-number", last_frame_->get_timecode());
 		return info;
 	}
 
@@ -396,12 +401,10 @@ public:
 
 		if(boost::regex_match(param, what, seek_exp))
 		{
-			while (!frame_buffer_.empty())
-				frame_buffer_.pop();
-			muxer_->clear();
-			seek(frame_to_time(boost::lexical_cast<uint32_t>(what["VALUE"].str())));
-
-			return L"SEEK OK";
+			if (seek(frame_to_time(boost::lexical_cast<uint32_t>(what["VALUE"].str())), true))
+				return L"SEEK OK";
+			else
+				return L"SEEK FAILED";
 		}
 		if(boost::regex_match(param, what, field_order_inverted_exp))
 		{
@@ -413,15 +416,24 @@ public:
 		BOOST_THROW_EXCEPTION(invalid_argument());
 	}
 
-	void seek(int64_t time_to_seek)
+	bool seek(int64_t time_to_seek, bool clear_buffer_and_muxer)
 	{
+		int64_t duration = file_duration();
+		if (time_to_seek > duration && duration != AV_NOPTS_VALUE)
+			return false;
+		if (clear_buffer_and_muxer)
+		{
+			while (!frame_buffer_.empty())
+				frame_buffer_.pop();
+			muxer_->clear();
+		}
 		input_.seek(time_to_seek);
 		if (video_decoder_)
 			video_decoder_->seek(time_to_seek);
 		if (audio_decoder_)
 			audio_decoder_->seek(time_to_seek);
-		decoded_frame_time_ = 0;
 		is_eof_ = false;
+		return true;
 	}
 
 
@@ -442,7 +454,7 @@ public:
 				audio = audio_decoder_->poll();
 		});
 
-		if ((!audio_decoder_ || (audio == nullptr && input_.eof()))
+		if ((!audio_decoder_ || (audio == nullptr && audio_decoder_->eof()))
 			&& !muxer_->audio_ready())
 			muxer_->push(empty_audio());
 		else
@@ -458,20 +470,36 @@ public:
 			if (video)
 			{
 				int64_t frame_time = av_rescale(video->pts, video_decoder_->time_base().numerator() * AV_TIME_BASE, video_decoder_->time_base().denominator());
-				if (length_ == std::numeric_limits<int64_t>().max() || frame_time < start_time_ + length_)
-					muxer_->push(video, hints);
-				decoded_frame_time_ = frame_time;
+				if (length_ == AV_NOPTS_VALUE || frame_time < start_time_ + length_)
+					muxer_->push(video, hints, time_to_frame(frame_time));
 			}
 		}
+	}
+
+	int64_t decoded_time() const
+	{
+		if (video_decoder_)
+			return video_decoder_->time();
+		else
+			if (audio_decoder_)
+				return audio_decoder_->time();
+		return AV_NOPTS_VALUE;
+	}
+
+	bool decoder_eof() const
+	{
+		return (!video_decoder_ || video_decoder_->eof())
+			&& (!audio_decoder_ || audio_decoder_->eof());
 	}
 	
 	void try_decode_frame(int hints)
 	{
+		int64_t time = decoded_time();
 		if (loop_ && 
-			((length_ != std::numeric_limits<int64_t>().max() && decoded_frame_time_ >= start_time_ + length_) 
-				|| input_.eof()))
-			seek(start_time_);
-		if (!loop_ && length_ != std::numeric_limits<int64_t>().max() && decoded_frame_time_ >= start_time_ + length_)
+			((length_ != AV_NOPTS_VALUE && time >= start_time_ + length_)
+				|| decoder_eof()))
+			seek(start_time_, false);
+		if (!loop_ && length_ != AV_NOPTS_VALUE && time >= start_time_ + length_)
 		{
 			is_eof_ = true;
 			return;
@@ -492,13 +520,15 @@ public:
 
 	uint32_t time_to_frame(int64_t time) const
 	{
+		if (time == AV_NOPTS_VALUE)
+			return std::numeric_limits<uint32_t>::max();
 		return static_cast<int32_t>(av_rescale(time, out_fps_.numerator(), out_fps_.denominator() * AV_TIME_BASE));
 	}
 
 	int64_t frame_to_time(uint32_t frame) const
 	{
 		if (frame == std::numeric_limits<uint32_t>::max()) 
-			return std::numeric_limits<int64_t>::max();
+			return AV_NOPTS_VALUE;
 		return av_rescale(frame, out_fps_.denominator() * AV_TIME_BASE, out_fps_.numerator());
 	}
 

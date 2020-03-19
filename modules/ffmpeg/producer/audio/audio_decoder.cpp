@@ -61,7 +61,10 @@ struct audio_decoder::implementation : boost::noncopyable
 	const std::shared_ptr<SwrContext>							swr_;
 	core::channel_layout										channel_layout_;
 	const int64_t												stream_start_pts_;
+	const int64_t												duration_;
+	tbb::atomic<int64_t>										time_;
 	tbb::atomic<int64_t>										seek_pts_;
+	tbb::atomic<bool>											eof_;
 	std::vector<int32_t,  tbb::cache_aligned_allocator<int32_t>> buffer_;
 
 public:
@@ -73,22 +76,24 @@ public:
 		, swr_(alloc_resampler())
 		, stream_start_pts_(stream_->start_time == AV_NOPTS_VALUE ? 0 : stream_->start_time)
 		, buffer_(BUFFER_SIZE)
+		, duration_(calc_duration(stream_))
 	{
 		seek_pts_ = 0;
+		time_ = 0;
+		eof_ = false;
 		THROW_ON_ERROR2(swr_init(swr_.get()), "[audio_decoder]");
 		CASPAR_LOG(debug) << print() 
 				<< " Selected channel layout " << channel_layout_.name;
 	}
 	
-	std::shared_ptr<core::audio_buffer> poll()
-	{
-		std::shared_ptr<core::audio_buffer> audio = nullptr;
-		std::shared_ptr<AVPacket> packet = nullptr;
-		while (!audio && input_.try_pop_audio(packet))
-			audio = decode(packet);
-		return audio;
-	}
 
+	int64_t calc_duration(const AVStream* stream)
+	{
+		if (stream->duration == AV_NOPTS_VALUE)
+			return 0;
+		else
+			return  av_rescale(stream->duration, stream->time_base.num * AV_TIME_BASE, stream->time_base.den);
+	}
 
 	std::shared_ptr<SwrContext>	alloc_resampler()
 	{
@@ -107,36 +112,37 @@ public:
 		return resampler;
 	}
 
-	std::shared_ptr<core::audio_buffer> decode(std::shared_ptr<AVPacket> pkt)
+	std::shared_ptr<core::audio_buffer> poll()
 	{
-		try
+		std::shared_ptr<AVPacket> packet;
+		input_.try_pop_audio(packet);
+		if (packet || (input_.eof() && !eof_))
+			avcodec_send_packet(codec_context_.get(), packet.get());
+		safe_ptr<AVFrame> frame = create_frame();
+		int ret = avcodec_receive_frame(codec_context_.get(), frame.get());
+		if (ret == AVERROR_EOF)
+			eof_ = true;
+		if (ret < 0)
+			return nullptr;
+		if (frame->pts == AV_NOPTS_VALUE)
+			frame->pts = frame->best_effort_timestamp;
+		if (frame->pts != AV_NOPTS_VALUE)
+			frame->pts -= stream_start_pts_;
+		if (frame->pts < seek_pts_)
+			return nullptr;
+		time_ = av_rescale(frame->pts * AV_TIME_BASE, stream_->time_base.num, stream_->time_base.den);
+		const uint8_t** in = const_cast<const uint8_t**>(frame->extended_data);
+		uint8_t* out[] = { reinterpret_cast<uint8_t*>(buffer_.data()) };
+		int n_samples = swr_convert(swr_.get(),
+			out,
+			BUFFER_SIZE / codec_context_->channels,
+			in,
+			frame->nb_samples);
+		if (n_samples > 0)
 		{
-			int got_frame = 0;
-			safe_ptr<AVFrame> frame = create_frame();
-			int ret = avcodec_decode_audio4(codec_context_.get(), frame.get(), &got_frame, pkt.get());
-			if (ret < 0 || !got_frame)
-				return nullptr;
-			if (frame->pts == AV_NOPTS_VALUE)
-				frame->pts = frame->best_effort_timestamp;
-			if (frame->pts != AV_NOPTS_VALUE)
-				frame->pts -= stream_start_pts_;
-			if (frame->pts < seek_pts_)
-				return nullptr;
-
-			const uint8_t **in = const_cast<const uint8_t**>(frame->extended_data);
-			uint8_t* out[] = { reinterpret_cast<uint8_t*>(buffer_.data()) };
-			int n_samples = swr_convert(swr_.get(),
-				out,
-				BUFFER_SIZE / codec_context_->channels,
-				in,
-				frame->nb_samples);
-			if (n_samples > 0)
-			{
-				const auto samples = reinterpret_cast<uint32_t*>(*out);
-				return std::make_shared<core::audio_buffer>(samples, samples + n_samples*codec_context_->channels);
-			}
+			const auto samples = reinterpret_cast<uint32_t*>(*out);
+			return std::make_shared<core::audio_buffer>(samples, samples + n_samples * codec_context_->channels);
 		}
-		catch (...) {}
 		return nullptr;
 	}
 
@@ -154,6 +160,7 @@ public:
 	{
 		avcodec_flush_buffers(codec_context_.get());
 		flush_resampler();
+		eof_ = false;
 		seek_pts_ = stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_ + (time * stream_->time_base.den / (AV_TIME_BASE * stream_->time_base.num));
 	}
 	
@@ -168,5 +175,9 @@ std::shared_ptr<core::audio_buffer> audio_decoder::poll(){return impl_->poll();}
 const core::channel_layout& audio_decoder::channel_layout() const { return impl_->channel_layout_; }
 std::wstring audio_decoder::print() const{return impl_->print();}
 void audio_decoder::seek(uint64_t time) {impl_->seek(time);}
+int64_t audio_decoder::duration() const { return impl_->duration_; }
+int64_t audio_decoder::time() const { return impl_->time_; }
+bool audio_decoder::eof() const { return impl_->eof_; }
+}
 
-}}
+}

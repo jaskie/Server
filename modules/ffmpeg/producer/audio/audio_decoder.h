@@ -51,6 +51,10 @@ public:
 	const core::channel_layout& channel_layout() const;
 	std::wstring print() const;
 	void seek(uint64_t time);
+	int64_t duration() const;
+	int64_t time() const;
+	bool eof() const;
+
 private:
 	struct implementation;
 	safe_ptr<implementation> impl_;

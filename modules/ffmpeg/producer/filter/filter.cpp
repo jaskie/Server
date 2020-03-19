@@ -288,7 +288,7 @@ struct filter::implementation
 
 	void clear()
 	{
-		do {} while (poll() != nullptr);
+		configure_filtergraph();
 	}
 
 	bool is_frame_format_changed(const std::shared_ptr<AVFrame>& frame)

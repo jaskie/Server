@@ -54,6 +54,8 @@ public:
 	void invert_field_order(bool invert);
 	boost::rational<int> frame_rate() const;
 	boost::rational<int> time_base() const;
+	int64_t time() const;
+	bool eof() const;
 	
 private:
 	struct implementation;

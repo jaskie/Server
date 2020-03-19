@@ -64,7 +64,8 @@ struct video_decoder::implementation : boost::noncopyable
 	const int64_t							stream_start_pts_;
 	tbb::atomic<int64_t>					seek_pts_;
 	tbb::atomic<bool>						invert_field_order_;
-	int64_t									frame_number_;
+	tbb::atomic<bool>						eof_;
+	int64_t									time_;
 public:
 	explicit implementation(input input, bool invert_field_order)
 		: input_(input)
@@ -73,9 +74,11 @@ public:
 		, width_(codec_context_->width)
 		, height_(codec_context_->height)
 		, stream_start_pts_(stream_->start_time == AV_NOPTS_VALUE ? 0 : stream_->start_time)
-		, duration_(static_cast<uint32_t>(calc_duration(stream_)))
+		, duration_(calc_duration(stream_))
+		, time_(AV_NOPTS_VALUE)
 	{
 		invert_field_order_ = invert_field_order;
+		eof_ = false;
 		seek_pts_ = 0;
 		CASPAR_LOG(trace) << "Codec: " << codec_->long_name;
 	}
@@ -89,26 +92,18 @@ public:
 	}
 
 	std::shared_ptr<AVFrame> poll()
-	{		
-		std::shared_ptr<AVFrame> video;
-		std::shared_ptr<AVPacket> packet;
-		while (!video && input_.try_pop_video(packet))
-			video = decode(packet);
-		if (!video && !input_.eof())
-			CASPAR_LOG(trace) << print() << L" Received empty frame";
-		return video;
-	}
-
-	std::shared_ptr<AVFrame> decode(std::shared_ptr<AVPacket> pkt)
 	{
+		std::shared_ptr<AVPacket> packet;
+		input_.try_pop_video(packet);
 		std::shared_ptr<AVFrame> decoded_frame = create_frame();
+		if (packet || (input_.eof() && !eof_))
+			avcodec_send_packet(codec_context_.get(), packet.get());
+		int ret = avcodec_receive_frame(codec_context_.get(), decoded_frame.get());
+		if (ret == AVERROR_EOF)
+			eof_ = true;
 
-		int got_picture_ptr = 0;
-		int bytes_consumed = avcodec_decode_video2(codec_context_.get(), decoded_frame.get(), &got_picture_ptr, pkt.get());
-		
-		if(got_picture_ptr == 0 || bytes_consumed < 0)	
+		if (ret < 0)	
 			return nullptr;
-
 
 		is_progressive_ = !decoded_frame->interlaced_frame;
 
@@ -124,6 +119,7 @@ public:
 
 		if(decoded_frame->repeat_pict > 0)
 			CASPAR_LOG(warning) << "[video_decoder] Field repeat_pict not implemented.";
+		time_ = av_rescale(decoded_frame->pts * AV_TIME_BASE, stream_->time_base.num, stream_->time_base.den);
 		return decoded_frame;
 	}
 
@@ -132,16 +128,12 @@ public:
 		avcodec_flush_buffers(codec_context_.get());
 		seek_pts_ = stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_
 			+ (time * stream_->time_base.den / (AV_TIME_BASE * stream_->time_base.num));
+		eof_ = false;
 	}
 
 	void invert_field_order (bool invert)
 	{
 		invert_field_order_ = invert;
-	}
-
-	int64_t duration() const
-	{
-		return duration_;
 	}
 
 	boost::rational<int> frame_rate() const
@@ -154,7 +146,6 @@ public:
 		return boost::rational<int>(stream_->time_base.num, stream_->time_base.den);
 	}
 
-
 	std::wstring print() const
 	{		
 		return L"[video-decoder] " + widen(codec_context_->codec->long_name);
@@ -165,11 +156,13 @@ video_decoder::video_decoder(input input, bool invert_field_order) : impl_(new i
 std::shared_ptr<AVFrame> video_decoder::poll(){return impl_->poll();}
 size_t video_decoder::width() const{return impl_->width_;}
 size_t video_decoder::height() const{return impl_->height_;}
-int64_t video_decoder::duration() const {return impl_->duration();}
+int64_t video_decoder::duration() const {return impl_->duration_;}
 bool	video_decoder::is_progressive() const{return impl_->is_progressive_;}
 std::wstring video_decoder::print() const{return impl_->print();}
 void video_decoder::seek(int64_t time) { impl_->seek(time);}
 void video_decoder::invert_field_order(bool invert) {impl_-> invert_field_order(invert);}
 boost::rational<int> video_decoder::frame_rate() const { return impl_->frame_rate(); };
 boost::rational<int> video_decoder::time_base() const { return impl_->time_base(); };
+int64_t video_decoder::time() const { return impl_->time_; }
+bool video_decoder::eof() const { return impl_->eof_; }
 }}
