@@ -488,8 +488,7 @@ public:
 
 	bool decoder_eof() const
 	{
-		return (!video_decoder_ || video_decoder_->eof())
-			&& (!audio_decoder_ || audio_decoder_->eof());
+		return video_decoder_ ? video_decoder_->eof() : audio_decoder_->eof();
 	}
 	
 	void try_decode_frame(int hints)
