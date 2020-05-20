@@ -21,6 +21,8 @@
 
 
 #pragma once
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 
 #include <common/memory/safe_ptr.h>
 
@@ -30,6 +32,9 @@
 #include <boost/thread/future.hpp>
 
 #include <vector>
+
+#include <windows.h>
+
 
 namespace caspar {
 
@@ -43,7 +48,7 @@ namespace core {
 class server : boost::noncopyable
 {
 public:
-	server(boost::promise<bool>& shutdown_server_now);
+	server(boost::promise<bool>& shutdown_server_now, HWND main_window);
 	const std::vector<safe_ptr<core::video_channel>> get_channels() const;
 	const std::vector<safe_ptr<core::recorder>> get_recorders() const;
 	std::shared_ptr<core::thumbnail_generator> get_thumbnail_generator() const;

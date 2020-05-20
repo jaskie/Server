@@ -2177,12 +2177,14 @@ bool ByeCommand::DoExecute()
 bool KillCommand::DoExecute()
 {
 	GetShutdownServerNow().set_value(false); // False for not attempting to restart.
+	PostMessage(GetMainWindow(), WM_QUIT, 0, 0);
 	return true;
 }
 
 bool RestartCommand::DoExecute()
 {
 	GetShutdownServerNow().set_value(true); // True for attempting to restart
+	PostMessage(GetMainWindow(), WM_QUIT, 0, 0);
 	return true;
 }
 

@@ -55,7 +55,9 @@ public:
 			const std::vector<safe_ptr<core::recorder>>& recorders,
 			const std::shared_ptr<core::thumbnail_generator>& thumb_gen,
 			const safe_ptr<core::media_info_repository>& media_info_repo,
-			boost::promise<bool>& shutdown_server_now);
+			boost::promise<bool>& shutdown_server_now,
+			HWND main_window
+		);
 	virtual ~AMCPProtocolStrategy();
 
 	virtual void Parse(const TCHAR* pData, int charCount, IO::ClientInfoPtr pClientInfo);
@@ -81,6 +83,7 @@ private:
 	boost::promise<bool>& shutdown_server_now_;
 	std::vector<AMCPCommandQueuePtr> commandQueues_;
 	static const std::wstring MessageDelimiter;
+	const HWND main_window_;
 };
 
 }}}

@@ -34,6 +34,8 @@
 #include "resource.h"
 
 #include "server.h"
+#include "tray_icon.h"
+#include "console.h"
 
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
@@ -44,6 +46,7 @@
 #include <winnt.h>
 #include <mmsystem.h>
 #include <atlbase.h>
+#include <ShellAPI.h>
 
 #include <protocol/amcp/AMCPProtocolStrategy.h>
 
@@ -77,6 +80,8 @@
 // NOTE: This is needed in order to make CComObject work since this is not a real ATL project.
 CComModule _AtlModule;
 extern __declspec(selectany) CAtlModule* _pAtlModule = &_AtlModule;
+
+const wchar_t* PRODUCT_NAME = L"CasparCG Server";
 
 void change_icon( const HICON hNewIcon )
 {
@@ -119,7 +124,7 @@ void setup_console_window()
 
 	// Set console title.
 	std::wstringstream str;
-	str << "CasparCG Server " << caspar::env::version();
+	str << PRODUCT_NAME << caspar::env::version();
 #ifdef COMPILE_RELEASE
 	str << " Release";
 #elif  COMPILE_PROFILE
@@ -186,13 +191,16 @@ std::wstring make_upper_case(const std::wstring& str)
 	return boost::to_upper_copy(str);
 }
 
-int main(int argc, wchar_t* argv[])
+int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 {	
 	static_assert(sizeof(void*) == 4, "64-bit code generation is not supported.");
 	
 	SetUnhandledExceptionFilter(UserUnhandledExceptionFilter);
 
 	setup_global_locale();
+
+	console console;
+	tray_icon tray(h_instance, PRODUCT_NAME);
 
 	std::wcout << L"Type \"q\" to close application." << std::endl;
 	
@@ -271,11 +279,11 @@ int main(int argc, wchar_t* argv[])
 			boost::unique_future<bool> shutdown_server = shutdown_server_now.get_future();
 
 			// Create server object which initializes channels, protocols and controllers.
-			caspar::server caspar_server(shutdown_server_now);
+			caspar::server caspar_server(shutdown_server_now, tray.GetWindow());
 
 			// Use separate thread for the blocking console input, will be terminated 
 			// anyway when the main thread terminates.
-			boost::thread stdin_thread([&caspar_server, &shutdown_server_now, &wait_for_keypress]
+			boost::thread stdin_thread([&caspar_server, &shutdown_server_now, &wait_for_keypress, &tray]
 			{
 				caspar::win32_exception::ensure_handler_installed_for_thread("stdin-thread");
 
@@ -285,7 +293,9 @@ int main(int argc, wchar_t* argv[])
 						caspar_server.get_recorders(),
 						caspar_server.get_thumbnail_generator(),
 						caspar_server.get_media_info_repo(),
-						shutdown_server_now);
+						shutdown_server_now,
+						tray.GetWindow()
+					);
 
 				// Create a dummy client which prints amcp responses to console.
 				auto console_client = std::make_shared<caspar::IO::ConsoleClientInfo>();
@@ -303,6 +313,7 @@ int main(int argc, wchar_t* argv[])
 					{
 						wait_for_keypress = true;
 						shutdown_server_now.set_value(false); // False to not restart server
+						tray.close();
 						break;
 					}
 				#ifndef COMPILE_RELEASE
@@ -367,8 +378,13 @@ int main(int argc, wchar_t* argv[])
 				}	
 			});
 			stdin_thread.detach();
+			MSG stMsg;
+			while (GetMessage(&stMsg, NULL, 0, 0) > 0)
+			{
+				TranslateMessage(&stMsg);
+				DispatchMessage(&stMsg);
+			}
 			restart = shutdown_server.get();
-			
 		}
 		CASPAR_LOG(info) << "Successfully shutdown CasparCG Server.";
 
@@ -386,7 +402,7 @@ int main(int argc, wchar_t* argv[])
 		CASPAR_LOG_CURRENT_EXCEPTION();
 		CASPAR_LOG(fatal) << L"Unhandled exception in main thread. Please report this error on GitHub (https://github.com/jaskie/Server/issues).";
 		Sleep(1000);
-		std::wcout << L"\n\nCasparCG will automatically shutdown. See the log file located at the configured log-file folder for more information.\n\n";
+		std::wcout << L"\n\nCasparCG will automatically shutdown. See the log file located at the configured log-path folder for more information.\n\n";
 		Sleep(4000);
 	}	
 	

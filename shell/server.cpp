@@ -41,6 +41,7 @@
 #include <core/producer/media_info/media_info.h>
 #include <core/producer/media_info/media_info_repository.h>
 #include <core/producer/media_info/in_memory_media_info_repository.h>
+#include <windows.h>
 
 #include <modules/bluefish/bluefish.h>
 #include <modules/decklink/decklink.h>
@@ -127,13 +128,15 @@ struct server::implementation : boost::noncopyable
 	boost::thread								initial_media_info_thread_;
 	tbb::atomic<bool>							running_;
 	std::shared_ptr<thumbnail_generator>		thumbnail_generator_;
+	const HWND									main_window_;
 
-	implementation(boost::promise<bool>& shutdown_server_now)
+	implementation(boost::promise<bool>& shutdown_server_now, const HWND main_window)
 		: io_service_(create_running_io_service())
 		, shutdown_server_now_(shutdown_server_now)
 		, ogl_(ogl_device::create())
 		, osc_client_(io_service_)
 		, media_info_repo_(create_in_memory_media_info_repository())
+		, main_window_(main_window)
 	{
 		running_ = true;
 		setup_audio(env::properties());
@@ -462,7 +465,7 @@ struct server::implementation : boost::noncopyable
 	safe_ptr<IO::IProtocolStrategy> create_protocol(const std::wstring& name) const
 	{
 		if(boost::iequals(name, L"AMCP"))
-			return make_safe<amcp::AMCPProtocolStrategy>(channels_, recorders_, thumbnail_generator_, media_info_repo_, shutdown_server_now_);
+			return make_safe<amcp::AMCPProtocolStrategy>(channels_, recorders_, thumbnail_generator_, media_info_repo_, shutdown_server_now_, main_window_);
 		else if(boost::iequals(name, L"CII"))
 			return make_safe<cii::CIIProtocolStrategy>(channels_);
 		else if(boost::iequals(name, L"CLOCK"))
@@ -495,7 +498,7 @@ struct server::implementation : boost::noncopyable
 	}
 };
 
-server::server(boost::promise<bool>& shutdown_server_now) : impl_(new implementation(shutdown_server_now)){}
+server::server(boost::promise<bool>& shutdown_server_now, HWND main_window) : impl_(new implementation(shutdown_server_now, main_window)){}
 
 const std::vector<safe_ptr<video_channel>> server::get_channels() const
 {

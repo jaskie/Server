@@ -58,12 +58,15 @@ AMCPProtocolStrategy::AMCPProtocolStrategy(
 		const std::vector<safe_ptr<core::recorder>>& recorders,
 		const std::shared_ptr<core::thumbnail_generator>& thumb_gen,
 		const safe_ptr<core::media_info_repository>& media_info_repo,
-		boost::promise<bool>& shutdown_server_now)
+		boost::promise<bool>& shutdown_server_now,
+		HWND main_window
+)
 	: channels_(channels)
 	, recorders_(recorders)
 	, thumb_gen_(thumb_gen)
 	, media_info_repo_(media_info_repo)
 	, shutdown_server_now_(shutdown_server_now)
+	, main_window_(main_window)
 {
 	AMCPCommandQueuePtr pGeneralCommandQueue(new AMCPCommandQueue());
 	commandQueues_.push_back(pGeneralCommandQueue);
@@ -207,6 +210,7 @@ AMCPCommandPtr AMCPProtocolStrategy::InterpretCommandString(const std::wstring& 
 				pCommand->SetThumbGenerator(thumb_gen_);
 				pCommand->SetMediaInfoRepo(media_info_repo_);
 				pCommand->SetShutdownServerNow(shutdown_server_now_);
+				pCommand->SetMainWindow(main_window_);
 				//Set scheduling
 				if(commandSwitch.size() > 0) {
 					transform(commandSwitch.begin(), commandSwitch.end(), commandSwitch.begin(), toupper);

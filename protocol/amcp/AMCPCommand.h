@@ -74,6 +74,9 @@ namespace caspar { namespace protocol { namespace amcp {
 		void SetShutdownServerNow(boost::promise<bool>& shutdown_server_now) {shutdown_server_now_ = &shutdown_server_now;}
 		boost::promise<bool>& GetShutdownServerNow() { return *shutdown_server_now_; }
 
+		void SetMainWindow(const HWND main_window) { main_window_ = main_window; }
+		HWND GetMainWindow() const { return main_window_; }
+
 		void SetChannelIndex(unsigned int channelIndex){channelIndex_ = channelIndex;}
 		unsigned int GetChannelIndex(){return channelIndex_;}
 
@@ -99,6 +102,7 @@ namespace caspar { namespace protocol { namespace amcp {
 		std::shared_ptr<core::thumbnail_generator> thumb_gen_;
 		std::shared_ptr<core::media_info_repository> media_info_repo_;
 		boost::promise<bool>* shutdown_server_now_;
+		HWND main_window_;
 		std::wstring replyString_;
 	};
 
