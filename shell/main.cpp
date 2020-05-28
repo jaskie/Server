@@ -82,14 +82,6 @@
 CComModule _AtlModule;
 extern __declspec(selectany) CAtlModule* _pAtlModule = &_AtlModule;
 
-void change_icon( const HICON hNewIcon )
-{
-   auto hMod = ::LoadLibrary(L"Kernel32.dll"); 
-   typedef DWORD(__stdcall *SCI)(HICON);
-   auto pfnSetConsoleIcon = reinterpret_cast<SCI>(::GetProcAddress(hMod, "SetConsoleIcon")); 
-   pfnSetConsoleIcon(hNewIcon); 
-   ::FreeLibrary(hMod);
-}
 
 void setup_global_locale()
 {
@@ -97,43 +89,6 @@ void setup_global_locale()
 	gen.categories(boost::locale::codepage_facet);
 
 	std::locale::global(gen(""));
-}
-
-void setup_console_window()
-{	 
-	auto hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-
-	// Disable close button in console to avoid shutdown without cleanup.
-	EnableMenuItem(GetSystemMenu(GetConsoleWindow(), FALSE), SC_CLOSE , MF_GRAYED);
-	DrawMenuBar(GetConsoleWindow());
-	SetConsoleCtrlHandler(NULL, true);
-
-	// Configure console size and position.
-	auto coord = GetLargestConsoleWindowSize(hOut);
-	coord.X /= 2;
-
-	SetConsoleScreenBufferSize(hOut, coord);
-
-	SMALL_RECT DisplayArea = {0, 0, 0, 0};
-	DisplayArea.Right = coord.X-1;
-	DisplayArea.Bottom = (coord.Y-1)/2;
-	SetConsoleWindowInfo(hOut, TRUE, &DisplayArea);
-		 
-	change_icon(::LoadIcon(GetModuleHandle(0), MAKEINTRESOURCE(101)));
-
-	// Set console title.
-	std::wstringstream str;
-	str << CASPAR_NAME << caspar::env::version();
-#ifdef COMPILE_RELEASE
-	str << " Release";
-#elif  COMPILE_PROFILE
-	str << " Profile";
-#elif  COMPILE_DEVELOP
-	str << " Develop";
-#elif  COMPILE_DEBUG
-	str << " Debug";
-#endif
-	SetConsoleTitle(str.str().c_str());
 }
 
 void print_info()
@@ -208,6 +163,8 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 		if (arg_upper == L"-HIDE")
 			hide_on_startup = true;
 	}
+
+	// Create and setup console window
 	console console(hide_on_startup);
 
 	std::wcout << L"Type \"q\" to close application." << std::endl;
@@ -270,9 +227,6 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 		caspar::log::add_file_sink(caspar::env::log_folder());
 		std::wcout << L"Logging [info] or higher severity to " << caspar::env::log_folder() << std::endl << std::endl;
 
-		// Setup console window.
-		setup_console_window();
-
 		// Print environment information.
 		print_info();
 
@@ -303,8 +257,15 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 				auto console_client = std::make_shared<caspar::IO::ConsoleClientInfo>();
 				std::wstring wcmd;
 				std::wcin.clear();
-				while (std::getline(std::wcin, wcmd) != nullptr)
+				while (true)
 				{
+					if (std::getline(std::wcin, wcmd) == nullptr)
+					{
+						if (std::wcin.bad())
+							break;
+						std::wcin.clear();
+						continue;
+					}
 					//boost::to_upper(wcmd);  // TODO COMPILER crashes on this line, Strange!
 					auto upper_cmd = make_upper_case(wcmd);
 
@@ -380,6 +341,7 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 					wcmd += L"\r\n";
 					amcp.Parse(wcmd.c_str(), wcmd.length(), console_client);
 				}
+				tray.close();
 			});
 			stdin_thread.detach();
 			MSG stMsg;

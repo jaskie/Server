@@ -1,19 +1,20 @@
 TVP's fork of CasparCG
 ======================
 This is fork of 2.06 Stable master branch with following fixes and enhacements which are not included in main distribution:
-1. Long-GOP files are now precisely seeked. Improved H.264 decoding performance.
-2. When interlaced image is paused (assuming that displayed fields comes from different moments in time), there is no image trembling (only first field is displayed).
-3. Server process can't be closed with Ctrl-C.
-4. Fix for IMX MPEG PAL (e.g. Sony MXF) files, so 32 VBI lines above active video lines are not displayed anymore.
-5. Added `FIELD_ORDER_INVERTED` parameter when playing file, it allows fix such a file. Also available as layer CALL (like LOOP), efects immediately.
-6. Decklink producer auto-detects input signal format on supported cards and scale it to channel format (works only with the same framerate formats).
-7. Added new transition type: SQUEEZE (both background and foreground layers).
-8. Added transition pause at half of its duration of specified length.
-9. Allows creating a input channel with no initial consumer, but with decklink or NDI input open (to record it with ADD FILE, CAPTURE or instantly play with ROUTE command).
+1.  Long-GOP files are now precisely seeked. Improved H.264 decoding performance.
+2.  When interlaced image is paused (assuming that displayed fields comes from different moments in time), there is no image trembling (only first field is displayed).
+3.  Server process can't be closed with Ctrl-C.
+4.  Fix for IMX MPEG PAL (e.g. Sony MXF) files, so 32 VBI lines above active video lines are not displayed anymore.
+5.  Added `FIELD_ORDER_INVERTED` parameter when playing file, it allows fix such a file. Also available as layer CALL (like LOOP), efects immediately.
+6.  Decklink producer auto-detects input signal format on supported cards and scale it to channel format (works only with the same framerate formats).
+7.  Added new transition type: SQUEEZE (both background and foreground layers).
+8.  Added transition pause at half of its duration of specified length.
+9.  Allows creating a input channel with no initial consumer, but with decklink or NDI input open (to record it with ADD FILE, CAPTURE or instantly play with ROUTE command).
 10. Added deck control, with new CAPTURE and RECORDER commands (see wiki).
 11. Added native Newtek NDI (http://ndi.newtek.com) consumer able to stream with or without alpha channel.
 12. Added NDI producer to play a NDI source (can be added using AMCP command or from casparcg.config).
 13. It's possible to produce perfectly stable CBR MPEG-TS UDP stream. Refer to wiki page if it's required here: https://github.com/jaskie/Server/wiki/Creating-perfectly-stable-CBR-MPEG-transport-stream.
+14. Added tray icon with popup menu and minimalization to tray.
 
 --------------------------------------
 |        Original readme below       |

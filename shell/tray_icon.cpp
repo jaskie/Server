@@ -21,7 +21,7 @@ void show_and_restore_if_minimized()
 
 void hide_console_window()
 {
-	::ShowWindow(::GetConsoleWindow(), SW_HIDE);
+	::ShowWindow(::GetConsoleWindow(), SW_MINIMIZE);
 }
 
 LRESULT CALLBACK HiddenWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)

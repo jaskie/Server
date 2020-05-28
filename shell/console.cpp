@@ -1,6 +1,9 @@
 #include "console.h"
 #include <windows.h>
 #include <iostream>
+#include "resource.h"
+#include "version.h"
+#include <common/env.h>
 
 void CALLBACK WinEventHandler(
     HWINEVENTHOOK hWinEventHook,
@@ -24,8 +27,41 @@ console::console(bool hide_on_start)
 {
     if (!allocated_)
         return;
-    if (hide_on_start)
-        hide();
+    // disable Ctrl+C
+    ::SetConsoleCtrlHandler(NULL, true);
+    
+    auto hOut = ::GetStdHandle(STD_OUTPUT_HANDLE);
+
+    // Disable close button in console to avoid shutdown without cleanup.
+    ::EnableMenuItem(::GetSystemMenu(h_window_, FALSE), SC_CLOSE, MF_GRAYED);
+    ::DrawMenuBar(h_window_);
+
+    // Configure console size and position.
+    auto coord = ::GetLargestConsoleWindowSize(hOut);
+    coord.X /= 2;
+
+    ::SetConsoleScreenBufferSize(hOut, coord);
+
+    SMALL_RECT display_area = { 0, 0, 0, 0 };
+    display_area.Right = coord.X - 1;
+    display_area.Bottom = (coord.Y - 1) / 2;
+    ::SetConsoleWindowInfo(hOut, TRUE, &display_area);
+
+    // Set console title.
+    std::wstringstream str;
+    str << CASPAR_NAME << caspar::env::version();
+#ifdef COMPILE_RELEASE
+    str << " Release";
+#elif  COMPILE_PROFILE
+    str << " Profile";
+#elif  COMPILE_DEVELOP
+    str << " Develop";
+#elif  COMPILE_DEBUG
+    str << " Debug";
+#endif
+    SetConsoleTitle(str.str().c_str());
+
+    // redirect streams
     cin_buffer = std::wcin.rdbuf();
     cout_buffer = std::wcout.rdbuf();
     cerr_buffer = std::wcerr.rdbuf();
@@ -35,6 +71,9 @@ console::console(bool hide_on_start)
     std::wcin.rdbuf(console_input.rdbuf());
     std::wcout.rdbuf(console_output.rdbuf());
     std::wcerr.rdbuf(console_error.rdbuf());
+
+    if (hide_on_start)
+        ::ShowWindow(h_window_, SW_HIDE);
 }
 
 console::~console()
@@ -42,6 +81,7 @@ console::~console()
     ::UnhookWinEvent(g_hook_);
     if (!allocated_)
         return;
+    ::FreeConsole();
     console_input.close();
     console_output.close();
     console_error.close();
@@ -54,10 +94,10 @@ void console::terminate()
 {
     if (!allocated_)
         return;
-    ::FreeConsole();
+    std::wcin.setstate(std::ios_base::badbit, true);
 }
 
 void console::hide()
 {
-    ::ShowWindow(h_window_, SW_HIDE);
+    ::ShowWindow(h_window_, SW_MINIMIZE);
 }
