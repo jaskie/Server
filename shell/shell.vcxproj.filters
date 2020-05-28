@@ -7,6 +7,12 @@
     <ClCompile Include="server.cpp">
       <Filter>source</Filter>
     </ClCompile>
+    <ClCompile Include="tray_icon.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="console.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="casparcg.config" />
@@ -18,6 +24,12 @@
       <Filter>source</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
+      <Filter>source</Filter>
+    </ClInclude>
+    <ClInclude Include="tray_icon.h">
+      <Filter>source</Filter>
+    </ClInclude>
+    <ClInclude Include="console.h">
       <Filter>source</Filter>
     </ClInclude>
   </ItemGroup>
