@@ -48,7 +48,7 @@ namespace core {
 class server : boost::noncopyable
 {
 public:
-	server(boost::promise<bool>& shutdown_server_now, HWND main_window);
+	server(HWND main_window);
 	const std::vector<safe_ptr<core::video_channel>> get_channels() const;
 	const std::vector<safe_ptr<core::recorder>> get_recorders() const;
 	std::shared_ptr<core::thumbnail_generator> get_thumbnail_generator() const;

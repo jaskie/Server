@@ -55,7 +55,6 @@ public:
 			const std::vector<safe_ptr<core::recorder>>& recorders,
 			const std::shared_ptr<core::thumbnail_generator>& thumb_gen,
 			const safe_ptr<core::media_info_repository>& media_info_repo,
-			boost::promise<bool>& shutdown_server_now,
 			HWND main_window
 		);
 	virtual ~AMCPProtocolStrategy();
@@ -80,7 +79,6 @@ private:
 	std::vector<safe_ptr<core::recorder>> recorders_;
 	std::shared_ptr<core::thumbnail_generator> thumb_gen_;
 	safe_ptr<core::media_info_repository> media_info_repo_;
-	boost::promise<bool>& shutdown_server_now_;
 	std::vector<AMCPCommandQueuePtr> commandQueues_;
 	static const std::wstring MessageDelimiter;
 	const HWND main_window_;

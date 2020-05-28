@@ -36,6 +36,7 @@
 #include "server.h"
 #include "tray_icon.h"
 #include "console.h"
+#include "version.h"
 
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
@@ -81,8 +82,6 @@
 CComModule _AtlModule;
 extern __declspec(selectany) CAtlModule* _pAtlModule = &_AtlModule;
 
-const wchar_t* PRODUCT_NAME = L"CasparCG Server";
-
 void change_icon( const HICON hNewIcon )
 {
    auto hMod = ::LoadLibrary(L"Kernel32.dll"); 
@@ -124,7 +123,7 @@ void setup_console_window()
 
 	// Set console title.
 	std::wstringstream str;
-	str << PRODUCT_NAME << caspar::env::version();
+	str << CASPAR_NAME << caspar::env::version();
 #ifdef COMPILE_RELEASE
 	str << " Release";
 #elif  COMPILE_PROFILE
@@ -192,143 +191,144 @@ std::wstring make_upper_case(const std::wstring& str)
 }
 
 int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
-{	
+{
 	static_assert(sizeof(void*) == 4, "64-bit code generation is not supported.");
-	
-	SetUnhandledExceptionFilter(UserUnhandledExceptionFilter);
+
+	::SetUnhandledExceptionFilter(UserUnhandledExceptionFilter);
 
 	setup_global_locale();
 
-	console console;
-	tray_icon tray(h_instance, PRODUCT_NAME);
+	int n_args;
+	auto argv = ::CommandLineToArgvW(::GetCommandLineW(), &n_args);
+	bool hide_on_startup = false;
+
+	for (int i = 0; i < n_args; i++)
+	{
+		auto arg_upper = make_upper_case(argv[i]);
+		if (arg_upper == L"-HIDE")
+			hide_on_startup = true;
+	}
+	console console(hide_on_startup);
 
 	std::wcout << L"Type \"q\" to close application." << std::endl;
-	
-	// Set debug mode.
-	#ifdef _DEBUG
-		HANDLE hLogFile;
-		hLogFile = CreateFile(L"crt_log.txt", GENERIC_WRITE, FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-		std::shared_ptr<void> crt_log(nullptr, [](HANDLE h){::CloseHandle(h);});
 
-		_CrtSetDbgFlag (_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
-		_CrtSetReportMode(_CRT_WARN,	_CRTDBG_MODE_FILE);
-		_CrtSetReportFile(_CRT_WARN,	hLogFile);
-		_CrtSetReportMode(_CRT_ERROR,	_CRTDBG_MODE_FILE);
-		_CrtSetReportFile(_CRT_ERROR,	hLogFile);
-		_CrtSetReportMode(_CRT_ASSERT,	_CRTDBG_MODE_FILE);
-		_CrtSetReportFile(_CRT_ASSERT,	hLogFile);
-	#endif
+	// Set debug mode.
+#ifdef _DEBUG
+	HANDLE hLogFile;
+	hLogFile = CreateFile(L"crt_log.txt", GENERIC_WRITE, FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	std::shared_ptr<void> crt_log(nullptr, [](HANDLE h) {::CloseHandle(h); });
+
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
+	_CrtSetReportFile(_CRT_WARN, hLogFile);
+	_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+	_CrtSetReportFile(_CRT_ERROR, hLogFile);
+	_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+	_CrtSetReportFile(_CRT_ASSERT, hLogFile);
+#endif
 
 	// Increase process priotity.
 	SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
 
 	// Install structured exception handler.
 	caspar::win32_exception::ensure_handler_installed_for_thread("main-thread");
-				
+
 	// Increase time precision. This will increase accuracy of function like Sleep(1) from 10 ms to 1 ms.
 	struct inc_prec
 	{
-		inc_prec(){timeBeginPeriod(1);}
-		~inc_prec(){timeEndPeriod(1);}
-	} inc_prec;	
+		inc_prec() { timeBeginPeriod(1); }
+		~inc_prec() { timeEndPeriod(1); }
+	} inc_prec;
 
 	// Install unstructured exception handlers into all tbb threads.
 	struct tbb_thread_installer : public tbb::task_scheduler_observer
 	{
-		tbb_thread_installer(){observe(true);}
+		tbb_thread_installer() { observe(true); }
 		void on_scheduler_entry(bool is_worker)
 		{
 			caspar::win32_exception::ensure_handler_installed_for_thread("tbb-worker-thread");
 		}
 	} tbb_thread_installer;
 
-	bool restart = false;
 	tbb::task_scheduler_init init;
-	
-	try 
+	tbb::atomic<bool> wait_for_keypress;
+	wait_for_keypress = false;
+
+	try
 	{
 		// Configure environment properties from configuration.
 		caspar::env::configure(L"casparcg.config");
-				
+
 		caspar::log::set_log_level(caspar::env::properties().get(L"configuration.log-level", L"debug"));
 
-	#ifdef _DEBUG
-		if(caspar::env::properties().get(L"configuration.debugging.remote", false))
+#ifdef _DEBUG
+		if (caspar::env::properties().get(L"configuration.debugging.remote", false))
 			MessageBox(nullptr, TEXT("Now is the time to connect for remote debugging..."), TEXT("Debug"), MB_OK | MB_TOPMOST);
-	#endif	 
+#endif	 
 
 		// Start logging to file.
-		caspar::log::add_file_sink(caspar::env::log_folder());			
+		caspar::log::add_file_sink(caspar::env::log_folder());
 		std::wcout << L"Logging [info] or higher severity to " << caspar::env::log_folder() << std::endl << std::endl;
-		
+
 		// Setup console window.
 		setup_console_window();
 
 		// Print environment information.
 		print_info();
-			
+
 		std::wstringstream str;
 		boost::property_tree::xml_writer_settings<wchar_t> w(' ', 3);
 		boost::property_tree::write_xml(str, caspar::env::properties(), w);
 		CASPAR_LOG(info) << L"casparcg.config:\n-----------------------------------------\n" << str.str().c_str() << L"-----------------------------------------";
-		tbb::atomic<bool> wait_for_keypress;
-		wait_for_keypress = false;
-
 		{
-			boost::promise<bool> shutdown_server_now;
-			boost::unique_future<bool> shutdown_server = shutdown_server_now.get_future();
+			tray_icon tray(h_instance, CASPAR_NAME);
 
 			// Create server object which initializes channels, protocols and controllers.
-			caspar::server caspar_server(shutdown_server_now, tray.GetWindow());
+			caspar::server caspar_server(tray.GetWindow());
 
 			// Use separate thread for the blocking console input, will be terminated 
 			// anyway when the main thread terminates.
-			boost::thread stdin_thread([&caspar_server, &shutdown_server_now, &wait_for_keypress, &tray]
+			boost::thread stdin_thread([&caspar_server, &wait_for_keypress, &tray]
 			{
 				caspar::win32_exception::ensure_handler_installed_for_thread("stdin-thread");
 
 				// Create a amcp parser for console commands.
 				caspar::protocol::amcp::AMCPProtocolStrategy amcp(
-						caspar_server.get_channels(),
-						caspar_server.get_recorders(),
-						caspar_server.get_thumbnail_generator(),
-						caspar_server.get_media_info_repo(),
-						shutdown_server_now,
-						tray.GetWindow()
-					);
+					caspar_server.get_channels(),
+					caspar_server.get_recorders(),
+					caspar_server.get_thumbnail_generator(),
+					caspar_server.get_media_info_repo(),
+					tray.GetWindow()
+				);
 
 				// Create a dummy client which prints amcp responses to console.
 				auto console_client = std::make_shared<caspar::IO::ConsoleClientInfo>();
 				std::wstring wcmd;
-	
-				while(true)
+				std::wcin.clear();
+				while (std::getline(std::wcin, wcmd) != nullptr)
 				{
-					std::wcin.clear();
-					std::getline(std::wcin, wcmd); // TODO: It's blocking...
-				
 					//boost::to_upper(wcmd);  // TODO COMPILER crashes on this line, Strange!
 					auto upper_cmd = make_upper_case(wcmd);
 
-					if(upper_cmd == L"EXIT" || upper_cmd == L"QUIT")
+					if (upper_cmd == L"EXIT" || upper_cmd == L"QUIT")
 					{
 						wait_for_keypress = true;
-						shutdown_server_now.set_value(false); // False to not restart server
-						tray.close();
+						tray.Close();
 						break;
 					}
-				#ifndef COMPILE_RELEASE
+#ifndef COMPILE_RELEASE
 					try
 					{
 						// This is just dummy code for testing.
-						if(wcmd.substr(0, 1) == L"1")
+						if (wcmd.substr(0, 1) == L"1")
 							wcmd = L"PLAY 1-0 ndi 192.168.2.6:5651";
-						else if(wcmd.substr(0, 1) == L"2")
+						else if (wcmd.substr(0, 1) == L"2")
 							wcmd = L"ADD 1 FILE RECORDING.MXF";
-						else if(wcmd.substr(0, 1) == L"3")
+						else if (wcmd.substr(0, 1) == L"3")
 							wcmd = L"REMOVE 1 FILE RECORDING.MXF";
-						else if(wcmd.substr(0, 1) == L"4")
+						else if (wcmd.substr(0, 1) == L"4")
 							wcmd = L"PLAY 2-0 route://1-0";
-						else if(wcmd.substr(0, 1) == L"5")
+						else if (wcmd.substr(0, 1) == L"5")
 							wcmd = L"PLAY 1-0 SYNCHRO8 LOOP";
 						else if (wcmd.substr(0, 1) == L"6")
 							wcmd = L"CAPTURE 1 recorder 1 IN 0:31:0:0 OUT 0:31:20:0 FILE record.mp4";
@@ -338,24 +338,24 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 							wcmd = L"CAPTURE 1 recorder 1 LIMIT 250 FILE limit2.mov";
 						else if (wcmd.substr(0, 1) == L"0")
 							wcmd = L"RECORDER FINISH 1";
-						else if(upper_cmd.substr(0, 1) == L"X")
+						else if (upper_cmd.substr(0, 1) == L"X")
 						{
 							int num = 0;
 							std::wstring file;
 							try
 							{
 								num = boost::lexical_cast<int>(wcmd.substr(1, 2));
-								file = wcmd.substr(4, wcmd.length()-1);
+								file = wcmd.substr(4, wcmd.length() - 1);
 							}
-							catch(...)
+							catch (...)
 							{
 								num = boost::lexical_cast<int>(wcmd.substr(1, 1));
-								file = wcmd.substr(3, wcmd.length()-1);
+								file = wcmd.substr(3, wcmd.length() - 1);
 							}
 
 							int n = 0;
 							int num2 = num;
-							while(num2 > 0)
+							while (num2 > 0)
 							{
 								num2 >>= 1;
 								n++;
@@ -363,7 +363,7 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 
 							wcmd = L"MIXER 1 GRID " + boost::lexical_cast<std::wstring>(n);
 
-							for(int i = 1; i <= num; ++i)
+							for (int i = 1; i <= num; ++i)
 								wcmd += L"\r\nPLAY 1-" + boost::lexical_cast<std::wstring>(i) + L" " + file + L" LOOP";// + L" SLIDE 100 LOOP";
 						}
 					}
@@ -372,10 +372,10 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 						CASPAR_LOG_CURRENT_EXCEPTION();
 						continue;
 					}
-				#endif
+#endif
 					wcmd += L"\r\n";
 					amcp.Parse(wcmd.c_str(), wcmd.length(), console_client);
-				}	
+				}
 			});
 			stdin_thread.detach();
 			MSG stMsg;
@@ -384,27 +384,27 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 				TranslateMessage(&stMsg);
 				DispatchMessage(&stMsg);
 			}
-			restart = shutdown_server.get();
-		}
-		CASPAR_LOG(info) << "Successfully shutdown CasparCG Server.";
+		} // end of server scope
 
-		if (wait_for_keypress)
-			system("pause");	
+		CASPAR_LOG(info) << "Successfully shutdown CasparCG Server.";
 	}
-	catch(boost::property_tree::file_parser_error&)
+	catch (boost::property_tree::file_parser_error&)
 	{
 		CASPAR_LOG_CURRENT_EXCEPTION();
 		CASPAR_LOG(fatal) << L"Unhandled configuration error in main thread. Please check the configuration file (casparcg.config) for errors.";
-		system("pause");	
+		system("pause");
+		return 1;
 	}
-	catch(...)
+	catch (...)
 	{
 		CASPAR_LOG_CURRENT_EXCEPTION();
 		CASPAR_LOG(fatal) << L"Unhandled exception in main thread. Please report this error on GitHub (https://github.com/jaskie/Server/issues).";
 		Sleep(1000);
 		std::wcout << L"\n\nCasparCG will automatically shutdown. See the log file located at the configured log-path folder for more information.\n\n";
 		Sleep(4000);
-	}	
-	
-	return restart ? 5 : 0;
+	}
+	if (wait_for_keypress)
+		system("pause");
+	console.terminate();
+	return 0;
 }

@@ -1,4 +1,8 @@
 #include "tray_icon.h"
+#include "version.h"
+#include "resource.h"
+#include <string.h>
+#include <string>
 
 const UINT WM_TRAY = WM_USER + 1;
 
@@ -9,6 +13,7 @@ HWND create_window(char* window_name)
 
 LRESULT CALLBACK HiddenWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+	HWND h_console = 0;
 	switch (uMsg)
 	{
 	case WM_CREATE:
@@ -20,7 +25,7 @@ LRESULT CALLBACK HiddenWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 		stData.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
 		stData.uCallbackMessage = WM_TRAY;
 		stData.hIcon = ::LoadIcon(GetModuleHandle(0), MAKEINTRESOURCE(101));
-		//LoadStringSafe(IDS_TIP, stData.szTip, _countof(stData.szTip));
+		wcscpy(stData.szTip, CASPAR_NAME);
 		if (!Shell_NotifyIcon(NIM_ADD, &stData))
 			return -1; // oops
 	}
@@ -36,27 +41,36 @@ LRESULT CALLBACK HiddenWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 	}
 	return 0;
 
-	/*case WM_TRAY:
+	case WM_TRAY:
 		switch (lParam)
 		{
 		case WM_LBUTTONDBLCLK:
-			SendMessage(hWnd, WM_COMMAND, ID_SHOW, 0);
+			h_console = GetConsoleWindow();
+			ShowWindow(h_console, SW_SHOW);
+			SetForegroundWindow(h_console);
 			break;
 
 		case WM_RBUTTONDOWN:
 		{
-			HMENU hMenu = LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDR_POPUP));
+			HMENU hMenu = LoadMenu(GetModuleHandle(0), MAKEINTRESOURCE(IDR_TRAY_MENU));
 			if (hMenu)
 			{
 				HMENU hSubMenu = GetSubMenu(hMenu, 0);
 				if (hSubMenu)
 				{
+					h_console = GetConsoleWindow();
+					if (IsWindowVisible(h_console))
+					{
+						EnableMenuItem(hMenu, ID_CASPARCG_SHOW, MF_BYCOMMAND | MF_DISABLED);
+					}
+					else
+					{
+						EnableMenuItem(hMenu, ID_CASPARCG_HIDE, MF_BYCOMMAND | MF_DISABLED);
+					}
 					POINT stPoint;
 					GetCursorPos(&stPoint);
-
 					TrackPopupMenu(hSubMenu, TPM_LEFTALIGN | TPM_BOTTOMALIGN | TPM_RIGHTBUTTON, stPoint.x, stPoint.y, 0, hWnd, NULL);
 				}
-
 				DestroyMenu(hMenu);
 			}
 		}
@@ -67,29 +81,31 @@ LRESULT CALLBACK HiddenWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 	case WM_COMMAND:
 		switch (LOWORD(wParam))
 		{
-		case ID_SHOW:
-			if (CPopupWndData::s_pThis)
-				SetForegroundWindow(CPopupWndData::s_pThis->m_hWnd);
-			else
-			{
-				CPopupWndData stData;
-				ZeroMemory(&stData, sizeof(stData));
-				CPopupWndData::s_pThis = &stData;
+		case ID_CASPARCG_SHOW:
+			h_console = GetConsoleWindow();
+			ShowWindow(h_console, SW_SHOW);
+			WINDOWPLACEMENT place;
+			memset(&place, 0, sizeof(WINDOWPLACEMENT));
+			place.length = sizeof(WINDOWPLACEMENT);
+			GetWindowPlacement(h_console, &place);
+			if (place.showCmd == SW_SHOWMINIMIZED)
+				ShowWindow(h_console, SW_RESTORE);
+			SetForegroundWindow(h_console);
+			break;
+		case ID_CASPARCG_HIDE:
+			h_console = GetConsoleWindow();
+			ShowWindow(h_console, SW_HIDE);
+			break;
+		return 0;
 
-				DialogBox(g_hInstance, MAKEINTRESOURCE(IDD_CONVERTER), NULL, ConverterProc);
-
-				if (stData.m_pControls)
-					delete[] stData.m_pControls;
-				CPopupWndData::s_pThis = NULL;
-			}
-			return 0;
-
-		case ID_QUIT:
+		case ID_CASPARCG_CLOSE:
+			if (MessageBox(NULL, _T("Are you shure to close CasparCG server?\nThis will terminate your broadcast."), _T("Confirm shutdown"), MB_YESNO | MB_ICONINFORMATION | MB_DEFBUTTON2 | MB_TOPMOST) != IDYES)
+				return 0;
 			PostQuitMessage(0);
 			return 0;
 		}
 		break;
-		*/
+
 	}
 	return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
@@ -117,13 +133,14 @@ tray_icon::~tray_icon()
 		UnregisterClass((LPCTSTR)a_class_, h_instance_);
 }
 
-void tray_icon::close()
-{
-	PostMessage(hidden_window_, WM_QUIT, 0, 0);
-}
 
 HWND tray_icon::GetWindow() const
 {
 	return hidden_window_;
+}
+
+void tray_icon::Close()
+{
+	PostMessage(hidden_window_, WM_QUIT, 0, 0);
 }
 
