@@ -74,7 +74,8 @@ LRESULT CALLBACK HiddenWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 						::EnableMenuItem(hMenu, ID_CASPARCG_HIDE, MF_BYCOMMAND | MF_DISABLED);
 					POINT stPoint;
 					::GetCursorPos(&stPoint);
-					::TrackPopupMenu(hSubMenu, TPM_LEFTALIGN | TPM_BOTTOMALIGN | TPM_RIGHTBUTTON, stPoint.x, stPoint.y, 0, hWnd, NULL);
+					::SetForegroundWindow(hWnd);
+					::TrackPopupMenu(hSubMenu, TPM_BOTTOMALIGN | TPM_LEFTBUTTON, stPoint.x, stPoint.y, 0, hWnd, NULL);
 				}
 				::DestroyMenu(hMenu);
 			}
