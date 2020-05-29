@@ -69,9 +69,9 @@ LRESULT CALLBACK HiddenWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 				{
 					HWND h_console = ::GetConsoleWindow();
 					if (::IsWindowVisible(h_console))
-						::EnableMenuItem(hMenu, ID_CASPARCG_SHOW, MF_BYCOMMAND | MF_DISABLED);
+						::DeleteMenu(hMenu, ID_CASPARCG_SHOW, MF_BYCOMMAND);
 					else
-						::EnableMenuItem(hMenu, ID_CASPARCG_HIDE, MF_BYCOMMAND | MF_DISABLED);
+						::DeleteMenu(hMenu, ID_CASPARCG_HIDE, MF_BYCOMMAND);
 					POINT stPoint;
 					::GetCursorPos(&stPoint);
 					::SetForegroundWindow(hWnd);
