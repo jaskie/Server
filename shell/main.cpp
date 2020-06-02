@@ -23,6 +23,9 @@
 // Replace the standard memory allocation routines in Microsoft* C/C++ RTL 
 // (malloc/free, global new/delete, etc.) with the TBB memory allocator. 
 
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+
 #ifdef _DEBUG
 	#define _CRTDBG_MAP_ALLOC
 	#include <stdlib.h>
@@ -37,9 +40,6 @@
 #include "tray_icon.h"
 #include "console.h"
 #include "version.h"
-
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
 
 #include <locale>
 
