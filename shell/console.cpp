@@ -27,6 +27,9 @@ console::console(bool hide_on_start)
 {
     if (!allocated_)
         return;
+
+    if (hide_on_start)
+        ::ShowWindow(h_window_, SW_HIDE);
     // disable Ctrl+C
     ::SetConsoleCtrlHandler(NULL, true);
     
@@ -72,8 +75,6 @@ console::console(bool hide_on_start)
     std::wcout.rdbuf(console_output.rdbuf());
     std::wcerr.rdbuf(console_error.rdbuf());
 
-    if (hide_on_start)
-        ::ShowWindow(h_window_, SW_HIDE);
 }
 
 console::~console()
