@@ -151,7 +151,6 @@ struct frame_muxer::implementation : boost::noncopyable
 			if(hints & core::frame_producer::ALPHA_HINT)
 				video_frame->format = make_alpha_format(video_frame->format);
 		
-			auto format = video_frame->format;
 			if(video_frame->format == CASPAR_PIX_FMT_LUMA) // CASPAR_PIX_FMT_LUMA is not valid for filter, change it to GRAY8
 				video_frame->format = AV_PIX_FMT_GRAY8;
 
@@ -162,8 +161,8 @@ struct frame_muxer::implementation : boost::noncopyable
 
 			BOOST_FOREACH(auto& av_frame, filter_->poll_all())
 			{
-				if(video_frame->format == AV_PIX_FMT_GRAY8 && format == CASPAR_PIX_FMT_LUMA)
-					av_frame->format = format;
+				if(video_frame->format == AV_PIX_FMT_GRAY8 && video_frame->format == CASPAR_PIX_FMT_LUMA)
+					av_frame->format = video_frame->format;
 				video_streams_.back().push(make_write_frame(this, av_frame, frame_factory_, hints, audio_channel_layout_));
 			}
 		}
@@ -340,6 +339,19 @@ struct frame_muxer::implementation : boost::noncopyable
 		video_streams_.push(std::queue<safe_ptr<write_frame>>());
 		audio_streams_.push(core::audio_buffer());
 	}
+
+	void flush()
+	{
+		filter_->flush();
+		auto frame = filter_->last_input_frame();
+		BOOST_FOREACH(auto & av_frame, filter_->poll_all())
+		{
+			if (frame->format == AV_PIX_FMT_GRAY8 && frame->format == CASPAR_PIX_FMT_LUMA)
+				av_frame->format = frame->format;
+			video_streams_.back().push(make_write_frame(this, av_frame, frame_factory_, 0, audio_channel_layout_));
+		}
+		push(empty_audio());
+	}
 };
 
 frame_muxer::frame_muxer(
@@ -352,6 +364,7 @@ frame_muxer::frame_muxer(
 	: impl_(new implementation(in_fps, in_timebase, frame_factory, filter, thumbnail_mode, audio_channel_layout)){}
 void frame_muxer::push(const std::shared_ptr<AVFrame>& video_frame, int hints, int frame_timecode){impl_->push(video_frame, hints, frame_timecode);}
 void frame_muxer::push(const std::shared_ptr<core::audio_buffer>& audio_samples){return impl_->push(audio_samples);}
+void frame_muxer::flush() { impl_->flush(); }
 void frame_muxer::clear(){return impl_->clear();}
 std::shared_ptr<basic_frame> frame_muxer::poll(){return impl_->poll();}
 bool frame_muxer::video_ready() const{return impl_->video_ready();}

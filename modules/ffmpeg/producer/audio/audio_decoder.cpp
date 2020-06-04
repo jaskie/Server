@@ -79,7 +79,7 @@ public:
 		, duration_(calc_duration(stream_))
 	{
 		seek_pts_ = 0;
-		time_ = 0;
+		time_ = AV_NOPTS_VALUE;
 		eof_ = false;
 		THROW_ON_ERROR2(swr_init(swr_.get()), "[audio_decoder]");
 		CASPAR_LOG(debug) << print() 
@@ -118,7 +118,7 @@ public:
 		input_.try_pop_audio(packet);
 		if (packet || (input_.eof() && !eof_))
 			avcodec_send_packet(codec_context_.get(), packet.get());
-		safe_ptr<AVFrame> frame = create_frame();
+		auto frame = create_frame();
 		int ret = avcodec_receive_frame(codec_context_.get(), frame.get());
 		if (ret == AVERROR_EOF)
 			eof_ = true;
@@ -161,6 +161,7 @@ public:
 		avcodec_flush_buffers(codec_context_.get());
 		flush_resampler();
 		eof_ = false;
+		time_ = AV_NOPTS_VALUE;
 		seek_pts_ = stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_ + (time * stream_->time_base.den / (AV_TIME_BASE * stream_->time_base.num));
 	}
 	

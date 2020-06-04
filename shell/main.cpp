@@ -286,9 +286,9 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 					{
 						// This is just dummy code for testing.
 						if (wcmd.substr(0, 1) == L"1")
-							wcmd = L"PLAY 1-0 ndi 192.168.2.6:5651";
+							wcmd = L"PLAY 1-0 TC SEEK 200";
 						else if (wcmd.substr(0, 1) == L"2")
-							wcmd = L"ADD 1 FILE RECORDING.MXF";
+							wcmd = L"CALL 1-0 SEEK 100";
 						else if (wcmd.substr(0, 1) == L"3")
 							wcmd = L"REMOVE 1 FILE RECORDING.MXF";
 						else if (wcmd.substr(0, 1) == L"4")

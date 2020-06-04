@@ -93,9 +93,9 @@ safe_ptr<AVPacket> create_packet()
 	return packet;
 }
 
-safe_ptr<AVFrame> create_frame()
+std::shared_ptr<AVFrame> create_frame()
 {	
-	safe_ptr<AVFrame> frame(av_frame_alloc(), [](AVFrame* f) { av_frame_free(&f);});
+	std::shared_ptr<AVFrame> frame(av_frame_alloc(), [](AVFrame* f) { av_frame_free(&f);});
 	return frame;
 }
 
@@ -247,7 +247,7 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 									boost::errinfo_api_function("sws_getContext"));
 		}	
 		
-		safe_ptr<AVFrame> av_frame = create_frame();	
+		std::shared_ptr<AVFrame> av_frame = create_frame();
 		if(target_pix_fmt == AV_PIX_FMT_BGRA)
 		{
 			auto size = avpicture_fill(reinterpret_cast<AVPicture*>(av_frame.get()), write->image_data().begin(), AV_PIX_FMT_BGRA, width, height);

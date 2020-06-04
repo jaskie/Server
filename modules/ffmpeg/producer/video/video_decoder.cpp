@@ -65,7 +65,7 @@ struct video_decoder::implementation : boost::noncopyable
 	tbb::atomic<int64_t>					seek_pts_;
 	tbb::atomic<bool>						invert_field_order_;
 	tbb::atomic<bool>						eof_;
-	int64_t									time_;
+	tbb::atomic<int64_t>					time_;
 public:
 	explicit implementation(input input, bool invert_field_order)
 		: input_(input)
@@ -75,10 +75,10 @@ public:
 		, height_(codec_context_->height)
 		, stream_start_pts_(stream_->start_time == AV_NOPTS_VALUE ? 0 : stream_->start_time)
 		, duration_(calc_duration(stream_))
-		, time_(AV_NOPTS_VALUE)
 	{
 		invert_field_order_ = invert_field_order;
 		eof_ = false;
+		time_ = AV_NOPTS_VALUE;
 		seek_pts_ = 0;
 		CASPAR_LOG(trace) << "Codec: " << codec_->long_name;
 	}
@@ -129,6 +129,7 @@ public:
 		seek_pts_ = stream_start_pts_ == AV_NOPTS_VALUE ? 0 : stream_start_pts_
 			+ (time * stream_->time_base.den / (AV_TIME_BASE * stream_->time_base.num));
 		eof_ = false;
+		time_ = AV_NOPTS_VALUE;
 	}
 
 	void invert_field_order (bool invert)

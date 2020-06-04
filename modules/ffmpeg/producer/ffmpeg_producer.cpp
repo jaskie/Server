@@ -111,13 +111,13 @@ struct ffmpeg_producer : public core::frame_producer
 	const std::wstring											custom_channel_order_;	
 
 	const boost::rational<int>									out_fps_;
-	int64_t														start_time_;
+	const int64_t												start_time_;
 	const int64_t												length_;
 	const bool													thumbnail_mode_;
 	const bool													alpha_mode_;
 	const std::string											filter_str_;
 	bool														loop_;
-	bool														is_eof_;
+	tbb::atomic<bool>											is_eof_;
 	safe_ptr<core::basic_frame>									last_frame_;
 	
 	std::queue<safe_ptr<core::basic_frame>>						frame_buffer_;
@@ -140,7 +140,6 @@ public:
 		, custom_channel_order_(custom_channel_order)
 		, loop_(loop)
 		, start_time_(frame_to_time(start))
-		, is_eof_(false)
 	{
 		graph_->set_color("frame-time", diagnostics::color(0.1f, 1.0f, 0.1f));
 		graph_->set_color("underflow", diagnostics::color(0.6f, 0.3f, 0.9f));	
@@ -186,8 +185,7 @@ public:
 			BOOST_THROW_EXCEPTION(averror_stream_not_found() << msg_info("No streams found"));
 		muxer_.reset(new frame_muxer(video_decoder_->frame_rate(), video_decoder_->time_base(), frame_factory, thumbnail_mode_, audio_channel_layout_, filter_str_));
 		seek(start_time_, false);
-		is_eof_ = false;
-		for (int n = 0; n < 32 && frame_buffer_.size() < 4; ++n)
+		for (int n = 0; n < 128 && frame_buffer_.size() < 2 && !is_eof_; ++n)
 			try_decode_frame(thumbnail_mode ? core::frame_producer::DEINTERLACE_HINT : alpha_mode ? core::frame_producer::ALPHA_HINT : core::frame_producer::NO_HINT);
 	}
 
@@ -208,21 +206,17 @@ public:
 		frame_timer_.restart();
 		auto disable_logging = temporary_disable_logging_for_thread(thumbnail_mode_);
 				
-		if (!is_eof_)
-			for (int n = 0; n < 64 && frame_buffer_.size() < 4; ++n)
-				try_decode_frame(hints);
+		for (int n = 0; n < 128 && frame_buffer_.size() < 2 && !is_eof_; ++n)
+			try_decode_frame(hints);
 		
 		graph_->set_value("frame-time", frame_timer_.elapsed()*format_desc_.fps*0.5);
 
 		if (frame_buffer_.empty())
 		{
-			if (is_eof_)
-				return last_frame();
 			
-			if (decoder_eof())
+			if (is_eof_)
 			{
 				send_osc();
-				is_eof_ = true;
 				return last_frame();
 			}
 			else 
@@ -370,9 +364,12 @@ public:
 		}
 		info.add(L"fps", static_cast<double>(out_fps_.numerator()) / out_fps_.denominator());
 		info.add(L"loop", loop_);
-		auto nb_frames2 = nb_frames();
-		info.add(L"nb-frames",			nb_frames2 == std::numeric_limits<uint32_t>::max() ? -1 : nb_frames2);
-		info.add(L"frame-number", last_frame_->get_timecode());
+		uint32_t nb_frames2 = nb_frames();
+		uint32_t file_nb_frames = time_to_frame(file_duration());
+		info.add(L"nb-frames",	nb_frames2 == std::numeric_limits<uint32_t>::max() ? -1 : nb_frames2);
+		info.add(L"frame-number", last_frame_->get_timecode() - time_to_frame(start_time_));
+		info.add(L"file-nb-frames", file_nb_frames == std::numeric_limits<uint32_t>::max() ? -1 : file_nb_frames);
+		info.add(L"file-frame-number", last_frame_->get_timecode());
 		return info;
 	}
 
@@ -494,22 +491,20 @@ public:
 	void try_decode_frame(int hints)
 	{
 		int64_t time = decoded_time();
-		if (loop_ && 
-			((length_ != AV_NOPTS_VALUE && time >= start_time_ + length_)
-				|| decoder_eof()))
-			seek(start_time_, false);
-		if (!loop_ && length_ != AV_NOPTS_VALUE && time >= start_time_ + length_)
+		if (time != AV_NOPTS_VALUE)
 		{
-			is_eof_ = true;
-			return;
+			if (loop_ &&
+				((length_ != AV_NOPTS_VALUE && time >= start_time_ + length_) || decoder_eof()))
+				seek(start_time_, false);
+			if (!loop_ && ((length_ != AV_NOPTS_VALUE && time >= start_time_ + length_) || decoder_eof()))
+				is_eof_ = true;
 		}
-
-		decode_frame(hints);
-		
+		if (is_eof_)
+			muxer_->flush();
+		else
+			decode_frame(hints);
 		for (auto frame = muxer_->poll(); frame; frame = muxer_->poll())
-		{
 			frame_buffer_.push(make_safe_ptr(frame));
-		}
 	}
 
 	core::monitor::subject& monitor_output()

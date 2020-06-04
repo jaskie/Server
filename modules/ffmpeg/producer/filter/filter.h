@@ -56,8 +56,10 @@ public:
 	filter& operator=(filter&& other);
 
 	void push(const std::shared_ptr<AVFrame>& frame);
+	void flush();
 	std::shared_ptr<AVFrame> poll();
 	std::vector<safe_ptr<AVFrame>> poll_all();
+	std::shared_ptr<AVFrame>& last_input_frame() const;
 	void clear();
 	bool is_frame_format_changed(const std::shared_ptr<AVFrame>& frame);
 	int out_width();

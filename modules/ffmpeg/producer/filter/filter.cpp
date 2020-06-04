@@ -80,6 +80,7 @@ struct filter::implementation
 	const AVRational		in_frame_rate_;
 	const AVRational		in_sample_aspect_ratio_;
 	std::queue<std::shared_ptr<AVFrame>>	fast_path_;
+	std::shared_ptr<AVFrame> last_frame_;
 
 	implementation(
 		int in_width,
@@ -251,13 +252,25 @@ struct filter::implementation
 	}
 
 	void push(const std::shared_ptr<AVFrame>& frame)
-	{		
+	{	
+		if (frame->pict_type == AV_PICTURE_TYPE_NONE)
+			return;
+		last_frame_ = frame;
 		if (fast_path())
 			fast_path_.push(frame);
 		else
-			FF(av_buffersrc_add_frame(
+			FF(av_buffersrc_add_frame_flags(
 				video_graph_in_, 
-				frame.get()));
+				frame.get(), AV_BUFFERSRC_FLAG_KEEP_REF));
+	}
+
+	void flush()
+	{
+		if (!last_frame_ || fast_path())
+			return;
+		FF(av_buffersrc_add_frame_flags(
+			video_graph_in_,
+			last_frame_.get(), AV_BUFFERSRC_FLAG_KEEP_REF));
 	}
 
 	std::shared_ptr<AVFrame> poll()
@@ -288,6 +301,7 @@ struct filter::implementation
 
 	void clear()
 	{
+		last_frame_.reset();
 		configure_filtergraph();
 	}
 
@@ -363,7 +377,9 @@ std::vector<safe_ptr<AVFrame>> filter::poll_all()
 		frames.push_back(make_safe_ptr(frame));
 	return frames;
 }
+std::shared_ptr<AVFrame>& filter::last_input_frame() const { return impl_->last_frame_; }
 void filter::clear() { impl_->clear(); }
+void filter::flush() { impl_->flush(); }
 bool filter::is_frame_format_changed(const std::shared_ptr<AVFrame>& frame) { return impl_->is_frame_format_changed(frame);}
 int filter::out_width() { return impl_->out_width(); }
 int filter::out_height() { return impl_->out_height(); }

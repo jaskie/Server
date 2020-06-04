@@ -59,6 +59,7 @@ public:
 	void push(const std::shared_ptr<AVFrame>& video_frame, int hints = 0, int frame_timecode = std::numeric_limits<unsigned int>().max());
 	void push(const std::shared_ptr<core::audio_buffer>& audio_samples);
 	void clear();
+	void flush();
 
 	bool video_ready() const;
 	bool audio_ready() const;

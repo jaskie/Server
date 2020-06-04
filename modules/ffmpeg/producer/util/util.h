@@ -71,7 +71,7 @@ int							make_alpha_format(int format); // NOTE: Be careful about CASPAR_PIX_FM
 safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVFrame>& decoded_frame, const safe_ptr<core::frame_factory>& frame_factory, int hints, const core::channel_layout& audio_channel_layout);
 
 safe_ptr<AVPacket> create_packet();
-safe_ptr<AVFrame> create_frame();
+std::shared_ptr<AVFrame> create_frame();
 
 bool is_sane_fps(AVRational time_base);
 AVRational fix_time_base(AVRational time_base);
