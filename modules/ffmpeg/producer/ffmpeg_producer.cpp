@@ -364,11 +364,9 @@ public:
 		}
 		info.add(L"fps", static_cast<double>(out_fps_.numerator()) / out_fps_.denominator());
 		info.add(L"loop", loop_);
-		uint32_t nb_frames2 = nb_frames();
-		uint32_t file_nb_frames = time_to_frame(file_duration());
-		info.add(L"nb-frames",	nb_frames2 == std::numeric_limits<uint32_t>::max() ? -1 : nb_frames2);
+		info.add(L"nb-frames",	static_cast<int32_t>(nb_frames()));
 		info.add(L"frame-number", last_frame_->get_timecode() - time_to_frame(start_time_));
-		info.add(L"file-nb-frames", file_nb_frames == std::numeric_limits<uint32_t>::max() ? -1 : file_nb_frames);
+		info.add(L"file-nb-frames", static_cast<int32_t>(time_to_frame(file_duration())));
 		info.add(L"file-frame-number", last_frame_->get_timecode());
 		return info;
 	}
