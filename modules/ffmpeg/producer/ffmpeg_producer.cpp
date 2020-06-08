@@ -124,7 +124,7 @@ struct ffmpeg_producer : public core::frame_producer
 
 		
 public:
-	explicit ffmpeg_producer(const safe_ptr<core::frame_factory>& frame_factory, const std::wstring& filename, const std::wstring& filter, bool loop, uint32_t start, uint32_t length, bool thumbnail_mode, bool alpha_mode, const std::wstring& custom_channel_order, bool field_order_inverted)
+	explicit ffmpeg_producer(const safe_ptr<core::frame_factory>& frame_factory, const std::wstring& filename, const std::wstring& filter, bool loop, uint32_t start, uint32_t length, bool thumbnail_mode, bool alpha_mode, const std::wstring& custom_channel_order, bool field_order_inverted, bool is_stream)
 		: filename_(filename)
 		, path_relative_to_media_(get_relative_or_original(filename, env::media_folder()))
 		, frame_factory_(frame_factory)
@@ -184,8 +184,12 @@ public:
 		if(!video_decoder_ && !audio_decoder_)
 			BOOST_THROW_EXCEPTION(averror_stream_not_found() << msg_info("No streams found"));
 		muxer_.reset(new frame_muxer(video_decoder_->frame_rate(), video_decoder_->time_base(), frame_factory, thumbnail_mode_, audio_channel_layout_, filter_str_));
-		seek(start_time_, false);
-		for (int n = 0; n < 128 && frame_buffer_.size() < 2 && !is_eof_; ++n)
+		if (is_stream)
+			input_.tick();
+		else
+			if (!seek(start_time_, false))
+				CASPAR_LOG(warning) << print() << " Initial seek failed.";
+		for (int n = 0; n < 32 && frame_buffer_.size() < 2 && !is_eof_; ++n)
 			try_decode_frame(thumbnail_mode ? core::frame_producer::DEINTERLACE_HINT : alpha_mode ? core::frame_producer::ALPHA_HINT : core::frame_producer::NO_HINT);
 	}
 
@@ -206,7 +210,7 @@ public:
 		frame_timer_.restart();
 		auto disable_logging = temporary_disable_logging_for_thread(thumbnail_mode_);
 				
-		for (int n = 0; n < 128 && frame_buffer_.size() < 2 && !is_eof_; ++n)
+		for (int n = 0; n < 32 && frame_buffer_.size() < 2 && !is_eof_; ++n)
 			try_decode_frame(hints);
 		
 		graph_->set_value("frame-time", frame_timer_.elapsed()*format_desc_.fps*0.5);
@@ -414,7 +418,7 @@ public:
 	bool seek(int64_t time_to_seek, bool clear_buffer_and_muxer)
 	{
 		int64_t duration = file_duration();
-		if (time_to_seek > duration && duration != AV_NOPTS_VALUE)
+		if (time_to_seek >= duration && duration != AV_NOPTS_VALUE)
 			return false;
 		if (clear_buffer_and_muxer)
 		{
@@ -422,7 +426,8 @@ public:
 				frame_buffer_.pop();
 			muxer_->clear();
 		}
-		input_.seek(time_to_seek);
+		if (!input_.seek(time_to_seek))
+			return false;
 		if (video_decoder_)
 			video_decoder_->seek(time_to_seek);
 		if (audio_decoder_)
@@ -534,26 +539,31 @@ safe_ptr<core::frame_producer> create_producer(
 
 	// Infer the resource type from the resource_name
 	auto tokens = core::parameters::protocol_split(params.at_original(0));
+	auto protocol = tokens[0];
 	auto filename = tokens[1];
-	if (!is_valid_file(filename, invalid_exts))
-		filename = env::media_folder() + L"\\" + tokens[1];
-	if(!boost::filesystem::exists(filename))
-		filename = probe_stem(filename, invalid_exts);
-	if(filename.empty())
-		return core::frame_producer::empty();
-	
-	auto loop		= params.has(L"LOOP");
-	auto start		= params.get(L"SEEK", static_cast<uint32_t>(0));
-	auto length		= params.get(L"LENGTH", std::numeric_limits<uint32_t>::max());
-	auto filter_str = params.get(L"FILTER", L""); 	
-	auto custom_channel_order	= params.get(L"CHANNEL_LAYOUT", L"");
-	auto field_order_inverted = params.has(L"FIELD_ORDER_INVERTED");
-	bool is_alpha = params.has(L"IS_ALPHA");
 
+	auto filter_str = params.get(L"FILTER", L"");
 	boost::replace_all(filter_str, L"DEINTERLACE", L"YADIF=0:-1");
 	boost::replace_all(filter_str, L"DEINTERLACE_BOB", L"YADIF=1:-1");
-	
-	return create_producer_destroy_proxy(make_safe<ffmpeg_producer>(frame_factory, filename, filter_str, loop, start, length, false, is_alpha, custom_channel_order, field_order_inverted));
+	auto custom_channel_order = params.get(L"CHANNEL_LAYOUT", L"");
+	auto field_order_inverted = params.has(L"FIELD_ORDER_INVERTED");
+	bool is_alpha = params.has(L"IS_ALPHA");
+	if (protocol.empty())
+	{
+		if (!is_valid_file(filename, invalid_exts))
+			filename = env::media_folder() + L"\\" + tokens[1];
+		if (!boost::filesystem::exists(filename))
+			filename = probe_stem(filename, invalid_exts);
+		if (filename.empty())
+			return core::frame_producer::empty();
+
+		auto loop = params.has(L"LOOP");
+		auto start = params.get(L"SEEK", static_cast<uint32_t>(0));
+		auto length = params.get(L"LENGTH", std::numeric_limits<uint32_t>::max());
+		return create_producer_destroy_proxy(make_safe<ffmpeg_producer>(frame_factory, filename, filter_str, loop, start, length, false, is_alpha, custom_channel_order, field_order_inverted, false));
+	}
+	else
+		return create_producer_destroy_proxy(make_safe<ffmpeg_producer>(frame_factory, params.at_original(0), filter_str, false, 0, -1, false, is_alpha, custom_channel_order, field_order_inverted, true));
 }
 
 safe_ptr<core::frame_producer> create_thumbnail_producer(
@@ -568,7 +578,7 @@ safe_ptr<core::frame_producer> create_thumbnail_producer(
 	if(filename.empty())
 		return core::frame_producer::empty();
 	
-	return make_safe<ffmpeg_producer>(frame_factory, filename, L"", false, 0, std::numeric_limits<uint32_t>::max(), true, false, L"", false);
+	return make_safe<ffmpeg_producer>(frame_factory, filename, L"", false, 0, std::numeric_limits<uint32_t>::max(), true, false, L"", false, false);
 }
 
 }}

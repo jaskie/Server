@@ -50,11 +50,12 @@ public:
 	safe_ptr<AVCodecContext> open_audio_codec(AVStream** stream);
 	safe_ptr<AVCodecContext> open_video_codec(AVStream** stream);
 
-	bool try_pop_audio(std::shared_ptr<AVPacket>& packet);
-	bool try_pop_video(std::shared_ptr<AVPacket>& packet);
+	void try_pop_audio(std::shared_ptr<AVPacket>& packet);
+	void try_pop_video(std::shared_ptr<AVPacket>& packet);
 	bool eof() const;
 
-	void seek(int64_t target_time);
+	bool seek(int64_t target_time);
+	void tick();
 	safe_ptr<AVFormatContext> format_context();
 
 private:

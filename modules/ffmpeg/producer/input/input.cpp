@@ -63,8 +63,6 @@ extern "C"
 
 static const size_t MAX_BUFFER_COUNT    = 500;
 static const size_t MIN_BUFFER_COUNT    = 50;
-static const int32_t FLUSH_AV_PACKET_COUNT = 0x150;
-
 
 namespace caspar { namespace ffmpeg {
 		
@@ -77,7 +75,6 @@ struct input::implementation : boost::noncopyable
 	const std::wstring											filename_;
 	const bool													thumbnail_mode_;
 	tbb::atomic<bool>											is_eof_;
-	tbb::atomic<int>											flush_av_packet_count_;
 	tbb::atomic<int>											video_stream_index_;
 	tbb::atomic<int>											audio_stream_index_;
 	tbb::concurrent_bounded_queue<std::shared_ptr<AVPacket>>	audio_buffer_;
@@ -135,19 +132,7 @@ struct input::implementation : boost::noncopyable
 		return safe_ptr<AVCodecContext>(format_context_->streams[index]->codec, avcodec_close);
 	}
 
-	bool get_flush_av_packet(std::shared_ptr<AVPacket>& packet)
-	{
-		if (flush_av_packet_count_ >= 0)
-		{
-			flush_av_packet_count_ --;
-			packet = flush_packet();
-			return true;
-		}
-		packet = nullptr;
-		return false;
-	}
-	
-	bool try_pop_audio(std::shared_ptr<AVPacket>& packet)
+	void try_pop_audio(std::shared_ptr<AVPacket>& packet)
 	{	
 		bool result = false;
 		for (int i = 0; i < 32 && !result; ++i)
@@ -155,7 +140,7 @@ struct input::implementation : boost::noncopyable
 			result = audio_buffer_.try_pop(packet);
 			if (!result)
 				if (is_eof_)
-					return get_flush_av_packet(packet);
+					return;
 				else
 				{
 					boost::this_thread::sleep(boost::posix_time::milliseconds(10));
@@ -165,10 +150,9 @@ struct input::implementation : boost::noncopyable
 		if(result)
 			tick();
 		graph_->set_value("audio-buffer-count", (static_cast<double>(audio_buffer_.size())+0.001)/MAX_BUFFER_COUNT);
-		return result;
 	}
 
-	bool try_pop_video(std::shared_ptr<AVPacket>& packet)
+	void try_pop_video(std::shared_ptr<AVPacket>& packet)
 	{
 		bool result = false;
 		for (int i = 0; i < 32 && !result; ++i)
@@ -176,7 +160,7 @@ struct input::implementation : boost::noncopyable
 			result = video_buffer_.try_pop(packet);
 			if (!result)
 				if (is_eof_)
-					return get_flush_av_packet(packet);
+					return;
 				else
 				{
 					boost::this_thread::sleep(boost::posix_time::milliseconds(10));
@@ -186,7 +170,6 @@ struct input::implementation : boost::noncopyable
 		if(result)
 			tick();
 		graph_->set_value("video-buffer-count", (static_cast<double>(video_buffer_.size()) + 0.001)/MAX_BUFFER_COUNT);
-		return result;
 	}
 
 
@@ -208,7 +191,7 @@ struct input::implementation : boost::noncopyable
 
 	bool is_eof() const
 	{
-		return is_eof_ && flush_av_packet_count_ <= 0;
+		return is_eof_;
 	}
 
 	void tick()
@@ -271,9 +254,9 @@ struct input::implementation : boost::noncopyable
 		return context;
 	}
 
-	void seek(int64_t target_time)
+	bool seek(int64_t target_time)
 	{
-		executor_.invoke([this, target_time]()
+		return executor_.invoke([this, target_time]() -> bool
 		{
 			audio_buffer_.clear();
 			video_buffer_.clear();
@@ -282,22 +265,24 @@ struct input::implementation : boost::noncopyable
 			graph_->set_value("video-buffer-count", (static_cast<double>(video_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
 			if (!thumbnail_mode_)
 				CASPAR_LOG(trace) << print() << " Seeking: " << target_time / 1000 << " ms";
-			flush_av_packet_count_ = FLUSH_AV_PACKET_COUNT;
 			is_eof_ = false;
-			if (av_seek_frame(format_context_.get(), -1, target_time - AV_TIME_BASE, AVSEEK_FLAG_BACKWARD) < 0)
+			int ret = av_seek_frame(format_context_.get(), -1, target_time - AV_TIME_BASE, AVSEEK_FLAG_BACKWARD);
+			if (ret < 0)
 				CASPAR_LOG(error) << print() << " Seek failed";
 			tick();
+			return ret >= 0;
 		}, high_priority);
 	}
 };
 
 input::input(const safe_ptr<diagnostics::graph> graph, const std::wstring& filename, bool thumbnail_mode)
 	: impl_(new implementation(graph, filename, thumbnail_mode)){}
-bool input::eof() const {return impl_->is_eof();}
-bool input::try_pop_audio(std::shared_ptr<AVPacket>& packet){return impl_->try_pop_audio(packet);}
-bool input::try_pop_video(std::shared_ptr<AVPacket>& packet) { return impl_->try_pop_video(packet); }
+bool input::eof() const { return impl_->is_eof(); }
+void input::try_pop_audio(std::shared_ptr<AVPacket>& packet) { impl_->try_pop_audio(packet); }
+void input::try_pop_video(std::shared_ptr<AVPacket>& packet) { impl_->try_pop_video(packet); }
 safe_ptr<AVFormatContext> input::format_context(){return impl_->format_context_;}
-void input::seek(int64_t target_time){impl_->seek(target_time);}
+bool input::seek(int64_t target_time) { return impl_->seek(target_time); }
+void input::tick() { impl_->tick(); }
 safe_ptr<AVCodecContext> input::open_audio_codec(AVStream** stream) { return impl_->open_audio_codec(stream);}
 safe_ptr<AVCodecContext> input::open_video_codec(AVStream** stream) { return impl_->open_video_codec(stream); }
 

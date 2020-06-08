@@ -93,34 +93,39 @@ public:
 
 	std::shared_ptr<AVFrame> poll()
 	{
-		std::shared_ptr<AVPacket> packet;
-		input_.try_pop_video(packet);
-		std::shared_ptr<AVFrame> decoded_frame = create_frame();
-		if (packet || (input_.eof() && !eof_))
-			avcodec_send_packet(codec_context_.get(), packet.get());
-		int ret = avcodec_receive_frame(codec_context_.get(), decoded_frame.get());
-		if (ret == AVERROR_EOF)
-			eof_ = true;
+		while (!eof_)
+		{
+			std::shared_ptr<AVPacket> packet;
+			input_.try_pop_video(packet);
+			if (packet || (input_.eof() && !eof_))
+				avcodec_send_packet(codec_context_.get(), packet.get());
+			std::shared_ptr<AVFrame> decoded_frame = create_frame();
+			int ret = avcodec_receive_frame(codec_context_.get(), decoded_frame.get());
+			switch (ret)
+			{
+			case 0:
+				is_progressive_ = !decoded_frame->interlaced_frame;
 
-		if (ret < 0)	
-			return nullptr;
+				if (invert_field_order_)
+					decoded_frame->top_field_first = (!decoded_frame->top_field_first & 0x1);
+				if (decoded_frame->pts == AV_NOPTS_VALUE)
+					decoded_frame->pts = decoded_frame->best_effort_timestamp;
+				if (decoded_frame->pts != AV_NOPTS_VALUE)
+					decoded_frame->pts -= stream_start_pts_;
 
-		is_progressive_ = !decoded_frame->interlaced_frame;
+				if (decoded_frame->pts < seek_pts_)
+					continue;
 
-		if (invert_field_order_)
-			decoded_frame->top_field_first = (!decoded_frame->top_field_first & 0x1);
-		if (decoded_frame->pts == AV_NOPTS_VALUE)
-			decoded_frame->pts = decoded_frame->best_effort_timestamp;
-		if (decoded_frame->pts != AV_NOPTS_VALUE)
-			decoded_frame->pts -= stream_start_pts_;
-
-		if (decoded_frame->pts < seek_pts_)
-			return nullptr;
-
-		if(decoded_frame->repeat_pict > 0)
-			CASPAR_LOG(warning) << "[video_decoder] Field repeat_pict not implemented.";
-		time_ = av_rescale(decoded_frame->pts * AV_TIME_BASE, stream_->time_base.num, stream_->time_base.den);
-		return decoded_frame;
+				if (decoded_frame->repeat_pict > 0)
+					CASPAR_LOG(warning) << "[video_decoder] Field repeat_pict not implemented.";
+				time_ = av_rescale(decoded_frame->pts * AV_TIME_BASE, stream_->time_base.num, stream_->time_base.den);
+				return decoded_frame;
+			case AVERROR_EOF:
+				eof_ = true;
+				break;
+			}
+		}
+		return nullptr;
 	}
 
 	void seek(int64_t time)
