@@ -454,8 +454,7 @@ public:
 				audio = audio_decoder_->poll();
 		});
 
-		if ((!audio_decoder_ || (audio == nullptr && audio_decoder_->eof()))
-			&& !muxer_->audio_ready())
+		if ((!audio_decoder_ || (!audio && audio_decoder_->eof())) && !muxer_->audio_ready())
 			muxer_->push(empty_audio());
 		else
 			muxer_->push(audio);

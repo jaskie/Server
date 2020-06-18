@@ -253,7 +253,7 @@ struct filter::implementation
 
 	void push(const std::shared_ptr<AVFrame>& frame)
 	{	
-		if (frame->pict_type == AV_PICTURE_TYPE_NONE)
+		if (frame->format == AV_PIX_FMT_NONE)
 			return;
 		last_frame_ = frame;
 		if (fast_path())
