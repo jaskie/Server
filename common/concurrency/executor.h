@@ -115,7 +115,7 @@ public:
 	explicit executor(const std::wstring& name) : name_(narrow(name)) // noexcept
 	{
 		is_running_ = true;
-		thread_ = boost::thread([this]{run();});
+		thread_ = boost::thread(&executor::run, this);
 	}
 	
 	virtual ~executor() // noexcept
@@ -252,7 +252,6 @@ private:
 	void run() // noexcept
 	{
 		win32_exception::ensure_handler_installed_for_thread(name_.c_str());
-
 		while(is_running_)
 		{
 			try
@@ -264,9 +263,15 @@ private:
 				CASPAR_LOG_CURRENT_EXCEPTION();
 			}
 		}
-
-		execute_rest(high_priority);
-		execute_rest(normal_priority);
+		try
+		{
+			execute_rest(high_priority);
+			execute_rest(normal_priority);
+		}
+		catch (...)
+		{
+			CASPAR_LOG_CURRENT_EXCEPTION();
+		}
 	}	
 };
 

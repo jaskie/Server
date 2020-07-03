@@ -244,6 +244,7 @@ struct server::implementation : boost::noncopyable
 			auto input = xml_channel.second.get_child_optional(L"input");
 			if (input.is_initialized())
 				create_input(input.get(), channels_.back());
+			channels_.back()->initialize();
 		}
 
 		// Dummy diagnostics channel

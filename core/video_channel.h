@@ -68,6 +68,8 @@ public:
 	
 	monitor::subject& monitor_output();
 
+	void initialize();
+
 private:
 	struct implementation;
 	safe_ptr<implementation> impl_;

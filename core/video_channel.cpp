@@ -70,22 +70,28 @@ public:
 		graph_->set_text(print());
 		diagnostics::register_graph(graph_);
 
-		for(int n = 0; n < std::max(1, env::properties().get(L"configuration.pipeline-tokens", 2)); ++n)
-			stage_->spawn_token();
+
 
 		stage_->monitor_output().attach_parent(monitor_subject_);
 		mixer_->monitor_output().attach_parent(monitor_subject_);
 		output_->monitor_output().attach_parent(monitor_subject_);
 
-		CASPAR_LOG(info) << print() << " Successfully Initialized.";
+		CASPAR_LOG(info) << print() << " created.";
 	}
 
 	~implementation()
 	{
-		CASPAR_LOG(info) << print() << " successfully unitialized.";
+		CASPAR_LOG(info) << print() << " unitialized.";
 	}
 
 	
+	void initialize()
+	{
+		for (int n = 0; n < std::max(1, env::properties().get(L"configuration.pipeline-tokens", 2)); ++n)
+			stage_->spawn_token();
+		CASPAR_LOG(info) << print() << " initialized.";
+	}
+
 	std::wstring print() const
 	{
 		return L"video_channel[" + boost::lexical_cast<std::wstring>(index_) + L"|" +  format_desc_.name + L"]";
@@ -145,4 +151,5 @@ boost::property_tree::wptree video_channel::info() const{return impl_->info();}
 int video_channel::index() const {return impl_->index_;}
 monitor::subject& video_channel::monitor_output(){return *impl_->monitor_subject_;}
 boost::property_tree::wptree video_channel::delay_info() const { return impl_->delay_info(); }
+void video_channel::initialize() { impl_->initialize(); }
 }}
