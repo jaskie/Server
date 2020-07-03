@@ -10,7 +10,7 @@
 class tray_icon
 {
 public:
-    tray_icon(HINSTANCE h_instance, const wchar_t* window_name);
+    tray_icon(HINSTANCE h_instance);
     ~tray_icon();
     void close();
 private:

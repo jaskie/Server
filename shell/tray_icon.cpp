@@ -103,19 +103,19 @@ LRESULT CALLBACK HiddenWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 	return ::DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
-tray_icon::tray_icon(HINSTANCE h_instance, const wchar_t* window_name)
+tray_icon::tray_icon(HINSTANCE h_instance)
 	: h_instance_(h_instance)
 	, hidden_window_(0)
 {
 	WNDCLASS stWC;
 	::ZeroMemory(&stWC, sizeof(stWC));
-	stWC.lpszClassName = window_name;
+	stWC.lpszClassName = CASPAR_NAME;
 	stWC.hInstance = h_instance;
 	stWC.lpfnWndProc = HiddenWndProc;
 	a_class_ = ::RegisterClass(&stWC);
 	if (!a_class_)
 		return;
-	hidden_window_ = ::CreateWindow((LPCTSTR)a_class_, CASPAR_NAME, 0, 0, 0, 0, 0, NULL, NULL, h_instance, NULL);
+	hidden_window_ = ::CreateWindowEx(WS_EX_NOACTIVATE, CASPAR_NAME, CASPAR_NAME, WS_MINIMIZE, 0, 0, 0, 0, NULL, NULL, h_instance, NULL);
 }
 
 tray_icon::~tray_icon()

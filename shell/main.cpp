@@ -235,7 +235,7 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 		boost::property_tree::write_xml(str, caspar::env::properties(), w);
 		CASPAR_LOG(info) << L"casparcg.config:\n-----------------------------------------\n" << str.str().c_str() << L"-----------------------------------------";
 		{
-			tray_icon tray(h_instance, CASPAR_NAME);
+			tray_icon tray(h_instance);
 
 			// Create server object which initializes channels, protocols and controllers.
 			caspar::server caspar_server;
