@@ -457,7 +457,7 @@ bool try_get_duration(const std::wstring filename, std::int64_t& duration, boost
 	if (fps.denominator() == 0)
 		return false;
 
-	duration = av_rescale(context->duration, fps.denominator(), fps.numerator());
+	duration = av_rescale(context->duration, fps.denominator(), fps.numerator() * AV_TIME_BASE);
 
 	time_base = boost::rational<std::int64_t>(fps.denominator(), fps.numerator());
 
