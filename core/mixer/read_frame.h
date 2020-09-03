@@ -43,12 +43,16 @@ class read_frame : boost::noncopyable
 public:
 	read_frame();
 	read_frame(
-			const safe_ptr<ogl_device>& ogl,
+			const std::shared_ptr<ogl_device>& ogl,
 			uint32_t size,
-			safe_ptr<host_buffer>&& image_data,
+			std::shared_ptr<host_buffer>&& image_data,
 			audio_buffer&& audio_data,
 			const channel_layout& audio_channel_layout,
 			int frame_timecode);
+	read_frame(
+		std::shared_ptr<basic_frame>& passthrough_frame,
+		audio_buffer&& audio_data,
+		const channel_layout& audio_channel_layout);
 
 	virtual const boost::iterator_range<const uint8_t*> image_data();
 	virtual const boost::iterator_range<const int32_t*> audio_data();

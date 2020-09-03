@@ -78,7 +78,6 @@ struct image_producer : public core::frame_producer
 		auto frame = frame_factory_->create_frame(this, desc);
 
 		std::copy_n(FreeImage_GetBits(bitmap.get()), frame->image_data().size(), frame->image_data().begin());
-		frame->commit();
 		frame_ = std::move(frame);
 	}
 

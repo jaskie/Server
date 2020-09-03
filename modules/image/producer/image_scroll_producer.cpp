@@ -190,7 +190,6 @@ struct image_scroll_producer : public core::frame_producer
 					count = 0;
 				}
 
-				frame->commit();
 				frames_.push_back(frame);
 
 				// Set the relative position to the other image fragments
@@ -224,8 +223,6 @@ struct image_scroll_producer : public core::frame_producer
 
 					count = 0;
 				}
-			
-				frame->commit();
 				frames_.push_back(frame);
 			}
 

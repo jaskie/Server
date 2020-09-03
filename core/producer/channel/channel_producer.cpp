@@ -206,7 +206,6 @@ public:
 		}
 
 		fast_memcpy(frame->image_data().begin(), read_frame->image_data().begin(), read_frame->image_data().size());
-		frame->commit();
 
 		frame_buffer_.push(frame);	
 		

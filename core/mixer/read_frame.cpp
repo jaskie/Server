@@ -22,6 +22,7 @@
 #include "../stdafx.h"
 
 #include "read_frame.h"
+#include "../producer/frame/basic_frame.h"
 
 #include "gpu/fence.h"
 #include "gpu/host_buffer.h"	
@@ -43,20 +44,21 @@ int64_t get_current_time_millis()
 																																							
 struct read_frame::implementation : boost::noncopyable
 {
-	safe_ptr<ogl_device>		ogl_;
-	uint32_t					size_;
-	safe_ptr<host_buffer>		image_data_;
-	tbb::mutex					mutex_;
-	audio_buffer				audio_data_;
-	const channel_layout&		audio_channel_layout_;
-	int64_t						created_timestamp_;
-	const int					frame_timecode_;
+	std::shared_ptr<ogl_device>		ogl_;
+	uint32_t						size_;
+	std::shared_ptr<host_buffer>	image_data_;
+	std::shared_ptr<basic_frame>	passthrough_frame_;
+	tbb::mutex						mutex_;
+	audio_buffer					audio_data_;
+	const channel_layout&			audio_channel_layout_;
+	int64_t							created_timestamp_;
+	const int						frame_timecode_;
 
 public:
 	implementation(
-			const safe_ptr<ogl_device>& ogl,
+			const std::shared_ptr<ogl_device>& ogl,
 			uint32_t size,
-			safe_ptr<host_buffer>&& image_data,
+			std::shared_ptr<host_buffer>&& image_data,
 			audio_buffer&& audio_data,
 			const channel_layout& audio_channel_layout,
 			const unsigned int frame_timecode
@@ -70,6 +72,20 @@ public:
 		, frame_timecode_(frame_timecode)
 	{
 	}	
+
+	implementation(
+			std::shared_ptr<basic_frame>& passthrough_frame,
+			audio_buffer&& audio_data,
+			const channel_layout& audio_channel_layout
+	)
+		: passthrough_frame_(passthrough_frame)
+		, audio_data_(std::move(audio_data))
+		, audio_channel_layout_(audio_channel_layout)
+		, created_timestamp_(get_current_time_millis())
+		, frame_timecode_(passthrough_frame->get_timecode())
+	{
+	}
+
 	
 	const boost::iterator_range<const uint8_t*> image_data()
 	{
@@ -78,8 +94,8 @@ public:
 
 			if(!image_data_->data())
 			{
-				image_data_.get()->wait(*ogl_);
-				ogl_->invoke([=]{image_data_.get()->map();}, high_priority);
+				image_data_->wait(*ogl_);
+				ogl_->invoke([=]{image_data_->map();}, high_priority);
 			}
 		}
 
@@ -95,13 +111,20 @@ public:
 };
 
 read_frame::read_frame(
-		const safe_ptr<ogl_device>& ogl,
+		const std::shared_ptr<ogl_device>& ogl,
 		uint32_t size,
-		safe_ptr<host_buffer>&& image_data,
+		std::shared_ptr<host_buffer>&& image_data,
 		audio_buffer&& audio_data,
 		const channel_layout& audio_channel_layout,
 		int frame_timecode)
 	: impl_(new implementation(ogl, size, std::move(image_data), std::move(audio_data), audio_channel_layout, frame_timecode))
+{
+}
+
+read_frame::read_frame(
+	std::shared_ptr<basic_frame>& passthrough_frame, 
+	audio_buffer&& audio_data, 
+	const channel_layout& audio_channel_layout)
 {
 }
 

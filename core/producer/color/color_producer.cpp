@@ -158,8 +158,6 @@ safe_ptr<core::write_frame> create_color_frame(void* tag, const safe_ptr<core::f
 	if(!(str >> std::hex >> value) || !str.eof())
 		BOOST_THROW_EXCEPTION(invalid_argument() << arg_name_info("color") << arg_value_info(narrow(color2)) << msg_info("Invalid color."));
 
-	frame->commit();
-		
 	return frame;
 }
 

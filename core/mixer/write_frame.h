@@ -67,8 +67,7 @@ public:
 	boost::iterator_range<uint8_t*> image_data(uint32_t plane_index = 0);	
 	audio_buffer& audio_data();
 	
-	void commit(uint32_t plane_index);
-	void commit();
+	virtual void commit() override;
 	
 	void set_type(const field_mode::type& mode);
 	field_mode::type get_type() const;

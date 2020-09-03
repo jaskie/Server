@@ -266,8 +266,6 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 
 		sws_scale(sws_context.get(), decoded_frame->data, decoded_frame->linesize, 0, height, av_frame->data, av_frame->linesize);	
 		pool.push(sws_context);
-
-		write->commit();		
 	}
 	else
 	{
@@ -297,8 +295,6 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 			{
 				fast_memcpy(result, decoded, plane.size);
 			}
-
-			write->commit(n);
 		}
 	}
 

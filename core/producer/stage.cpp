@@ -172,6 +172,7 @@ public:
 					hints |= frame_producer::ALPHA_HINT;
 
 				auto frame = layer.second->receive(hints);	
+				frame->commit();
 				auto layer_consumers_it = layer_consumers_.find(layer.first);
 				if (layer_consumers_it != layer_consumers_.end())
 				{
@@ -202,7 +203,7 @@ public:
 			
 			graph_->set_value("produce-time", produce_timer_.elapsed()*format_desc_.fps*0.5);
 
-			std::shared_ptr<void> ticket(nullptr, [self](void*)
+			std::shared_ptr<void> ticket(nullptr, [this, self](void*)
 			{
 				auto self2 = self.lock();
 				if(self2)				

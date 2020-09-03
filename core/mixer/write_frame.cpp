@@ -51,6 +51,7 @@ struct write_frame::implementation
 	boost::timer								since_created_timer_;
 	tbb::atomic<int64_t>						recorded_frame_age_;
 	tbb::atomic<int>							timecode_;
+	tbb::atomic<bool>							commited_;
 
 	implementation(const void* tag, const channel_layout& channel_layout)
 		: channel_layout_(channel_layout)
@@ -104,6 +105,10 @@ struct write_frame::implementation
 	
 	void commit()
 	{
+		if (commited_.fetch_and_store(true))
+		{
+			CASPAR_LOG(trace) << L"Frame already commited: " << timecode_;
+		}
 		for(uint32_t n = 0; n < buffers_.size(); ++n)
 			commit(n);
 	}
@@ -168,7 +173,6 @@ multichannel_view<int32_t, audio_buffer::iterator> write_frame::get_multichannel
 	return make_multichannel_view<int32_t>(impl_->audio_data_.begin(), impl_->audio_data_.end(), impl_->channel_layout_);
 }
 const std::vector<safe_ptr<device_buffer>>& write_frame::get_textures() const{return impl_->textures_;}
-void write_frame::commit(uint32_t plane_index){impl_->commit(plane_index);}
 void write_frame::commit(){impl_->commit();}
 void write_frame::set_type(const field_mode::type& mode){impl_->mode_ = mode;}
 core::field_mode::type write_frame::get_type() const{return impl_->mode_;}
