@@ -196,7 +196,7 @@ public:
 
 		desc.pix_fmt = core::pixel_format::bgra;
 		desc.planes.push_back(core::pixel_format_desc::plane(format_desc.width, format_desc.height, 4));
-		auto frame = frame_factory_->create_frame(this, desc);
+		auto frame = frame_factory_->create_frame(this, desc, std::numeric_limits<int>().max());
 		bool copy_audio = !double_speed && !half_speed;
 
 		if (copy_audio)

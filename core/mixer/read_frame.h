@@ -50,7 +50,7 @@ public:
 			const channel_layout& audio_channel_layout,
 			int frame_timecode);
 	read_frame(
-		std::shared_ptr<basic_frame>& passthrough_frame,
+		safe_ptr<basic_frame>& passthrough_frame,
 		audio_buffer&& audio_data,
 		const channel_layout& audio_channel_layout);
 

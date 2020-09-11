@@ -110,29 +110,48 @@ public:
 				mix_timer_.restart();
 
 				auto frames = packet.first;
-				int timecode = std::numeric_limits<int>().max();
-				
-				BOOST_FOREACH(auto& frame, frames)
+
+				//if (frames.empty())
+				//{
+				//	target_->send(std::make_pair(make_safe<read_frame>(), packet.second));
+				//}
+				//else
+				if (frames.size() == 1 && frames.at(0)->can_bypass_ogl(format_desc_))
 				{
-					auto blend_it = blend_modes_.find(frame.first);
-					image_mixer_.begin_layer(blend_it != blend_modes_.end() ? blend_it->second : blend_mode::normal);
-													
-					frame.second->accept(audio_mixer_);					
-					frame.second->accept(image_mixer_);
-					
+					auto frame = frames.at(0);
+					frame->accept(audio_mixer_);
+					auto audio = audio_mixer_(format_desc_, audio_channel_layout_);
+					target_->send(std::make_pair(make_safe<read_frame>(frame, std::move(audio), audio_channel_layout_), packet.second));
 					image_mixer_.end_layer();
-					timecode = std::min(timecode, frame.second->get_timecode());
 				}
+				else
+				{
+					int timecode = std::numeric_limits<int>().max();
 
-				auto image = image_mixer_(format_desc_, straighten_alpha_);
-				auto audio = audio_mixer_(format_desc_, audio_channel_layout_);
-				image.wait();
 
-				auto mix_time = mix_timer_.elapsed();
-				graph_->set_value("mix-time", mix_time*format_desc_.fps*0.5);
-				current_mix_time_ = static_cast<int64_t>(mix_time * 1000.0);
+					BOOST_FOREACH(auto & frame, frames)
+					{
+						frame.second->commit();
+						auto blend_it = blend_modes_.find(frame.first);
+						image_mixer_.begin_layer(blend_it != blend_modes_.end() ? blend_it->second : blend_mode::normal);
 
-				target_->send(std::make_pair(make_safe<read_frame>(ogl_, format_desc_.size, std::move(image.get()), std::move(audio), audio_channel_layout_, timecode), packet.second));
+						frame.second->accept(audio_mixer_);
+						frame.second->accept(image_mixer_);
+
+						image_mixer_.end_layer();
+						timecode = std::min(timecode, frame.second->get_timecode());
+					}
+
+					auto image = image_mixer_(format_desc_, straighten_alpha_);
+					auto audio = audio_mixer_(format_desc_, audio_channel_layout_);
+					image.wait();
+
+					auto mix_time = mix_timer_.elapsed();
+					graph_->set_value("mix-time", mix_time * format_desc_.fps * 0.5);
+					current_mix_time_ = static_cast<int64_t>(mix_time * 1000.0);
+
+					target_->send(std::make_pair(make_safe<read_frame>(ogl_, format_desc_.size, std::move(image.get()), std::move(audio), audio_channel_layout_, timecode), packet.second));
+				}
 			}
 			catch(...)
 			{
@@ -144,9 +163,10 @@ public:
 	safe_ptr<core::write_frame> create_frame(
 			const void* tag,
 			const core::pixel_format_desc& desc,
+			int timecode,
 			const channel_layout& audio_channel_layout)
 	{		
-		return make_safe<write_frame>(ogl_, tag, desc, audio_channel_layout);
+		return make_safe<write_frame>(ogl_, tag, desc, audio_channel_layout, timecode);
 	}
 
 	blend_mode::type get_blend_mode(int index)
@@ -265,7 +285,7 @@ mixer::mixer(const safe_ptr<diagnostics::graph>& graph, const safe_ptr<target_t>
 	: impl_(new implementation(graph, target, format_desc, ogl, audio_channel_layout)){}
 void mixer::send(const std::pair<std::map<int, safe_ptr<core::basic_frame>>, std::shared_ptr<void>>& frames){ impl_->send(frames);}
 core::video_format_desc mixer::get_video_format_desc() const { return impl_->get_video_format_desc(); }
-safe_ptr<core::write_frame> mixer::create_frame(const void* tag, const core::pixel_format_desc& desc, const channel_layout& audio_channel_layout){ return impl_->create_frame(tag, desc, audio_channel_layout); }		
+safe_ptr<core::write_frame> mixer::create_frame(const void* tag, const core::pixel_format_desc& desc, int timecode, const channel_layout& audio_channel_layout){ return impl_->create_frame(tag, desc, timecode, audio_channel_layout); }		
 blend_mode::type mixer::get_blend_mode(int index) { return impl_->get_blend_mode(index); }
 void mixer::set_blend_mode(int index, blend_mode::type value){impl_->set_blend_mode(index, value);}
 chroma mixer::get_chroma(int index) { return impl_->get_chroma(index); }

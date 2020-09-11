@@ -53,7 +53,7 @@ std::wstring get_cg_version()
 		struct dummy_factory : public core::frame_factory
 		{
 		
-			virtual safe_ptr<core::write_frame> create_frame(const void* video_stream_tag, const core::pixel_format_desc& desc, const core::channel_layout& layout) 
+			virtual safe_ptr<core::write_frame> create_frame(const void* video_stream_tag, const core::pixel_format_desc& desc, int timecode, const core::channel_layout& layout) 
 			{
 				return make_safe<core::write_frame>(nullptr, layout);
 			}

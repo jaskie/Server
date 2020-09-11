@@ -176,7 +176,7 @@ struct image_scroll_producer : public core::frame_producer
 				core::pixel_format_desc desc;
 				desc.pix_fmt = core::pixel_format::bgra;
 				desc.planes.push_back(core::pixel_format_desc::plane(width_, format_desc_.height, 4));
-				auto frame = frame_factory->create_frame(reinterpret_cast<void*>(rand()), desc);
+				auto frame = frame_factory->create_frame(reinterpret_cast<void*>(rand()), desc, 0);
 
 				if(count >= frame->image_data().size())
 				{	
@@ -205,7 +205,7 @@ struct image_scroll_producer : public core::frame_producer
 				core::pixel_format_desc desc;
 				desc.pix_fmt = core::pixel_format::bgra;
 				desc.planes.push_back(core::pixel_format_desc::plane(format_desc_.width, height_, 4));
-				auto frame = frame_factory->create_frame(reinterpret_cast<void*>(rand()), desc);
+				auto frame = frame_factory->create_frame(reinterpret_cast<void*>(rand()), desc, 0);
 				if(count >= frame->image_data().size())
 				{	
 					for(size_t y = 0; y < height_; ++y)

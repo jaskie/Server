@@ -172,7 +172,6 @@ public:
 					hints |= frame_producer::ALPHA_HINT;
 
 				auto frame = layer.second->receive(hints);	
-				frame->commit();
 				auto layer_consumers_it = layer_consumers_.find(layer.first);
 				if (layer_consumers_it != layer_consumers_.end())
 				{

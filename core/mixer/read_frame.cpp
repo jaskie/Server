@@ -45,7 +45,7 @@ int64_t get_current_time_millis()
 struct read_frame::implementation : boost::noncopyable
 {
 	std::shared_ptr<ogl_device>		ogl_;
-	uint32_t						size_;
+	const uint32_t					size_;
 	std::shared_ptr<host_buffer>	image_data_;
 	std::shared_ptr<basic_frame>	passthrough_frame_;
 	tbb::mutex						mutex_;
@@ -74,11 +74,12 @@ public:
 	}	
 
 	implementation(
-			std::shared_ptr<basic_frame>& passthrough_frame,
+			safe_ptr<basic_frame>& passthrough_frame,
 			audio_buffer&& audio_data,
 			const channel_layout& audio_channel_layout
 	)
 		: passthrough_frame_(passthrough_frame)
+		, size_(passthrough_frame->image_data().size())
 		, audio_data_(std::move(audio_data))
 		, audio_channel_layout_(audio_channel_layout)
 		, created_timestamp_(get_current_time_millis())
@@ -89,6 +90,8 @@ public:
 	
 	const boost::iterator_range<const uint8_t*> image_data()
 	{
+		if (passthrough_frame_)
+			return passthrough_frame_->image_data();
 		{
 			tbb::mutex::scoped_lock lock(mutex_);
 
@@ -102,13 +105,15 @@ public:
 		auto ptr = static_cast<const uint8_t*>(image_data_->data());
 		return boost::iterator_range<const uint8_t*>(ptr, ptr + image_data_->size());
 	}
+
 	const boost::iterator_range<const int32_t*> audio_data()
 	{
 		return boost::iterator_range<const int32_t*>(audio_data_.data(), audio_data_.data() + audio_data_.size());
 	}
 
-
 };
+
+read_frame::read_frame() {}
 
 read_frame::read_frame(
 		const std::shared_ptr<ogl_device>& ogl,
@@ -122,13 +127,13 @@ read_frame::read_frame(
 }
 
 read_frame::read_frame(
-	std::shared_ptr<basic_frame>& passthrough_frame, 
+	safe_ptr<basic_frame>& passthrough_frame, 
 	audio_buffer&& audio_data, 
 	const channel_layout& audio_channel_layout)
+	: impl_(new implementation(passthrough_frame, std::move(audio_data), audio_channel_layout))
 {
 }
 
-read_frame::read_frame(){}
 const boost::iterator_range<const uint8_t*> read_frame::image_data()
 {
 	return impl_ ? impl_->image_data() : boost::iterator_range<const uint8_t*>();

@@ -89,6 +89,22 @@ public:
 		BOOST_FOREACH(auto frame, frames_)
 			frame->commit();
 	}
+
+	bool can_bypass_ogl(const video_format_desc& format_desc) const
+	{
+
+		return true;
+	}
+
+	boost::iterator_range<uint8_t*> image_data(uint32_t plane_index)
+	{
+		BOOST_FOREACH(auto & frame, frames_)
+		{
+			if (!frame->image_data(plane_index).empty())
+				return frame->image_data(plane_index);
+		}
+		return boost::iterator_range<uint8_t*>();
+	}
 };
 	
 basic_frame::basic_frame() : impl_(new implementation(std::vector<safe_ptr<basic_frame>>())){}
@@ -117,6 +133,9 @@ frame_transform& basic_frame::get_frame_transform() { return impl_->frame_transf
 int64_t basic_frame::get_and_record_age_millis() { return impl_->get_and_record_age_millis(*this); }
 int basic_frame::get_timecode() { return impl_->get_timecode(*this);; }
 void basic_frame::commit() { impl_->commit(); }
+bool basic_frame::can_bypass_ogl(const video_format_desc& format_desc) const { return impl_->can_bypass_ogl(format_desc);}
+boost::iterator_range<uint8_t*> basic_frame::image_data(uint32_t plane_index) { return impl_->image_data(plane_index); }
+
 void basic_frame::accept(frame_visitor& visitor){impl_->accept(*this, visitor);}
 
 safe_ptr<basic_frame> basic_frame::interlace(const safe_ptr<basic_frame>& frame1, const safe_ptr<basic_frame>& frame2, field_mode::type mode)

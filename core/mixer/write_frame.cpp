@@ -50,32 +50,31 @@ struct write_frame::implementation
 	core::field_mode::type						mode_;
 	boost::timer								since_created_timer_;
 	tbb::atomic<int64_t>						recorded_frame_age_;
-	tbb::atomic<int>							timecode_;
+	const int									timecode_;
 	tbb::atomic<bool>							commited_;
 
 	implementation(const void* tag, const channel_layout& channel_layout)
 		: channel_layout_(channel_layout)
+		, timecode_(0)
 		, tag_(tag)
 	{
+		commited_ = false;
 		recorded_frame_age_ = -1;
 	}
 
-	implementation(const safe_ptr<ogl_device>& ogl, const void* tag, const core::pixel_format_desc& desc, const channel_layout& channel_layout) 
+	implementation(const safe_ptr<ogl_device>& ogl, const void* tag, const core::pixel_format_desc& desc, const channel_layout& channel_layout, int timecode) 
 		: ogl_(ogl)
 		, desc_(desc)
 		, channel_layout_(channel_layout)
 		, tag_(tag)
 		, mode_(core::field_mode::progressive)
+		, timecode_(timecode)
 	{
+		commited_ = false;
 		std::transform(desc.planes.begin(), desc.planes.end(), std::back_inserter(buffers_), [&](const core::pixel_format_desc::plane& plane)
 		{
 			return ogl_->create_host_buffer(plane.size, write_only);
 		});
-		std::transform(desc.planes.begin(), desc.planes.end(), std::back_inserter(textures_), [&](const core::pixel_format_desc::plane& plane)
-		{
-			return ogl_->create_device_buffer(plane.width, plane.height, plane.channels);	
-		});
-
 		recorded_frame_age_ = -1;
 	}
 			
@@ -106,9 +105,11 @@ struct write_frame::implementation
 	void commit()
 	{
 		if (commited_.fetch_and_store(true))
+			return;
+		std::transform(desc_.planes.begin(), desc_.planes.end(), std::back_inserter(textures_), [&](const core::pixel_format_desc::plane& plane)
 		{
-			CASPAR_LOG(trace) << L"Frame already commited: " << timecode_;
-		}
+			return ogl_->create_device_buffer(plane.width, plane.height, plane.channels);
+		});
 		for(uint32_t n = 0; n < buffers_.size(); ++n)
 			commit(n);
 	}
@@ -143,8 +144,10 @@ write_frame::write_frame(
 		const safe_ptr<ogl_device>& ogl,
 		const void* tag,
 		const core::pixel_format_desc& desc,
-		const channel_layout& channel_layout)
-	: impl_(new implementation(ogl, tag, desc, channel_layout))
+		const channel_layout& channel_layout,
+		int timecode
+	)
+	: impl_(new implementation(ogl, tag, desc, channel_layout, timecode))
 {
 }
 write_frame::write_frame(const write_frame& other) : impl_(new implementation(*other.impl_)){}
@@ -179,7 +182,5 @@ core::field_mode::type write_frame::get_type() const{return impl_->mode_;}
 void write_frame::accept(core::frame_visitor& visitor){impl_->accept(*this, visitor);}
 int64_t write_frame::get_and_record_age_millis() { return impl_->get_and_record_age_millis(); }
 int write_frame::get_timecode() { return impl_->timecode_; }
-void write_frame::set_timecode(int timecode) { impl_->timecode_ = timecode; }
-
 
 }}
