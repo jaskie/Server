@@ -115,7 +115,7 @@ static core::video_format::type get_caspar_video_format(BMDDisplayMode fmt)
 	case bmdMode4K2160p30:					return core::video_format::x2160p3000;	
 	case bmdMode4K2160p50:					return core::video_format::x2160p5000;	
 	case bmdMode4K2160p60:					return core::video_format::x2160p6000;
-	default:								return core::video_format::invalid;	
+	default:								return core::video_format::unknown;	
 	}
 }
 

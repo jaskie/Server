@@ -63,7 +63,7 @@ public:
 		
 	// mixer
 
-	safe_ptr<core::write_frame> create_frame(const void* tag, const core::pixel_format_desc& desc, int timecode, const channel_layout& audio_channel_layout);		
+	safe_ptr<core::write_frame> create_frame(const void* tag, const core::video_format_desc& video_format, const core::pixel_format_desc& pix_format, int timecode, const channel_layout& audio_channel_layout);
 	
 	core::video_format_desc get_video_format_desc() const; // nothrow
 	void set_video_format_desc(const video_format_desc& format_desc);

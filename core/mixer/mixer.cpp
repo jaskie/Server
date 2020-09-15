@@ -162,11 +162,12 @@ public:
 					
 	safe_ptr<core::write_frame> create_frame(
 			const void* tag,
-			const core::pixel_format_desc& desc,
+			const core::video_format_desc& video_format,
+			const core::pixel_format_desc& pix_format,
 			int timecode,
 			const channel_layout& audio_channel_layout)
 	{		
-		return make_safe<write_frame>(ogl_, tag, desc, audio_channel_layout, timecode);
+		return make_safe<write_frame>(ogl_, tag, format_desc_, pix_format, audio_channel_layout, timecode);
 	}
 
 	blend_mode::type get_blend_mode(int index)
@@ -285,7 +286,7 @@ mixer::mixer(const safe_ptr<diagnostics::graph>& graph, const safe_ptr<target_t>
 	: impl_(new implementation(graph, target, format_desc, ogl, audio_channel_layout)){}
 void mixer::send(const std::pair<std::map<int, safe_ptr<core::basic_frame>>, std::shared_ptr<void>>& frames){ impl_->send(frames);}
 core::video_format_desc mixer::get_video_format_desc() const { return impl_->get_video_format_desc(); }
-safe_ptr<core::write_frame> mixer::create_frame(const void* tag, const core::pixel_format_desc& desc, int timecode, const channel_layout& audio_channel_layout){ return impl_->create_frame(tag, desc, timecode, audio_channel_layout); }		
+safe_ptr<core::write_frame> mixer::create_frame(const void* tag, const core::video_format_desc& video_format, const core::pixel_format_desc& pix_format, int timecode, const channel_layout& audio_channel_layout){ return impl_->create_frame(tag, video_format, pix_format, timecode, audio_channel_layout); }
 blend_mode::type mixer::get_blend_mode(int index) { return impl_->get_blend_mode(index); }
 void mixer::set_blend_mode(int index, blend_mode::type value){impl_->set_blend_mode(index, value);}
 chroma mixer::get_chroma(int index) { return impl_->get_chroma(index); }

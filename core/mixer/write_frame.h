@@ -45,7 +45,7 @@ class write_frame : public core::basic_frame, boost::noncopyable
 {
 public:	
 	explicit write_frame(const void* tag, const channel_layout& channel_layout);
-	explicit write_frame(const safe_ptr<ogl_device>& ogl, const void* tag, const core::pixel_format_desc& desc, const channel_layout& channel_layout, int timecode);
+	explicit write_frame(const safe_ptr<ogl_device>& ogl, const void* tag, const core::video_format_desc& video_format, const core::pixel_format_desc& desc, const channel_layout& channel_layout, int timecode);
 
 	write_frame(const write_frame& other);
 	write_frame(write_frame&& other);
@@ -64,6 +64,8 @@ public:
 	void swap(write_frame& other);
 			
 	virtual boost::iterator_range<uint8_t*> image_data(uint32_t plane_index = 0) override;
+	virtual const core::video_format_desc& video_format() const override;
+
 	audio_buffer& audio_data();
 	
 	virtual void commit() override;

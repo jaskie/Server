@@ -425,7 +425,7 @@ safe_ptr<core::frame_producer> create_producer(
 	auto audio_layout = core::create_custom_channel_layout(
 			params.get(L"CHANNEL_LAYOUT", L"STEREO"),
 			core::default_channel_layout_repository());
-	if(format_desc.format == core::video_format::invalid)
+	if(format_desc.format == core::video_format::unknown)
 		format_desc = frame_factory->get_video_format_desc();
 	return make_safe<ndi_producer>(frame_factory, format_desc, audio_layout, source_name, source_address, buffer_depth);
 }

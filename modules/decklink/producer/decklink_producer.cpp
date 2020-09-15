@@ -456,7 +456,7 @@ safe_ptr<core::frame_producer> create_producer(
 	boost::replace_all(filter_str, L"DEINTERLACE", L"YADIF=0:-1");
 	boost::replace_all(filter_str, L"DEINTERLACE_BOB", L"YADIF=1:-1");
 	
-	if(format_desc.format == core::video_format::invalid)
+	if(format_desc.format == core::video_format::unknown)
 		format_desc = frame_factory->get_video_format_desc();
 			
 	return create_producer_print_proxy(

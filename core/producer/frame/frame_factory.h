@@ -33,13 +33,15 @@ namespace caspar { namespace core {
 class write_frame;
 struct pixel_format_desc;
 struct video_format_desc;
+
 		
 struct frame_factory : boost::noncopyable
 {
 	virtual ~frame_factory(){}
 	virtual safe_ptr<write_frame> create_frame(
 			const void* video_stream_tag,
-			const pixel_format_desc& desc,
+			const video_format_desc& video_format,
+			const pixel_format_desc& pix_format,
 			int timecode,
 			const channel_layout& audio_channel_layout = channel_layout::stereo()) = 0;	
 

@@ -289,7 +289,7 @@ public:
 			core::pixel_format_desc desc;
 			desc.pix_fmt = core::pixel_format::bgra;
 			desc.planes.push_back(core::pixel_format_desc::plane(width_, height_, 4));
-			auto frame = frame_factory_->create_frame(this, desc, 0);
+			auto frame = frame_factory_->create_frame(this, frame_factory_->get_video_format_desc(), desc, 0);
 
 			fast_memclr(bmp_.data(), width_*height_*4);
 			ax_->DrawControl(bmp_);

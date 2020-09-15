@@ -81,7 +81,7 @@ const video_format_desc format_descs[video_format::count] =
 	DEFINE_VIDEOFORMATDESC(video_format::x2160p3000	,3840, 2160, 3840, 2160, field_mode::progressive,	30000,		1000,	boost::assign::list_of(1600),							L"2160p3000"),
 	DEFINE_VIDEOFORMATDESC(video_format::x2160p5000	,3840, 2160, 3840, 2160, field_mode::progressive,	50000,		1000,	boost::assign::list_of(960),							L"2160p5000"),
 	DEFINE_VIDEOFORMATDESC(video_format::x2160p6000	,3840, 2160, 3840, 2160, field_mode::progressive,	60000,		1000,	boost::assign::list_of(800),							L"2160p6000"),
-	DEFINE_VIDEOFORMATDESC(video_format::invalid	,0,		0,   0,		0,   field_mode::progressive,	1000,		1000,	boost::assign::list_of(1),								L"invalid")
+	DEFINE_VIDEOFORMATDESC(video_format::unknown	,0,		0,   0,		0,   field_mode::progressive,	1000,		1000,	boost::assign::list_of(1),								L"invalid")
 };
 
 const video_format_desc& video_format_desc::get(video_format::type format)	
@@ -91,12 +91,12 @@ const video_format_desc& video_format_desc::get(video_format::type format)
 
 const video_format_desc& video_format_desc::get(const std::wstring& name)	
 {
-	for(int n = 0; n < video_format::invalid; ++n)
+	for(int n = 0; n < video_format::unknown; ++n)
 	{
 		if(boost::iequals(format_descs[n].name, name))
 			return format_descs[n];
 	}
-	return format_descs[video_format::invalid];
+	return format_descs[video_format::unknown];
 }
 
 }}

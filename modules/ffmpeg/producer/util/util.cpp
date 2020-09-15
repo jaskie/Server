@@ -192,8 +192,9 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 	if(decoded_frame->width < 1 || decoded_frame->height < 1)
 		return make_safe<core::write_frame>(tag, audio_channel_layout);
 
-	const auto width  = decoded_frame->width;
-	const auto height = decoded_frame->height;
+	const uint32_t width  = decoded_frame->width;
+	const uint32_t height = decoded_frame->height;
+	const auto& video_format = frame_factory->get_video_format_desc();
 	auto desc		  = get_pixel_format_desc(static_cast<AVPixelFormat>(decoded_frame->format), width, height);
 	
 	if(hints & core::frame_producer::ALPHA_HINT)
@@ -221,7 +222,7 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 		
 		auto target_desc = get_pixel_format_desc(static_cast<AVPixelFormat>(target_pix_fmt), width, height);
 
-		write = frame_factory->create_frame(tag, target_desc, decoded_frame->display_picture_number, audio_channel_layout);
+		write = frame_factory->create_frame(tag, video_format.width == width && video_format.height == height ? video_format : core::video_format_desc::get(core::video_format::unknown), target_desc, decoded_frame->display_picture_number, audio_channel_layout);
 		write->set_type(get_mode(*decoded_frame));
 		
 		std::shared_ptr<SwsContext> sws_context;
@@ -268,7 +269,7 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 	}
 	else
 	{
-		write = frame_factory->create_frame(tag, desc, decoded_frame->display_picture_number, audio_channel_layout);
+		write = frame_factory->create_frame(tag, video_format.width == width && video_format.height == height ? video_format : core::video_format_desc::get(core::video_format::unknown), desc, decoded_frame->display_picture_number, audio_channel_layout);
 		write->set_type(get_mode(*decoded_frame));
 
 		for(int n = 0; n < static_cast<int>(desc.planes.size()); ++n)

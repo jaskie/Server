@@ -220,8 +220,8 @@ struct server::implementation : boost::noncopyable
 		BOOST_FOREACH(auto& xml_channel, pt.get_child(L"configuration.channels"))
 		{
 			auto format_desc = video_format_desc::get(widen(xml_channel.second.get(L"video-mode", L"PAL")));
-			if (format_desc.format == video_format::invalid)
-				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Invalid video-mode."));
+			if (format_desc.format == video_format::unknown)
+				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Unknown video-mode."));
 			auto audio_channel_layout = default_channel_layout_repository().get_by_name(
 				boost::to_upper_copy(xml_channel.second.get(L"channel-layout", L"STEREO")));
 

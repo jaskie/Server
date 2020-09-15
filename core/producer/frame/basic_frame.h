@@ -60,6 +60,7 @@ public:
 	virtual void commit();
 	bool can_bypass_ogl(const video_format_desc& format_desc) const;
 	virtual boost::iterator_range<uint8_t*> image_data(uint32_t plane_index = 0);
+	virtual const core::video_format_desc& video_format() const;
 
 	static safe_ptr<basic_frame> interlace(const safe_ptr<basic_frame>& frame1, const safe_ptr<basic_frame>& frame2, field_mode::type mode);
 	static safe_ptr<basic_frame> combine(const safe_ptr<basic_frame>& frame1, const safe_ptr<basic_frame>& frame2);

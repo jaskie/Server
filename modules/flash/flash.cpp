@@ -53,14 +53,14 @@ std::wstring get_cg_version()
 		struct dummy_factory : public core::frame_factory
 		{
 		
-			virtual safe_ptr<core::write_frame> create_frame(const void* video_stream_tag, const core::pixel_format_desc& desc, int timecode, const core::channel_layout& layout) 
+			virtual safe_ptr<core::write_frame> create_frame(const void* video_stream_tag, const core::video_format_desc& video_format, const core::pixel_format_desc& desc, int timecode, const core::channel_layout& layout)
 			{
 				return make_safe<core::write_frame>(nullptr, layout);
 			}
 	
 			virtual core::video_format_desc get_video_format_desc() const
 			{
-				return core::video_format_desc::get(L"PAL");
+				return core::video_format_desc::get(core::video_format::unknown);
 			}
 
 			virtual bool get_use_software_scaler() const 

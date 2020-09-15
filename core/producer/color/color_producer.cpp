@@ -149,7 +149,7 @@ safe_ptr<core::write_frame> create_color_frame(void* tag, const safe_ptr<core::f
 	core::pixel_format_desc desc;
 	desc.pix_fmt = pixel_format::bgra;
 	desc.planes.push_back(core::pixel_format_desc::plane(1, 1, 4));
-	auto frame = frame_factory->create_frame(tag, desc, std::numeric_limits<int>().max());
+	auto frame = frame_factory->create_frame(tag, core::video_format_desc::get(core::video_format::unknown), desc, std::numeric_limits<int>().max());
 		
 	// Read color from hex-string and write to frame pixel.
 

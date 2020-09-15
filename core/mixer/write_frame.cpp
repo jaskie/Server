@@ -52,23 +52,26 @@ struct write_frame::implementation
 	tbb::atomic<int64_t>						recorded_frame_age_;
 	const int									timecode_;
 	tbb::atomic<bool>							commited_;
+	const core::video_format_desc&				video_format_;
 
 	implementation(const void* tag, const channel_layout& channel_layout)
 		: channel_layout_(channel_layout)
 		, timecode_(0)
 		, tag_(tag)
+		, video_format_(core::video_format_desc::get(core::video_format::unknown))
 	{
 		commited_ = false;
 		recorded_frame_age_ = -1;
 	}
 
-	implementation(const safe_ptr<ogl_device>& ogl, const void* tag, const core::pixel_format_desc& desc, const channel_layout& channel_layout, int timecode) 
+	implementation(const safe_ptr<ogl_device>& ogl, const void* tag, const core::video_format_desc& video_format, const core::pixel_format_desc& desc, const channel_layout& channel_layout, int timecode)
 		: ogl_(ogl)
 		, desc_(desc)
 		, channel_layout_(channel_layout)
 		, tag_(tag)
 		, mode_(core::field_mode::progressive)
 		, timecode_(timecode)
+		, video_format_(video_format)
 	{
 		commited_ = false;
 		std::transform(desc.planes.begin(), desc.planes.end(), std::back_inserter(buffers_), [&](const core::pixel_format_desc::plane& plane)
@@ -143,11 +146,12 @@ write_frame::write_frame(const void* tag, const channel_layout& channel_layout)
 write_frame::write_frame(
 		const safe_ptr<ogl_device>& ogl,
 		const void* tag,
+		const core::video_format_desc& video_format,
 		const core::pixel_format_desc& desc,
 		const channel_layout& channel_layout,
 		int timecode
 	)
-	: impl_(new implementation(ogl, tag, desc, channel_layout, timecode))
+	: impl_(new implementation(ogl, tag, video_format, desc, channel_layout, timecode))
 {
 }
 write_frame::write_frame(const write_frame& other) : impl_(new implementation(*other.impl_)){}
@@ -167,6 +171,7 @@ write_frame& write_frame::operator=(write_frame&& other)
 void write_frame::swap(write_frame& other){impl_.swap(other.impl_);}
 
 boost::iterator_range<uint8_t*> write_frame::image_data(uint32_t index){return impl_->image_data(index);}
+const core::video_format_desc& write_frame::video_format() const { return impl_->video_format_; }
 audio_buffer& write_frame::audio_data() { return impl_->audio_data_; }
 const void* write_frame::tag() const {return impl_->tag_;}
 const core::pixel_format_desc& write_frame::get_pixel_format_desc() const{return impl_->desc_;}

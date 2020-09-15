@@ -95,7 +95,7 @@ public:
 
 		return true;
 	}
-
+		
 	boost::iterator_range<uint8_t*> image_data(uint32_t plane_index)
 	{
 		BOOST_FOREACH(auto & frame, frames_)
@@ -135,6 +135,7 @@ int basic_frame::get_timecode() { return impl_->get_timecode(*this);; }
 void basic_frame::commit() { impl_->commit(); }
 bool basic_frame::can_bypass_ogl(const video_format_desc& format_desc) const { return impl_->can_bypass_ogl(format_desc);}
 boost::iterator_range<uint8_t*> basic_frame::image_data(uint32_t plane_index) { return impl_->image_data(plane_index); }
+const core::video_format_desc& basic_frame::video_format() const { return core::video_format_desc::get(core::video_format::unknown); }
 
 void basic_frame::accept(frame_visitor& visitor){impl_->accept(*this, visitor);}
 
