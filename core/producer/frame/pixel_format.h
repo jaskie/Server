@@ -71,6 +71,12 @@ struct pixel_format_desc
 	
 	pixel_format::type pix_fmt;
 	std::vector<plane> planes;
+
+	static const pixel_format_desc& invalid() 
+	{
+		static pixel_format_desc desc;
+		return desc;
+	}
 };
 
 }}

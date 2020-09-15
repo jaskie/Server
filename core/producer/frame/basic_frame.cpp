@@ -25,6 +25,7 @@
 
 #include "frame_transform.h"
 #include "../../video_format.h"
+#include "pixel_format.h"
 
 #include <boost/foreach.hpp>
 
@@ -136,6 +137,11 @@ void basic_frame::commit() { impl_->commit(); }
 bool basic_frame::can_bypass_ogl(const video_format_desc& format_desc) const { return impl_->can_bypass_ogl(format_desc);}
 boost::iterator_range<uint8_t*> basic_frame::image_data(uint32_t plane_index) { return impl_->image_data(plane_index); }
 const core::video_format_desc& basic_frame::video_format() const { return core::video_format_desc::get(core::video_format::unknown); }
+
+const core::pixel_format_desc& basic_frame::pixel_format() const
+{
+	return core::pixel_format_desc::invalid();
+}
 
 void basic_frame::accept(frame_visitor& visitor){impl_->accept(*this, visitor);}
 
