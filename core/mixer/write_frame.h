@@ -64,8 +64,7 @@ public:
 	void swap(write_frame& other);
 			
 	virtual boost::iterator_range<uint8_t*> image_data(uint32_t plane_index = 0) override;
-	virtual const core::video_format_desc& video_format() const override;
-	virtual const core::pixel_format_desc& pixel_format() const override;
+	virtual core::video_format::type video_format() const override;
 
 	audio_buffer& audio_data();
 	

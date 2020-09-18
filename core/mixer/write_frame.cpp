@@ -172,8 +172,7 @@ write_frame& write_frame::operator=(write_frame&& other)
 void write_frame::swap(write_frame& other){impl_.swap(other.impl_);}
 
 boost::iterator_range<uint8_t*> write_frame::image_data(uint32_t index){return impl_->image_data(index);}
-const core::video_format_desc& write_frame::video_format() const { return impl_->video_format_; }
-const core::pixel_format_desc& write_frame::pixel_format() const { return impl_->pixel_format_; }
+core::video_format::type write_frame::video_format() const { return impl_->video_format_.format; }
 audio_buffer& write_frame::audio_data() { return impl_->audio_data_; }
 const void* write_frame::tag() const {return impl_->tag_;}
 const core::pixel_format_desc& write_frame::get_pixel_format_desc() const{return impl_->pixel_format_;}

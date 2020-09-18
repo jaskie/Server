@@ -106,6 +106,35 @@ public:
 		}
 		return boost::iterator_range<uint8_t*>();
 	}
+
+	core::video_format::type video_format() const
+	{
+		auto result = core::video_format::unknown;
+		BOOST_FOREACH(auto & frame, frames_)
+		{
+			if (frame->video_format() != core::video_format::unknown)
+				if (result == core::video_format::unknown)
+					result = frame->video_format();
+				else
+					return core::video_format::unknown;
+		}
+		return result;
+	}
+
+	core::pixel_format::type pixel_format() const
+	{
+		auto result = core::pixel_format::type::invalid;
+		//BOOST_FOREACH(auto & frame, frames_)
+		//{
+		//	if (&frame->get_pixel_format_desc() != &core::pixel_format_desc::invalid())
+		//		if (&result == &core::pixel_format_desc::invalid())
+		//			result = frame->get_pixel_format_desc();
+		//		else
+		//			return core::pixel_format_desc::invalid();
+		//}
+		return result;
+	}
+
 };
 	
 basic_frame::basic_frame() : impl_(new implementation(std::vector<safe_ptr<basic_frame>>())){}
@@ -136,12 +165,7 @@ int basic_frame::get_timecode() { return impl_->get_timecode(*this);; }
 void basic_frame::commit() { impl_->commit(); }
 bool basic_frame::can_bypass_ogl(const video_format_desc& format_desc) const { return impl_->can_bypass_ogl(format_desc);}
 boost::iterator_range<uint8_t*> basic_frame::image_data(uint32_t plane_index) { return impl_->image_data(plane_index); }
-const core::video_format_desc& basic_frame::video_format() const { return core::video_format_desc::get(core::video_format::unknown); }
-
-const core::pixel_format_desc& basic_frame::pixel_format() const
-{
-	return core::pixel_format_desc::invalid();
-}
+core::video_format::type basic_frame::video_format() const { return impl_->video_format(); }
 
 void basic_frame::accept(frame_visitor& visitor){impl_->accept(*this, visitor);}
 
