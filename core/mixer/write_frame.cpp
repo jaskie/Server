@@ -44,7 +44,7 @@ struct write_frame::implementation
 	std::vector<std::shared_ptr<host_buffer>>	buffers_;
 	std::vector<safe_ptr<device_buffer>>		textures_;
 	audio_buffer								audio_data_;
-	const core::pixel_format_desc&				pixel_format_;
+	const core::pixel_format_desc				pixel_format_;
 	const channel_layout						channel_layout_;
 	const void*									tag_;
 	core::field_mode::type						mode_;
@@ -173,6 +173,8 @@ void write_frame::swap(write_frame& other){impl_.swap(other.impl_);}
 
 boost::iterator_range<uint8_t*> write_frame::image_data(uint32_t index){return impl_->image_data(index);}
 core::video_format::type write_frame::video_format() const { return impl_->video_format_.format; }
+core::pixel_format::type write_frame::pixel_format() const { return impl_->pixel_format_.pix_fmt; }
+
 audio_buffer& write_frame::audio_data() { return impl_->audio_data_; }
 const void* write_frame::tag() const {return impl_->tag_;}
 const core::pixel_format_desc& write_frame::get_pixel_format_desc() const{return impl_->pixel_format_;}

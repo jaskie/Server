@@ -91,15 +91,20 @@ public:
 			frame->commit();
 	}
 
-	bool can_bypass_ogl(const video_format_desc& format_desc) const
+	bool can_bypass_ogl(const video_format::type video_format) const
 	{
-
+		if (!std::all_of(frames_.begin(), frames_.end(), [&](const safe_ptr<basic_frame>& frame) { return frame->video_format() == video_format; }))
+			return false;
+		if (!std::all_of(frames_.begin(), frames_.end(), [&](const safe_ptr<basic_frame>& frame) { return frame->pixel_format() == core::pixel_format::type::bgra; }))
+			return false;
+		if (!std::all_of(frames_.begin(), frames_.end(), [&](const safe_ptr<basic_frame>& frame) { return frame->image_data().begin() == frames_[0]->image_data().begin(); }))
+			return false;
 		return true;
 	}
 		
 	boost::iterator_range<uint8_t*> image_data(uint32_t plane_index)
 	{
-		BOOST_FOREACH(auto & frame, frames_)
+		BOOST_FOREACH(auto frame, frames_)
 		{
 			if (!frame->image_data(plane_index).empty())
 				return frame->image_data(plane_index);
@@ -110,7 +115,7 @@ public:
 	core::video_format::type video_format() const
 	{
 		auto result = core::video_format::unknown;
-		BOOST_FOREACH(auto & frame, frames_)
+		BOOST_FOREACH(auto frame, frames_)
 		{
 			if (frame->video_format() != core::video_format::unknown)
 				if (result == core::video_format::unknown)
@@ -124,14 +129,14 @@ public:
 	core::pixel_format::type pixel_format() const
 	{
 		auto result = core::pixel_format::type::invalid;
-		//BOOST_FOREACH(auto & frame, frames_)
-		//{
-		//	if (&frame->get_pixel_format_desc() != &core::pixel_format_desc::invalid())
-		//		if (&result == &core::pixel_format_desc::invalid())
-		//			result = frame->get_pixel_format_desc();
-		//		else
-		//			return core::pixel_format_desc::invalid();
-		//}
+		BOOST_FOREACH(auto frame, frames_)
+		{
+			if (frame->pixel_format() != core::pixel_format::type::invalid)
+				if (result == core::pixel_format::type::invalid)
+					result = frame->pixel_format();
+				else
+					return core::pixel_format::type::invalid;
+		}
 		return result;
 	}
 
@@ -163,9 +168,10 @@ frame_transform& basic_frame::get_frame_transform() { return impl_->frame_transf
 int64_t basic_frame::get_and_record_age_millis() { return impl_->get_and_record_age_millis(*this); }
 int basic_frame::get_timecode() { return impl_->get_timecode(*this);; }
 void basic_frame::commit() { impl_->commit(); }
-bool basic_frame::can_bypass_ogl(const video_format_desc& format_desc) const { return impl_->can_bypass_ogl(format_desc);}
+bool basic_frame::can_bypass_ogl(const video_format::type video_format) const { return impl_->can_bypass_ogl(video_format);}
 boost::iterator_range<uint8_t*> basic_frame::image_data(uint32_t plane_index) { return impl_->image_data(plane_index); }
 core::video_format::type basic_frame::video_format() const { return impl_->video_format(); }
+core::pixel_format::type basic_frame::pixel_format() const { return impl_->pixel_format(); }
 
 void basic_frame::accept(frame_visitor& visitor){impl_->accept(*this, visitor);}
 

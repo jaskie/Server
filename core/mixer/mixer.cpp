@@ -116,7 +116,7 @@ public:
 				//	target_->send(std::make_pair(make_safe<read_frame>(), packet.second));
 				//}
 				//else
-				if (frames.size() == 1 && frames.at(0)->can_bypass_ogl(format_desc_))
+				if (frames.size() == 1 && frames.at(0)->can_bypass_ogl(format_desc_.format))
 				{
 					auto frame = frames.at(0);
 					frame->accept(audio_mixer_);

@@ -65,6 +65,8 @@ public:
 			
 	virtual boost::iterator_range<uint8_t*> image_data(uint32_t plane_index = 0) override;
 	virtual core::video_format::type video_format() const override;
+	virtual core::pixel_format::type pixel_format() const override;
+
 
 	audio_buffer& audio_data();
 	
