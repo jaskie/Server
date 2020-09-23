@@ -114,38 +114,45 @@ public:
 
 	std::shared_ptr<core::audio_buffer> poll()
 	{
-		while (!eof_)
+		try
 		{
-			std::shared_ptr<AVPacket> packet;
-			input_.try_pop_audio(packet);
-			if (packet || (input_.eof() && !eof_))
-				avcodec_send_packet(codec_context_.get(), packet.get());
-			auto frame = create_frame();
-			int ret = avcodec_receive_frame(codec_context_.get(), frame.get());
-			switch (ret)
+			while (!eof_)
 			{
-			case 0:
-				if (frame->pts == AV_NOPTS_VALUE)
-					frame->pts = frame->best_effort_timestamp;
-				if (frame->pts != AV_NOPTS_VALUE)
-					frame->pts -= stream_start_pts_;
-				if (frame->pts < seek_pts_ || frame->nb_samples == 0)
-					continue;
-				time_ = av_rescale(frame->pts * AV_TIME_BASE, stream_->time_base.num, stream_->time_base.den);
+				std::shared_ptr<AVPacket> packet;
+				input_.try_pop_audio(packet);
+				if (packet || (input_.eof() && !eof_))
+					avcodec_send_packet(codec_context_.get(), packet.get());
+				auto frame = create_frame();
+				int ret = avcodec_receive_frame(codec_context_.get(), frame.get());
+				switch (ret)
 				{
-					const uint8_t** in = const_cast<const uint8_t**>(frame->extended_data);
-					uint8_t* out[] = { reinterpret_cast<uint8_t*>(buffer_.data()) };
-					int n_samples = swr_convert(swr_.get(), out, BUFFER_SIZE / codec_context_->channels, in, frame->nb_samples);
-					if (n_samples <= 0)
+				case 0:
+					if (frame->pts == AV_NOPTS_VALUE)
+						frame->pts = frame->best_effort_timestamp;
+					if (frame->pts != AV_NOPTS_VALUE)
+						frame->pts -= stream_start_pts_;
+					if (frame->pts < seek_pts_ || frame->nb_samples == 0)
 						continue;
-					const auto samples = reinterpret_cast<uint32_t*>(*out);
-					return std::make_shared<core::audio_buffer>(samples, samples + n_samples * codec_context_->channels);
+					time_ = av_rescale(frame->pts * AV_TIME_BASE, stream_->time_base.num, stream_->time_base.den);
+					{
+						const uint8_t** in = const_cast<const uint8_t**>(frame->extended_data);
+						uint8_t* out[] = { reinterpret_cast<uint8_t*>(buffer_.data()) };
+						int n_samples = swr_convert(swr_.get(), out, buffer_.size() / frame->channels, in, frame->nb_samples);
+						if (n_samples <= 0)
+							continue;
+						const auto samples = reinterpret_cast<uint32_t*>(*out);
+						return std::make_shared<core::audio_buffer>(samples, samples + n_samples * codec_context_->channels);
+					}
+					break;
+				case AVERROR_EOF:
+					eof_ = true;
+					return nullptr;
 				}
-				break;
-			case AVERROR_EOF:
-				eof_ = true;
-				return nullptr;
 			}
+		}
+		catch (...)
+		{
+			CASPAR_LOG_CURRENT_EXCEPTION();
 		}
 		return nullptr;
 	}
