@@ -286,7 +286,7 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 					{
 						// This is just dummy code for testing.
 						if (wcmd.substr(0, 1) == L"1")
-							wcmd = L"PLAY 1-0 TC";
+							wcmd = L"PLAY 1-0 TC MIX 50";
 						else if (wcmd.substr(0, 1) == L"2")
 							wcmd = L"CALL 1-0 SEEK 100";
 						else if (wcmd.substr(0, 1) == L"3")
