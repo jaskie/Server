@@ -93,13 +93,22 @@ public:
 
 	bool can_bypass_ogl(const video_format::type video_format) const
 	{
-		if (!std::all_of(frames_.begin(), frames_.end(), [&](const safe_ptr<basic_frame>& frame) { return frame->video_format() == video_format; }))
+		if (
+			frame_transform_.brightness != 1.0 
+			|| frame_transform_.clip_scale[0] != 1.0
+			|| frame_transform_.clip_scale[1] != 1.0
+			)
 			return false;
-		if (!std::all_of(frames_.begin(), frames_.end(), [&](const safe_ptr<basic_frame>& frame) { return frame->pixel_format() == core::pixel_format::type::bgra; }))
-			return false;
-		if (!std::all_of(frames_.begin(), frames_.end(), [&](const safe_ptr<basic_frame>& frame) { return frame->image_data().begin() == frames_[0]->image_data().begin(); }))
-			return false;
-		return true;
+		return std::all_of(frames_.begin(), frames_.end(), [&](const safe_ptr<basic_frame>& frame) -> bool
+		{
+			if (!frame->can_bypass_ogl(video_format))
+				return false;
+			if (frame->video_format() != video_format)
+				return false;
+			if (frame->image_data().begin() != frames_[0]->image_data().begin())
+				return false;
+			return true;
+		});
 	}
 		
 	boost::iterator_range<uint8_t*> image_data(uint32_t plane_index)
@@ -140,6 +149,21 @@ public:
 		return result;
 	}
 
+	const core::pixel_format_desc& get_pixel_format_desc() const
+	{
+		auto result = &core::pixel_format_desc::invalid();
+		BOOST_FOREACH(auto frame, frames_)
+		{
+			if (&frame->get_pixel_format_desc() != &core::pixel_format_desc::invalid())
+				if (result == &core::pixel_format_desc::invalid())
+					result = &frame->get_pixel_format_desc();
+				else
+					return core::pixel_format_desc::invalid();
+		}
+		return *result;
+	}
+
+
 };
 	
 basic_frame::basic_frame() : impl_(new implementation(std::vector<safe_ptr<basic_frame>>())){}
@@ -172,6 +196,8 @@ bool basic_frame::can_bypass_ogl(const video_format::type video_format) const { 
 boost::iterator_range<uint8_t*> basic_frame::image_data(uint32_t plane_index) { return impl_->image_data(plane_index); }
 core::video_format::type basic_frame::video_format() const { return impl_->video_format(); }
 core::pixel_format::type basic_frame::pixel_format() const { return impl_->pixel_format(); }
+
+const core::pixel_format_desc& basic_frame::get_pixel_format_desc() const { return impl_->get_pixel_format_desc(); }
 
 void basic_frame::accept(frame_visitor& visitor){impl_->accept(*this, visitor);}
 

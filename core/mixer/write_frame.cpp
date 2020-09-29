@@ -138,6 +138,18 @@ struct write_frame::implementation
 			buffer->unbind();
 		}, high_priority);
 	}
+
+	bool can_bypass_ogl(video_format::type video_format) const
+	{
+		if (pixel_format_.pix_fmt != pixel_format::type::bgra
+			|| pixel_format_.planes.size() != 1 )
+			return false;
+		const auto& plane = pixel_format_.planes.at(0);
+		const auto& format_desc = video_format_desc::get(video_format);
+		if (plane.height != format_desc.height || plane.width != format_desc.width)
+			return false;
+		return true;
+	}
 };
 	
 write_frame::write_frame(const void* tag, const channel_layout& channel_layout)
@@ -187,6 +199,7 @@ const std::vector<safe_ptr<device_buffer>>& write_frame::get_textures() const{re
 void write_frame::commit(){impl_->commit();}
 void write_frame::set_type(const field_mode::type& mode){impl_->mode_ = mode;}
 core::field_mode::type write_frame::get_type() const{return impl_->mode_;}
+bool write_frame::can_bypass_ogl(const video_format::type video_format) const { return impl_->can_bypass_ogl(video_format); }
 void write_frame::accept(core::frame_visitor& visitor){impl_->accept(*this, visitor);}
 int64_t write_frame::get_and_record_age_millis() { return impl_->get_and_record_age_millis(); }
 int write_frame::get_timecode() { return impl_->timecode_; }

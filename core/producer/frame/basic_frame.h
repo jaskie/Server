@@ -60,10 +60,12 @@ public:
 	virtual int64_t get_and_record_age_millis();
 	virtual int get_timecode();
 	virtual void commit();
-	bool can_bypass_ogl(const video_format::type video_format) const;
+	virtual bool can_bypass_ogl(const video_format::type video_format) const;
+
 	virtual boost::iterator_range<uint8_t*> image_data(uint32_t plane_index = 0);
 	virtual core::video_format::type video_format() const;
 	virtual core::pixel_format::type pixel_format() const;
+	virtual const core::pixel_format_desc& get_pixel_format_desc() const;
 
 	static safe_ptr<basic_frame> interlace(const safe_ptr<basic_frame>& frame1, const safe_ptr<basic_frame>& frame2, field_mode::type mode);
 	static safe_ptr<basic_frame> combine(const safe_ptr<basic_frame>& frame1, const safe_ptr<basic_frame>& frame2);

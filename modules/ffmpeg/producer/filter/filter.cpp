@@ -79,7 +79,6 @@ struct filter::implementation
 	const AVRational		in_time_base_;
 	const AVRational		in_frame_rate_;
 	const AVRational		in_sample_aspect_ratio_;
-	std::queue<std::shared_ptr<AVFrame>>	fast_path_;
 	std::shared_ptr<AVFrame> last_frame_;
 
 	implementation(
@@ -104,12 +103,12 @@ struct filter::implementation
 		if(out_pix_fmts_.empty())
 		{
 			out_pix_fmts_ = boost::assign::list_of
+				(AV_PIX_FMT_BGRA)
 				(AV_PIX_FMT_YUVA420P)
 				(AV_PIX_FMT_YUV444P)
 				(AV_PIX_FMT_YUV422P)
 				(AV_PIX_FMT_YUV420P)
 				(AV_PIX_FMT_YUV411P)
-				(AV_PIX_FMT_BGRA)
 				(AV_PIX_FMT_ARGB)
 				(AV_PIX_FMT_RGBA)
 				(AV_PIX_FMT_ABGR)
@@ -121,11 +120,11 @@ struct filter::implementation
 	}
 	void configure_filtergraph()
 	{
-		if (filtergraph_.empty())
+		/*if (filtergraph_.empty())
 		{
 			video_graph_.reset();
 			return;
-		}
+		}*/
 
 		video_graph_.reset(
 			avfilter_graph_alloc(), 
@@ -246,27 +245,19 @@ struct filter::implementation
 	}
 
 
-	bool fast_path() const
-	{
-		return filtergraph_.empty();
-	}
-
 	void push(const std::shared_ptr<AVFrame>& frame)
-	{	
+	{
 		if (frame->format == AV_PIX_FMT_NONE)
 			return;
 		last_frame_ = frame;
-		if (fast_path())
-			fast_path_.push(frame);
-		else
-			FF(av_buffersrc_add_frame_flags(
-				video_graph_in_, 
-				frame.get(), AV_BUFFERSRC_FLAG_KEEP_REF));
+		FF(av_buffersrc_add_frame_flags(
+			video_graph_in_,
+			frame.get(), AV_BUFFERSRC_FLAG_KEEP_REF));
 	}
 
 	void flush()
 	{
-		if (!last_frame_ || fast_path())
+		if (!last_frame_)
 			return;
 		FF(av_buffersrc_add_frame_flags(
 			video_graph_in_,
@@ -275,16 +266,6 @@ struct filter::implementation
 
 	std::shared_ptr<AVFrame> poll()
 	{
-		if (fast_path())
-		{
-			if (fast_path_.empty())
-				return nullptr;
-
-			auto result = fast_path_.front();
-			fast_path_.pop();
-			return result;
-		}
-
 		auto filt_frame = ffmpeg::create_frame();
 		
 		const auto ret = av_buffersink_get_frame(
@@ -312,23 +293,21 @@ struct filter::implementation
 
 	int out_width()
 	{
-		return fast_path() ? in_width_ : av_buffersink_get_w(video_graph_out_);
+		return av_buffersink_get_w(video_graph_out_);
 	}
 
 	int out_height()
 	{
-		return fast_path() ? in_height_ : av_buffersink_get_h(video_graph_out_);
+		return av_buffersink_get_h(video_graph_out_);
 	}
 
 	AVPixelFormat out_pixel_format()
 	{
-		return fast_path() ? in_pix_format_ : static_cast<AVPixelFormat>(av_buffersink_get_format(video_graph_out_));
+		return static_cast<AVPixelFormat>(av_buffersink_get_format(video_graph_out_));
 	}
 
 	AVRational out_frame_rate()
 	{
-		if (fast_path())
-			return in_frame_rate_;
 		AVRational frame_rate = av_buffersink_get_frame_rate(video_graph_out_);
 		if (frame_rate.num != 0)
 			return frame_rate;
@@ -337,12 +316,12 @@ struct filter::implementation
 
 	AVRational out_time_base()
 	{
-		return fast_path() ? in_time_base_ : av_buffersink_get_time_base(video_graph_out_);
+		return av_buffersink_get_time_base(video_graph_out_);
 	}
 
 	AVRational out_sample_aspect_ratio()
 	{
-		return fast_path() ? in_sample_aspect_ratio_ : av_buffersink_get_sample_aspect_ratio(video_graph_out_);
+		return av_buffersink_get_sample_aspect_ratio(video_graph_out_);
 	}
 	
 };
