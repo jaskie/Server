@@ -95,10 +95,24 @@ public:
 	{
 		if (
 			frame_transform_.brightness != 1.0 
+			|| frame_transform_.contrast != 1.0
+			|| frame_transform_.saturation != 1.0
 			|| frame_transform_.clip_scale[0] != 1.0
 			|| frame_transform_.clip_scale[1] != 1.0
+			|| frame_transform_.fill_translation[0] != 0.0
+			|| frame_transform_.fill_translation[1] != 0.0
+			|| frame_transform_.fill_scale[0] != 1.0
+			|| frame_transform_.fill_scale[1] != 1.0
 			)
 			return false;
+		if (frames_.size() == 2)
+		{
+			field_mode::type field_mode = video_format_desc::get(video_format).field_mode;
+			if (frames_[0]->get_frame_transform().field_mode != field_mode)
+				return false;
+			if (frames_[1]->get_frame_transform().field_mode != (field_mode == field_mode::type::upper ? field_mode::type::lower : field_mode::type::upper))
+				return false;
+		}
 		return std::all_of(frames_.begin(), frames_.end(), [&](const safe_ptr<basic_frame>& frame) -> bool
 		{
 			if (!frame->can_bypass_ogl(video_format))
