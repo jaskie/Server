@@ -70,6 +70,7 @@ struct mixer::implementation : boost::noncopyable
 	safe_ptr<mixer::target_t>		target_;
 	mutable tbb::spin_mutex			format_desc_mutex_;
 	video_format_desc				format_desc_;
+	std::vector<uint8_t>			empty_frame_;
 	safe_ptr<ogl_device>			ogl_;
 	channel_layout					audio_channel_layout_;
 	bool							straighten_alpha_;
@@ -92,6 +93,7 @@ public:
 		, straighten_alpha_(false)
 		, audio_mixer_(graph_)
 		, image_mixer_(ogl)
+		, empty_frame_(format_desc.size, 0x0)
 		, executor_(L"mixer")
 		, monitor_subject_(make_safe<monitor::subject>("/mixer"))
 	{			
@@ -111,11 +113,12 @@ public:
 
 				auto frames = packet.first;
 
-				//if (frames.empty())
-				//{
-				//	target_->send(std::make_pair(make_safe<read_frame>(), packet.second));
-				//}
-				//else
+				if (frames.empty())
+				{
+					auto audio = audio_mixer_(format_desc_, audio_channel_layout_);
+					target_->send(std::make_pair(make_safe<read_frame>(empty_frame_, std::move(audio), audio_channel_layout_), packet.second));
+				}
+				else
 				if (frames.size() == 1 && frames.at(0)->can_bypass_ogl(format_desc_.format))
 				{
 					auto frame = frames.at(0);

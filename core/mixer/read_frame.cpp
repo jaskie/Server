@@ -41,12 +41,14 @@ int64_t get_current_time_millis()
 	return duration_cast<milliseconds>(
 			high_resolution_clock::now().time_since_epoch()).count();
 }
-																																							
+
 struct read_frame::implementation : boost::noncopyable
 {
 	std::shared_ptr<ogl_device>		ogl_;
+	
 	const uint32_t					size_;
 	std::shared_ptr<host_buffer>	image_data_;
+	const uint8_t*					host_image_data_;
 	std::shared_ptr<basic_frame>	passthrough_frame_;
 	tbb::mutex						mutex_;
 	audio_buffer					audio_data_;
@@ -70,6 +72,7 @@ public:
 		, audio_channel_layout_(audio_channel_layout)
 		, created_timestamp_(get_current_time_millis())
 		, frame_timecode_(frame_timecode)
+		, host_image_data_(nullptr)
 	{
 	}	
 
@@ -84,12 +87,31 @@ public:
 		, audio_channel_layout_(audio_channel_layout)
 		, created_timestamp_(get_current_time_millis())
 		, frame_timecode_(passthrough_frame->get_timecode())
+		, host_image_data_(nullptr)
+	{
+	}
+
+	implementation(
+		const std::vector<uint8_t>& image_data,
+		audio_buffer&& audio_data,
+		const channel_layout& audio_channel_layout
+	)
+		: audio_channel_layout_(audio_channel_layout)
+		, audio_data_(audio_data)
+		, host_image_data_(image_data.data())
+		, size_(image_data.size())
+		, created_timestamp_(get_current_time_millis())
+		, frame_timecode_(std::numeric_limits<int>().max())
 	{
 	}
 
 	
 	const boost::iterator_range<const uint8_t*> image_data()
 	{
+		if (host_image_data_)
+		{
+			return boost::iterator_range<const uint8_t*>(host_image_data_, host_image_data_ + size_);
+		}
 		if (passthrough_frame_)
 			return passthrough_frame_->image_data();
 		{
@@ -131,6 +153,14 @@ read_frame::read_frame(
 	audio_buffer&& audio_data, 
 	const channel_layout& audio_channel_layout)
 	: impl_(new implementation(passthrough_frame, std::move(audio_data), audio_channel_layout))
+{
+}
+
+read_frame::read_frame(
+	const std::vector<uint8_t>& image_data,
+	audio_buffer&& audio_data,
+	const channel_layout& audio_channel_layout)
+	:impl_(new implementation(image_data, std::move(audio_data), audio_channel_layout))
 {
 }
 
