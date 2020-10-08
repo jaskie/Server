@@ -142,7 +142,8 @@ struct write_frame::implementation
 	bool can_bypass_ogl(video_format::type video_format) const
 	{
 		if (pixel_format_.pix_fmt != pixel_format::type::bgra
-			|| pixel_format_.planes.size() != 1 )
+			|| pixel_format_.planes.size() != 1
+			)
 			return false;
 		const auto& plane = pixel_format_.planes.at(0);
 		const auto& format_desc = video_format_desc::get(video_format);

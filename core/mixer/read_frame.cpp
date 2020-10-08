@@ -109,9 +109,7 @@ public:
 	const boost::iterator_range<const uint8_t*> image_data()
 	{
 		if (host_image_data_)
-		{
 			return boost::iterator_range<const uint8_t*>(host_image_data_, host_image_data_ + size_);
-		}
 		if (passthrough_frame_)
 			return passthrough_frame_->image_data();
 		{
@@ -186,17 +184,17 @@ const multichannel_view<const int32_t, boost::iterator_range<const int32_t*>::co
 
 int64_t read_frame::get_age_millis() const
 {
-	return impl_ ? get_current_time_millis() - impl_->created_timestamp_ : 0;
+	return impl_ ? get_current_time_millis() - impl_->created_timestamp_ : 0LL;
 }
 
 int read_frame::get_timecode() const
 {
-	return impl_->frame_timecode_;
+	return impl_ ? impl_->frame_timecode_ : std::numeric_limits<int>().max();
 }
 
 const channel_layout & read_frame::get_channel_layout() const
 {
-	return impl_->audio_channel_layout_;
+	return impl_ ? impl_->audio_channel_layout_ : channel_layout::stereo();
 }
 
 

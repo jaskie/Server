@@ -34,9 +34,6 @@ namespace core {
 
 namespace protocol {
 
-std::wstring ListMedia();
-std::wstring ListTemplates();
-
 namespace amcp {
 	
 class ChannelGridCommand : public AMCPCommandBase<false, 0>
