@@ -43,7 +43,7 @@ namespace caspar { namespace core {
 
 class channel_consumer : public frame_consumer
 {	
-	tbb::concurrent_bounded_queue<std::shared_ptr<read_frame>>	frame_buffer_;
+	tbb::concurrent_bounded_queue<std::pair<std::shared_ptr<read_frame>, bool>>	frame_buffer_; // bool: is repeated
 	core::video_format_desc										format_desc_;
 	tbb::atomic<int>											channel_index_;
 	tbb::atomic<bool>											is_running_;
@@ -66,8 +66,9 @@ public:
 
 	virtual boost::unique_future<bool> send(const safe_ptr<read_frame>& frame) override
 	{
-		frame_buffer_.try_push(frame);
-		return caspar::wrap_as_future(is_running_.load());
+		if (frame_buffer_.empty())
+			frame_buffer_.try_push(std::make_pair(frame, true)); // repeat frame
+		return caspar::wrap_as_future(frame_buffer_.try_push(std::make_pair(frame, false)));
 	}
 
 	virtual void initialize(const core::video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index) override
@@ -101,7 +102,7 @@ public:
 
 	virtual uint32_t buffer_depth() const override
 	{
-		return 1;
+		return frame_buffer_.size();
 	}
 
 	virtual int index() const override
@@ -119,7 +120,7 @@ public:
 	void stop()
 	{
 		is_running_ = false;
-		frame_buffer_.try_push(make_safe<read_frame>());
+		frame_buffer_.try_push(std::make_pair(make_safe<read_frame>(), true));
 	}
 	
 	const core::video_format_desc& get_video_format_desc()
@@ -127,14 +128,14 @@ public:
 		return format_desc_;
 	}
 
-	std::shared_ptr<read_frame> receive()
+	std::pair<std::shared_ptr<read_frame>, bool> receive()
 	{
 		if(!is_running_)
-			return make_safe<read_frame>();
-		std::shared_ptr<read_frame> frame;
+			return std::make_pair(make_safe<read_frame>(), true);
+		std::pair<std::shared_ptr<read_frame>, bool> frame;
 		
 		if (frame_buffer_.try_pop(frame))
-			current_age_ = frame->get_age_millis();
+			current_age_ = frame.first->get_age_millis();
 
 		return frame;
 	}
@@ -180,10 +181,9 @@ public:
 			frame_buffer_.pop();
 			return last_frame_ = frame;
 		}
-		
-		auto read_frame = consumer_->receive();
-		if(!read_frame || read_frame->image_data().empty())
-			return basic_frame::late();		
+		std::pair<std::shared_ptr<read_frame>, bool> read_frame;
+		while (!read_frame.first)
+			read_frame = consumer_->receive();
 
 		frame_number_++;
 		
@@ -197,15 +197,15 @@ public:
 		desc.pix_fmt = core::pixel_format::bgra;
 		desc.planes.push_back(core::pixel_format_desc::plane(format_desc.width, format_desc.height, 4));
 		auto frame = frame_factory_->create_frame(this, desc);
-		bool copy_audio = !double_speed && !half_speed;
+		bool copy_audio = !double_speed && !half_speed && !read_frame.second;
 
 		if (copy_audio)
 		{
-			frame->audio_data().reserve(read_frame->audio_data().size());
-			boost::copy(read_frame->audio_data(), std::back_inserter(frame->audio_data()));
+			frame->audio_data().reserve(read_frame.first->audio_data().size());
+			boost::copy(read_frame.first->audio_data(), std::back_inserter(frame->audio_data()));
 		}
 
-		fast_memcpy(frame->image_data().begin(), read_frame->image_data().begin(), read_frame->image_data().size());
+		fast_memcpy(frame->image_data().begin(), read_frame.first->image_data().begin(), read_frame.first->image_data().size());
 		frame->commit();
 
 		frame_buffer_.push(frame);	
@@ -218,7 +218,7 @@ public:
 
 	virtual safe_ptr<basic_frame> last_frame() const override
 	{
-		return last_frame_; 
+		return disable_audio(last_frame_); 
 	}	
 
 	virtual std::wstring print() const override

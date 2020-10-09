@@ -192,7 +192,6 @@ public:
 	
 	STDMETHOD(ScheduledPlaybackHasStopped())
 	{
-		is_running_ = false;
 		CASPAR_LOG(info) << print() << L" Scheduled playback has stopped.";
 		return S_OK;
 	}
