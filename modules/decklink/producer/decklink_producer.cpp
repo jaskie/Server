@@ -112,6 +112,7 @@ class decklink_producer : boost::noncopyable, public IDeckLinkInputCallback
 	BMDTimeValue												frame_duration_;
 	BMDTimeScale												time_scale_;
 	int64_t														frame_pts_;
+	const bool													format_auto_detection_;
 
 public:
 	decklink_producer(
@@ -121,7 +122,8 @@ public:
 			const safe_ptr<core::frame_factory>& frame_factory,
 			const std::wstring& filter,
 			std::size_t buffer_depth,
-			const BMDTimecodeFormat timecode_source
+			const BMDTimecodeFormat timecode_source,
+			bool format_auto_detection
 		)
 		: decklink_(get_device(device_index))
 		, input_(decklink_)
@@ -140,6 +142,7 @@ public:
 		, frame_duration_(format_desc_.duration)
 		, time_scale_(format_desc_.time_scale)
 		, frame_pts_(0)
+		, format_auto_detection_(format_auto_detection)
 	{		
 		hints_ = 0;
 		frame_buffer_.set_capacity(buffer_depth);
@@ -161,8 +164,9 @@ public:
 		diagnostics::register_graph(graph_);
 		
 		BOOL supportsFormatDetection = false;
-		if (FAILED(attributes_->GetFlag(BMDDeckLinkSupportsInputFormatDetection, &supportsFormatDetection)))
-			supportsFormatDetection = false;
+		if (format_auto_detection_)
+			if (FAILED(attributes_->GetFlag(BMDDeckLinkSupportsInputFormatDetection, &supportsFormatDetection)))
+				supportsFormatDetection = false;
 		
 		open_input(current_display_mode_->GetDisplayMode(), supportsFormatDetection ? bmdVideoInputEnableFormatDetection : bmdVideoInputFlagDefault);
 
@@ -214,6 +218,10 @@ public:
 		
 	virtual HRESULT STDMETHODCALLTYPE VideoInputFormatChanged(BMDVideoInputFormatChangedEvents notificationEvents, IDeckLinkDisplayMode* newDisplayMode, BMDDetectedVideoInputFormatFlags /*detectedSignalFlags*/)
 	{
+		if (!(notificationEvents & bmdVideoInputDisplayModeChanged)) // only reopen if actual mode has changed
+			return S_OK;
+		if (!format_auto_detection_)
+			return E_FAIL;
 		close_input();
 		open_input(newDisplayMode->GetDisplayMode(), bmdVideoInputEnableFormatDetection);
 		current_display_mode_ = newDisplayMode;
@@ -388,7 +396,8 @@ public:
 		const std::wstring& filter_str,
 		uint32_t length,
 		std::size_t buffer_depth,
-		const std::wstring timecode_source_str
+		const std::wstring timecode_source_str,
+		bool format_auto_detection
 	)
 		: context_(L"decklink_producer[" + boost::lexical_cast<std::wstring>(device_index) + L"]")
 		, last_frame_(core::basic_frame::late())
@@ -398,7 +407,7 @@ public:
 			timecode_source = bmdTimecodeSerial;
 		else if (timecode_source_str == L"vitc")
 			timecode_source = bmdTimecodeVITC;
-		context_.reset([&]{return new decklink_producer(format_desc, audio_channel_layout, device_index, frame_factory, filter_str, buffer_depth, timecode_source);});
+		context_.reset([&]{return new decklink_producer(format_desc, audio_channel_layout, device_index, frame_factory, filter_str, buffer_depth, timecode_source, format_auto_detection);});
 	}
 	
 	// frame_producer
@@ -452,6 +461,7 @@ safe_ptr<core::frame_producer> create_producer(
 	auto audio_layout		= core::create_custom_channel_layout(
 			params.get(L"CHANNEL_LAYOUT", L"STEREO"),
 			core::default_channel_layout_repository());
+	auto format_auto_detection = params.has(L"DISABLE_FORMAT_AUTO_DETECTION");
 	
 	boost::replace_all(filter_str, L"DEINTERLACE", L"YADIF=0:-1");
 	boost::replace_all(filter_str, L"DEINTERLACE_BOB", L"YADIF=1:-1");
@@ -461,10 +471,10 @@ safe_ptr<core::frame_producer> create_producer(
 			
 	return create_producer_print_proxy(
 		   create_producer_destroy_proxy(
-			make_safe<decklink_producer_proxy>(frame_factory, format_desc, audio_layout, device_index, filter_str, length, buffer_depth, L"")));
+			make_safe<decklink_producer_proxy>(frame_factory, format_desc, audio_layout, device_index, filter_str, length, buffer_depth, L"", format_auto_detection)));
 }
 
-safe_ptr<core::frame_producer> create_producer(const safe_ptr<core::frame_factory>& frame_factory, const core::video_format_desc format_desc, const core::channel_layout channel_layout, int device_index, const std::wstring timecode_source)
+safe_ptr<core::frame_producer> create_producer(const safe_ptr<core::frame_factory>& frame_factory, const core::video_format_desc format_desc, const core::channel_layout channel_layout, int device_index, const std::wstring timecode_source, bool format_auto_detection)
 {
 	return make_safe<decklink_producer_proxy>(
 		frame_factory,
@@ -474,7 +484,8 @@ safe_ptr<core::frame_producer> create_producer(const safe_ptr<core::frame_factor
 		L"", 
 		std::numeric_limits<uint32_t>::max(),
 		3,
-		timecode_source
+		timecode_source,
+		format_auto_detection
 		);
 }
 

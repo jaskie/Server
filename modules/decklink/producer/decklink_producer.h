@@ -42,5 +42,6 @@ safe_ptr<core::frame_producer> create_producer(
 	const core::video_format_desc format_desc, 
 	const core::channel_layout channel_layout, 
 	const int device_index,
-	const std::wstring timecode_source);
+	const std::wstring timecode_source,
+	bool format_auto_detection);
 }}
