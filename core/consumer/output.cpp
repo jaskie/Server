@@ -72,7 +72,7 @@ public:
 		, monitor_subject_("/output")
 		, format_desc_(format_desc)
 		, audio_channel_layout_(audio_channel_layout)
-		, executor_(L"output")
+		, executor_(L"output[" + std::to_wstring(static_cast<uint64_t>(channel_index)) + L"]")
 	{
 		graph_->set_color("consume-time", diagnostics::color(1.0f, 0.4f, 0.0f, 0.8));
 	}
@@ -83,7 +83,6 @@ public:
 
 		consumer = create_consumer_cadence_guard(consumer);
 		consumer->initialize(format_desc_, audio_channel_layout_, channel_index_);
-
 		executor_.invoke([&]
 		{
 			consumers_.insert(std::make_pair(index, consumer));

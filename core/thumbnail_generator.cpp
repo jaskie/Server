@@ -130,7 +130,8 @@ public:
 				output_,
 				format_desc_,
 				ogl,
-				channel_layout::stereo()))
+				channel_layout::stereo(),
+				0))
 		, thumbnail_creator_(thumbnail_creator)
 		, media_info_repo_(std::move(media_info_repo))
 		, monitor_(monitor_factory.create(

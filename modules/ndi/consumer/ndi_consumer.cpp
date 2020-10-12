@@ -203,10 +203,7 @@ namespace caspar {
 			{
 				std::unique_ptr<NDIlib_video_frame_t> ndi_frame(create_video_frame(format_desc_, is_alpha_));
 				if (is_alpha_)
-				{
-					video_send_timer_.restart();
 					ndi_frame->p_data = const_cast<uint8_t*>(frame->image_data().begin());
-				}
 				else  //colorspace conversion
 				{
 					frame_convert_timer_.restart();
@@ -219,8 +216,8 @@ namespace caspar {
 					sws_scale(sws_.get(), src_data, src_linesize, 0, format_desc_.height, dest_data, dst_linesize);
 					graph_->set_value("frame-convert-time", frame_convert_timer_.elapsed() * format_desc_.fps * 0.5f);
 					ndi_frame->p_data = &send_frame_buffer_.front();
-					video_send_timer_.restart();
 				}
+				video_send_timer_.restart();
 				ndi_lib_->NDIlib_send_send_video(ndi_send_, ndi_frame.get());
 				graph_->set_value("video-send-time", video_send_timer_.elapsed() * format_desc_.fps * 0.5f);
 			}

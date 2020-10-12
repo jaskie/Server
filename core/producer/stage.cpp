@@ -108,12 +108,12 @@ struct stage::implementation : public std::enable_shared_from_this<implementatio
 	executor																	 executor_;
 
 public:
-	implementation(const safe_ptr<diagnostics::graph>& graph, const safe_ptr<stage::target_t>& target, const video_format_desc& format_desc)  
+	implementation(const safe_ptr<diagnostics::graph>& graph, const safe_ptr<stage::target_t>& target, const video_format_desc& format_desc, int channel_index)
 		: graph_(graph)
 		, format_desc_(format_desc)
 		, target_(target)
 		, monitor_subject_(make_safe<monitor::subject>("/stage"))
-		, executor_(L"stage")
+		, executor_(L"stage[" + std::to_wstring(static_cast<uint64_t>(channel_index)) + L"]")
 	{
 		graph_->set_color("tick-time", diagnostics::color(0.0f, 0.6f, 0.9f, 0.8));	
 		graph_->set_color("produce-time", diagnostics::color(0.0f, 1.0f, 0.0f));
@@ -481,8 +481,8 @@ public:
 	}
 };
 
-stage::stage(const safe_ptr<diagnostics::graph>& graph, const safe_ptr<target_t>& target, const video_format_desc& format_desc) 
-	: impl_(new implementation(graph, target, format_desc)){}
+stage::stage(const safe_ptr<diagnostics::graph>& graph, const safe_ptr<target_t>& target, const video_format_desc& format_desc, int channel_index)
+	: impl_(new implementation(graph, target, format_desc, channel_index)){}
 void stage::apply_transforms(const std::vector<stage::transform_tuple_t>& transforms){impl_->apply_transforms(transforms);}
 void stage::apply_transform(int index, const transform_func_t& transform, unsigned int mix_duration, const std::wstring& tween){impl_->apply_transform(index, transform, mix_duration, tween);}
 void stage::clear_transforms(int index){impl_->clear_transforms(index);}
