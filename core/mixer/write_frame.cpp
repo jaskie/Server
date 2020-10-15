@@ -200,7 +200,7 @@ const std::vector<safe_ptr<device_buffer>>& write_frame::get_textures() const{re
 void write_frame::commit(){impl_->commit();}
 void write_frame::set_type(const field_mode::type& mode){impl_->mode_ = mode;}
 core::field_mode::type write_frame::get_type() const{return impl_->mode_;}
-bool write_frame::can_bypass_ogl(const video_format::type video_format) const { return impl_->can_bypass_ogl(video_format); }
+bool write_frame::can_bypass_ogl(const video_format::type video_format) const { return basic_frame::can_bypass_ogl(video_format) && impl_->can_bypass_ogl(video_format); }
 void write_frame::accept(core::frame_visitor& visitor){impl_->accept(*this, visitor);}
 int64_t write_frame::get_and_record_age_millis() { return impl_->get_and_record_age_millis(); }
 int write_frame::get_timecode() { return impl_->timecode_; }
