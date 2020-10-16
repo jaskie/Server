@@ -66,9 +66,12 @@ public:
 
 	virtual boost::unique_future<bool> send(const safe_ptr<read_frame>& frame) override
 	{
-		if (frame_buffer_.empty())
-			frame_buffer_.try_push(std::make_pair(frame, true)); // repeat frame
-		return caspar::wrap_as_future(frame_buffer_.try_push(std::make_pair(frame, false)));
+		if (!frame_buffer_.try_push(std::make_pair(frame, true)))
+		{
+			CASPAR_LOG(warning) << print() << L" Frame dropped.";
+			return caspar::wrap_as_future(false);
+		}
+		return caspar::wrap_as_future(true);
 	}
 
 	virtual void initialize(const core::video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index) override
@@ -147,10 +150,11 @@ class channel_producer : public frame_producer
 
 	const safe_ptr<frame_factory>		frame_factory_;
 	const safe_ptr<channel_consumer>	consumer_;
+	const video_format_desc&			chanel_video_format_desc_;
 
-	std::queue<safe_ptr<basic_frame>>	frame_buffer_;
 	safe_ptr<basic_frame>				last_frame_;
 	uint64_t							frame_number_;
+	
 
 public:
 	explicit channel_producer(const safe_ptr<frame_factory>& frame_factory, const safe_ptr<video_channel>& channel) 
@@ -158,7 +162,10 @@ public:
 		, consumer_(make_safe<channel_consumer>())
 		, last_frame_(basic_frame::empty())
 		, frame_number_(0)
+		, chanel_video_format_desc_(channel->get_video_format_desc())
 	{
+		if (frame_factory->get_video_format_desc().time_scale * channel->get_video_format_desc().duration != channel->get_video_format_desc().time_scale * frame_factory->get_video_format_desc().duration)
+			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Could not initialize channel producer for another if frame rate differs"));
 		channel->output()->add(consumer_);
 		CASPAR_LOG(info) << print() << L" Initialized";
 	}
@@ -173,47 +180,27 @@ public:
 			
 	virtual safe_ptr<basic_frame> receive(int) override
 	{
-		auto format_desc = consumer_->get_video_format_desc();
 
-		if(frame_buffer_.size() > 1)
-		{
-			auto frame = frame_buffer_.front();
-			frame_buffer_.pop();
-			return last_frame_ = frame;
-		}
-		std::pair<std::shared_ptr<read_frame>, bool> read_frame;
-		while (!read_frame.first)
-			read_frame = consumer_->receive();
+		std::pair<std::shared_ptr<read_frame>, bool> read_frame = consumer_->receive();
+		if (!read_frame.first)
+			return basic_frame::late();
 
 		frame_number_++;
 		
 		core::pixel_format_desc desc;
-		bool double_speed	= std::abs(frame_factory_->get_video_format_desc().fps / 2.0 - format_desc.fps) < 0.01;		
-		bool half_speed		= std::abs(format_desc.fps / 2.0 - frame_factory_->get_video_format_desc().fps) < 0.01;
-
-		if(half_speed && frame_number_ % 2 == 0) // Skip frame
-			return receive(0);
 
 		desc.pix_fmt = core::pixel_format::bgra;
-		desc.planes.push_back(core::pixel_format_desc::plane(format_desc.width, format_desc.height, 4));
+		desc.planes.push_back(core::pixel_format_desc::plane(chanel_video_format_desc_.width, chanel_video_format_desc_.height, 4));
 		auto frame = frame_factory_->create_frame(this, desc);
-		bool copy_audio = !double_speed && !half_speed && !read_frame.second;
-
-		if (copy_audio)
+		if (read_frame.first)
 		{
 			frame->audio_data().reserve(read_frame.first->audio_data().size());
 			boost::copy(read_frame.first->audio_data(), std::back_inserter(frame->audio_data()));
 		}
-
 		fast_memcpy(frame->image_data().begin(), read_frame.first->image_data().begin(), read_frame.first->image_data().size());
 		frame->commit();
-
-		frame_buffer_.push(frame);	
-		
-		if(double_speed)	
-			frame_buffer_.push(frame);
-
-		return receive(0);
+		last_frame_ = frame;
+		return frame;
 	}	
 
 	virtual safe_ptr<basic_frame> last_frame() const override
