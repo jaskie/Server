@@ -123,6 +123,13 @@ public:
 			case AVERROR_EOF:
 				eof_ = true;
 				break;
+			case AVERROR(EAGAIN):
+				if (input_.eof())
+					eof_ = true;
+				break;
+			case AVERROR(EINVAL):
+				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("codec not opened"));
+				return nullptr;
 			}
 		}
 		return nullptr;

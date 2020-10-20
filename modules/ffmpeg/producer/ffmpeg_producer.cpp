@@ -417,8 +417,7 @@ public:
 
 	bool seek(int64_t time_to_seek, bool clear_buffer_and_muxer)
 	{
-		int64_t duration = file_duration();
-		if (time_to_seek >= duration && duration != AV_NOPTS_VALUE)
+		if (!input_.seek(time_to_seek))
 			return false;
 		if (clear_buffer_and_muxer)
 		{
@@ -426,8 +425,6 @@ public:
 				frame_buffer_.pop();
 			muxer_->clear();
 		}
-		if (!input_.seek(time_to_seek))
-			return false;
 		if (video_decoder_)
 			video_decoder_->seek(time_to_seek);
 		if (audio_decoder_)
