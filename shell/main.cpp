@@ -82,6 +82,12 @@
 CComModule _AtlModule;
 extern __declspec(selectany) CAtlModule* _pAtlModule = &_AtlModule;
 
+// exports to set maximum OpenGL performance on nVidia and AMD cards
+extern "C" {
+	_declspec(dllexport) DWORD NvOptimusEnablement = 1;
+	_declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+
 
 void setup_global_locale()
 {
@@ -286,9 +292,9 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 					{
 						// This is just dummy code for testing.
 						if (wcmd.substr(0, 1) == L"1")
-							wcmd = L"PLAY 1-0 udp://225.100.10.25:5500";
+							wcmd = L"LOAD 1-48 \"Pogoda 19.10.-1\" SEEK 2746 CHANNEL_LAYOUT STEREO";
 						else if (wcmd.substr(0, 1) == L"2")
-							wcmd = L"CALL 1-0 SEEK 100";
+							wcmd = L"PLAY 1-48";
 						else if (wcmd.substr(0, 1) == L"3")
 							wcmd = L"REMOVE 1 FILE RECORDING.MXF";
 						else if (wcmd.substr(0, 1) == L"4")

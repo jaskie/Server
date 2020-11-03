@@ -208,11 +208,13 @@ public:
 		if(!GLEW_VERSION_2_1)
 			BOOST_THROW_EXCEPTION(not_supported() << msg_info("Missing OpenGL 2.1 support."));
 
-		window_.Create(sf::VideoMode(screen_width_, screen_height_, 32), narrow(print()), config_.borderless ? sf::Style::None : (config_.windowed ? sf::Style::Resize | sf::Style::Close : sf::Style::Fullscreen));
-		window_.ShowMouseCursor(false);
-		window_.SetPosition(screen_x_, screen_y_);
-		window_.SetSize(screen_width_, screen_height_);
-		window_.SetActive();
+		window_.create(sf::VideoMode(screen_width_, screen_height_, 32), narrow(print()), config_.borderless ? sf::Style::None : (config_.windowed ? sf::Style::Resize | sf::Style::Close : sf::Style::Fullscreen));
+		window_.setMouseCursorVisible(false);
+		sf::Vector2i position(0, 0);
+		window_.setPosition(position);
+		sf::Vector2u size(screen_width_, screen_height_);
+		window_.setSize(size);
+		window_.setActive();
 		GL(glEnable(GL_TEXTURE_2D));
 		GL(glDisable(GL_DEPTH_TEST));		
 		GL(glClearColor(0.0, 0.0, 0.0, 0.0));
@@ -280,11 +282,11 @@ public:
 				{
 
 					sf::Event e;		
-					while(window_.GetEvent(e))
+					while(window_.pollEvent(e))
 					{
-						if(e.Type == sf::Event::Resized)
+						if(e.type == sf::Event::Resized)
 							calculate_aspect();
-						else if(e.Type == sf::Event::Closed)
+						else if(e.type == sf::Event::Closed)
 							is_running_ = false;
 					}
 			
@@ -325,7 +327,7 @@ public:
 	void wait_for_vblank_and_display()
 	{
 		try_sleep_almost_until_vblank();
-		window_.Display();
+		window_.display();
 		// Make sure that the next tick measures the duration from this point in time.
 		wait_timer_.tick(0.0);
 	}
@@ -403,8 +405,9 @@ public:
 	{
 		if(config_.windowed)
 		{
-			screen_height_ = window_.GetHeight();
-			screen_width_ = window_.GetWidth();
+			
+			screen_height_ = window_.getSize().x;
+			screen_width_ = window_.getSize().y;
 		}
 		
 		GL(glViewport(0, 0, screen_width_, screen_height_));

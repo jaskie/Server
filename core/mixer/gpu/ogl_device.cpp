@@ -34,6 +34,19 @@
 #include <boost/foreach.hpp>
 
 #include <gl/glew.h>
+#include <GL/wglew.h>
+#include <SFML/Window/Window.hpp>
+
+LRESULT CALLBACK WindowProcedure(HWND hWnd, unsigned int msg, WPARAM wparam, LPARAM lparam)
+{
+	switch (msg)
+	{
+	case WM_DESTROY:
+		PostQuitMessage(0);
+		break;
+	}
+	return DefWindowProc(hWnd, msg, wparam, lparam);
+}
 
 namespace caspar { namespace core {
 
@@ -54,12 +67,56 @@ ogl_device::ogl_device()
 	
 	invoke([=]
 	{
-		context_.reset(new sf::Context());
-		context_->SetActive(true);
+		//context_.reset(new sf::Context());
+		int gpuIndex = 0;
+		HGPUNV* gpu = nullptr;
+
+		PIXELFORMATDESCRIPTOR pfd;
+		memset(&pfd, 0, sizeof(pfd));
+		pfd.nSize = sizeof(pfd);
+		pfd.nVersion = 1;
+		pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL;
+		pfd.iPixelType = PFD_TYPE_RGBA;
+		pfd.cColorBits = 32;
+
+		HMODULE hModule = ::GetModuleHandle(0);
+		if (!hModule)
+			BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("GetModuleHandle failed."));
+		wchar_t* class_name = L"Test_Class";
+		// Create window calss
+		WNDCLASSEX wndClassData;
+		memset(&wndClassData, 0, sizeof(WNDCLASSEX));
+		wndClassData.cbSize = sizeof(WNDCLASSEX);
+		wndClassData.style = CS_DBLCLKS;
+		wndClassData.lpfnWndProc = WindowProcedure;
+		wndClassData.cbClsExtra = 0;
+		wndClassData.cbWndExtra = 0;
+		wndClassData.hInstance = hModule;
+		wndClassData.hIcon = ::LoadIcon(0, IDI_APPLICATION);
+		wndClassData.hCursor = ::LoadCursor(0, IDC_ARROW);
+		wndClassData.hbrBackground = ::CreateSolidBrush(COLOR_WINDOW + 1);
+		wndClassData.lpszMenuName = 0;
+		wndClassData.lpszClassName = class_name;
+		wndClassData.hIconSm = 0;
+		if (!::RegisterClassEx(&wndClassData))
+			BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("RegisterClass failed."));
+
+		HWND hidden_window = ::CreateWindow(class_name, NULL, WS_OVERLAPPEDWINDOW, 0, 0, 0, 0, NULL, NULL, NULL, 0);
+		HDC hDC = ::GetDC(hidden_window);
+		int pf = ChoosePixelFormat(hDC, &pfd);
+		SetPixelFormat(hDC, pf, &pfd);
+		HGLRC hRC = wglCreateContext(hDC);
+		DescribePixelFormat(hDC, pf, sizeof(PIXELFORMATDESCRIPTOR), &pfd);
+		wglMakeCurrent(hDC, hRC);
+
 
 		if (glewInit() != GLEW_OK)
 			BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("Failed to initialize GLEW."));
-						
+		if (wglewInit() != GLEW_OK)
+			BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("Failed to initialize WGLEW."));
+
+		wglEnumGpusNV(gpuIndex, gpu);
+
 		CASPAR_LOG(info) << L"OpenGL " << version();
 
 		if(!GLEW_VERSION_3_0)

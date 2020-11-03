@@ -49,7 +49,6 @@
 #include <modules/flash/flash.h>
 #include <modules/oal/oal.h>
 #include <modules/ogl/ogl.h>
-#include <modules/silverlight/silverlight.h>
 #include <modules/image/image.h>
 #include <modules/image/consumer/image_consumer.h>
 
