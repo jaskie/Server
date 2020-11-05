@@ -45,6 +45,7 @@ ogl_device::ogl_device(int gpu_index)
 	, attached_fbo_(0)
 	, active_shader_(0)
 	, read_buffer_(0)
+	, offscreen_rendering_context_(NULL)
 {
 	CASPAR_LOG(info) << L"Initializing OpenGL Device.";
 
@@ -75,10 +76,9 @@ ogl_device::ogl_device(int gpu_index)
 				int pf = ChoosePixelFormat(affDC, &pfd);
 				SetPixelFormat(affDC, pf, &pfd);
 				DescribePixelFormat(affDC, pf, sizeof(PIXELFORMATDESCRIPTOR), &pfd);
-				HGLRC affRC = wglCreateContext(affDC);
-				if (!wglMakeCurrent(affDC, affRC))
+				offscreen_rendering_context_ = wglCreateContext(affDC);
+				if (!wglMakeCurrent(affDC, offscreen_rendering_context_))
 					CASPAR_LOG(error) << L"Unable to set OpenGL context.";
-				//context_.reset();
 			}
 			else
 				CASPAR_LOG(error) << L"Selected OpenGL device not found.";
@@ -104,6 +104,9 @@ ogl_device::~ogl_device()
 		BOOST_FOREACH(auto& pool, host_pools_)
 			pool.clear();
 		glDeleteFramebuffers(1, &fbo_);
+		wglMakeCurrent(NULL, NULL);
+		if (offscreen_rendering_context_)
+			wglDeleteContext(offscreen_rendering_context_);
 	});
 }
 
