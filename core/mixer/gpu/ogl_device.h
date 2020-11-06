@@ -72,6 +72,7 @@ class ogl_device : public std::enable_shared_from_this<ogl_device>, boost::nonco
 	GLenum							 read_buffer_;
 
 	std::unique_ptr<sf::Context> context_;
+	HGLRC offscreen_rendering_context_;
 	
 	std::array<tbb::concurrent_unordered_map<uint32_t, safe_ptr<buffer_pool<device_buffer>>>, 4> device_pools_;
 	std::array<tbb::concurrent_unordered_map<uint32_t, safe_ptr<buffer_pool<host_buffer>>>, 2> host_pools_;
@@ -80,9 +81,9 @@ class ogl_device : public std::enable_shared_from_this<ogl_device>, boost::nonco
 
 	executor executor_;
 				
-	ogl_device();
+	ogl_device(int gpu_index);
 public:		
-	static safe_ptr<ogl_device> create();
+	static safe_ptr<ogl_device> create(int gpu_index);
 	~ogl_device();
 
 	// Not thread-safe, must be called inside of context

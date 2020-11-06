@@ -49,7 +49,6 @@
 #include <modules/flash/flash.h>
 #include <modules/oal/oal.h>
 #include <modules/ogl/ogl.h>
-#include <modules/silverlight/silverlight.h>
 #include <modules/image/image.h>
 #include <modules/image/consumer/image_consumer.h>
 
@@ -130,7 +129,7 @@ struct server::implementation : boost::noncopyable
 
 	implementation()
 		: io_service_(create_running_io_service())
-		, ogl_(ogl_device::create())
+		, ogl_(create_ogl_device(env::properties()))
 		, osc_client_(io_service_)
 		, media_info_repo_(create_in_memory_media_info_repository())
 	{
@@ -193,6 +192,12 @@ struct server::implementation : boost::noncopyable
 		recorders_.clear();
 		channels_.clear();
 		ffmpeg::uninit();
+	}
+
+	safe_ptr<ogl_device> create_ogl_device(const boost::property_tree::wptree& pt)
+	{
+		auto gpu_index = pt.get(L"configuration.opengl.gpu-index", -1);
+		return ogl_device::create(gpu_index);
 	}
 
 	void setup_audio(const boost::property_tree::wptree& pt)
