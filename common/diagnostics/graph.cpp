@@ -345,12 +345,12 @@ private:
 		text.move(text_margin, text_margin);
 		
 		glPushMatrix();
-		glScaled(1.0f/getScale().x, 1.0f/getScale().y, 1.0f);
-		target.draw(text);
-		float x_offset = text_margin;
+			glScaled(1.0f/getScale().x, 1.0f/getScale().y, 1.0f);
+			target.draw(text);
+			float x_offset = text_margin;
 			for(auto it = lines_.begin(); it != lines_.end(); ++it)
 			{						
-				sf::String line_str(it->first);
+				sf::String line_str(it->first.c_str());
 				sf::Text line_text(line_str, font, text_size);
 				line_text.setPosition(x_offset, text_margin+text_offset/2);
 				auto c = it->second.get_color();
