@@ -34,6 +34,7 @@
 #include <boost/foreach.hpp>
 
 #include <gl/wglew.h>
+
 #include <SFML/Window/Window.hpp>
 
 namespace caspar { namespace core {
@@ -61,29 +62,32 @@ ogl_device::ogl_device(int gpu_index)
 
 		if (glewInit() != GLEW_OK)
 			BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("Failed to initialize GLEW."));		
-
-		if (gpu_index >=0 && WGLEW_NV_gpu_affinity)
-		{
-			CASPAR_LOG(trace) << L"WGLEW_NV_gpu_affinity supported, selecting GPU " << gpu_index << L" to render on.";
-			HGPUNV hGPU[2];
-			if (wglEnumGpusNV(gpu_index, &hGPU[0]))
+		if (gpu_index >=0)
+			if (WGLEW_NV_gpu_affinity)
 			{
-				GPU_DEVICE gpuDevice;
-				if (wglEnumGpuDevicesNV(hGPU[0], 0, &gpuDevice))
-					CASPAR_LOG(debug) << L"Selected OpenGL device: " << gpuDevice.DeviceName;
-				hGPU[1] = NULL;
-				HDC affDC = wglCreateAffinityDCNV(hGPU);
-				PIXELFORMATDESCRIPTOR pfd;
-				int pf = ChoosePixelFormat(affDC, &pfd);
-				SetPixelFormat(affDC, pf, &pfd);
-				DescribePixelFormat(affDC, pf, sizeof(PIXELFORMATDESCRIPTOR), &pfd);
-				offscreen_rendering_context_ = wglCreateContext(affDC);
-				if (!wglMakeCurrent(affDC, offscreen_rendering_context_))
-					CASPAR_LOG(error) << L"Unable to set OpenGL context.";
+				CASPAR_LOG(trace) << L"WGLEW_NV_gpu_affinity supported, selecting GPU " << gpu_index << L" to render on.";
+				HGPUNV hGPU[2];
+				if (wglEnumGpusNV(gpu_index, &hGPU[0]))
+				{
+					GPU_DEVICE gpuDevice;
+					if (wglEnumGpuDevicesNV(hGPU[0], 0, &gpuDevice))
+						CASPAR_LOG(info) << L"Selected OpenGL device: " << gpuDevice.DeviceString << L" on " << gpuDevice.DeviceName;
+					hGPU[1] = NULL;
+					HDC affDC = wglCreateAffinityDCNV(hGPU);
+					PIXELFORMATDESCRIPTOR pfd;
+					int pf = ChoosePixelFormat(affDC, &pfd);
+					SetPixelFormat(affDC, pf, &pfd);
+					DescribePixelFormat(affDC, pf, sizeof(PIXELFORMATDESCRIPTOR), &pfd);
+					offscreen_rendering_context_ = wglCreateContext(affDC);
+					if (!wglMakeCurrent(affDC, offscreen_rendering_context_))
+						CASPAR_LOG(error) << L"Unable to set OpenGL context.";
+				}
+				else
+					CASPAR_LOG(error) << L"Selected OpenGL device not found.";
 			}
 			else
-				CASPAR_LOG(error) << L"Selected OpenGL device not found.";
-		}
+				CASPAR_LOG(error) << L"Cannot select GPU " << gpu_index << L" to render on, WGLEW_NV_gpu_affinity not supported";
+
 
 		CASPAR_LOG(info) << L"OpenGL " << version();
 
