@@ -66,12 +66,12 @@ public:
 
 	virtual boost::unique_future<bool> send(const safe_ptr<read_frame>& frame) override
 	{
-		if (!frame_buffer_.try_push(std::make_pair(frame, true)))
+		while (is_running_ && !frame_buffer_.try_push(std::make_pair(frame, true)))
 		{
-			CASPAR_LOG(warning) << print() << L" Frame dropped.";
-			return caspar::wrap_as_future(false);
+			std::pair<std::shared_ptr<read_frame>, bool> recycled_frame;
+			frame_buffer_.pop(recycled_frame);
 		}
-		return caspar::wrap_as_future(true);
+		return caspar::wrap_as_future(is_running_.load());
 	}
 
 	virtual void initialize(const core::video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index) override
