@@ -123,7 +123,7 @@ struct write_frame::implementation
 		if(plane_index >= buffers_.size())
 			return;
 				
-		auto buffer = std::move(buffers_[plane_index]); // Release buffer once done.
+		auto buffer = buffers_[plane_index];
 
 		if(!buffer)
 			return;
