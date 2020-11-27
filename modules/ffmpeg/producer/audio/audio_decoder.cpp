@@ -120,8 +120,7 @@ public:
 			{
 				std::shared_ptr<AVPacket> packet;
 				input_.try_pop_audio(packet);
-				if (packet || (input_.eof() && !eof_))
-					avcodec_send_packet(codec_context_.get(), packet.get());
+				avcodec_send_packet(codec_context_.get(), packet.get());
 				auto frame = create_frame();
 				int ret = avcodec_receive_frame(codec_context_.get(), frame.get());
 				switch (ret)

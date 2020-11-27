@@ -97,8 +97,7 @@ public:
 		{
 			std::shared_ptr<AVPacket> packet;
 			input_.try_pop_video(packet);
-			if (packet || (input_.eof() && !eof_))
-				avcodec_send_packet(codec_context_.get(), packet.get());
+			avcodec_send_packet(codec_context_.get(), packet.get());
 			std::shared_ptr<AVFrame> decoded_frame = create_frame();
 			int ret = avcodec_receive_frame(codec_context_.get(), decoded_frame.get());
 			switch (ret)
@@ -124,8 +123,6 @@ public:
 				eof_ = true;
 				break;
 			case AVERROR(EAGAIN):
-				if (input_.eof())
-					eof_ = true;
 				break;
 			case AVERROR(EINVAL):
 				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("codec not opened"));
