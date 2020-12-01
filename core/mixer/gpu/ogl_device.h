@@ -83,7 +83,7 @@ class ogl_device : public std::enable_shared_from_this<ogl_device>, boost::nonco
 				
 	ogl_device(int gpu_index);
 public:		
-	static safe_ptr<ogl_device> create(int gpu_index);
+	static safe_ptr<ogl_device> create();
 	~ogl_device();
 
 	// Not thread-safe, must be called inside of context

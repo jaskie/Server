@@ -129,7 +129,7 @@ struct server::implementation : boost::noncopyable
 
 	implementation()
 		: io_service_(create_running_io_service())
-		, ogl_(create_ogl_device(env::properties()))
+		, ogl_(ogl_device::create())
 		, osc_client_(io_service_)
 		, media_info_repo_(create_in_memory_media_info_repository())
 	{
@@ -192,12 +192,6 @@ struct server::implementation : boost::noncopyable
 		recorders_.clear();
 		channels_.clear();
 		ffmpeg::uninit();
-	}
-
-	safe_ptr<ogl_device> create_ogl_device(const boost::property_tree::wptree& pt)
-	{
-		auto gpu_index = pt.get(L"configuration.opengl.gpu-index", -1);
-		return ogl_device::create(gpu_index);
 	}
 
 	void setup_audio(const boost::property_tree::wptree& pt)

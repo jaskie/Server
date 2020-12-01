@@ -30,6 +30,7 @@
 #include <common/exception/exceptions.h>
 #include <common/utility/assert.h>
 #include <common/gl/gl_check.h>
+#include <common/env.h>
 
 #include <boost/foreach.hpp>
 
@@ -224,8 +225,9 @@ safe_ptr<host_buffer> ogl_device::create_host_buffer(uint32_t size, usage_t usag
 	});
 }
 
-safe_ptr<ogl_device> ogl_device::create(int gpu_index)
+safe_ptr<ogl_device> ogl_device::create()
 {
+	int gpu_index = env::properties().get(L"configuration.mixer.gpu-index", -1);
 	return safe_ptr<ogl_device>(new ogl_device(gpu_index));
 }
 
