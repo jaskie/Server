@@ -15,6 +15,7 @@ This is fork of 2.06 Stable master branch with following fixes and enhacements w
 12. Added NDI producer to play a NDI source (can be added using AMCP command or from casparcg.config).
 13. It's possible to produce perfectly stable CBR MPEG-TS UDP stream. Refer to wiki page if it's required here: https://github.com/jaskie/Server/wiki/Creating-perfectly-stable-CBR-MPEG-transport-stream.
 14. Added tray icon with popup menu and minimalization to tray.
+15. Added Nvidia Quadro GPU selection, allowing to start CasparCG using RDP or using headless GPU.
 
 --------------------------------------
 |        Original readme below       |
