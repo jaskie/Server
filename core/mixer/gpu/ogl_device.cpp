@@ -67,30 +67,37 @@ ogl_device::ogl_device(int gpu_index)
 			if (WGLEW_NV_gpu_affinity)
 			{
 				CASPAR_LOG(trace) << L"WGLEW_NV_gpu_affinity supported, selecting GPU " << gpu_index << L" to render on.";
-				HGPUNV hGPU[2];
-				if (wglEnumGpusNV(gpu_index, &hGPU[0]))
+				HGPUNV hGPU[2] = {};
+				if (wglEnumGpusNV(gpu_index, hGPU))
 				{
 					GPU_DEVICE gpuDevice;
 					if (wglEnumGpuDevicesNV(hGPU[0], 0, &gpuDevice))
 						CASPAR_LOG(info) << L"Selected OpenGL device: " << gpuDevice.DeviceString << L" on " << gpuDevice.DeviceName;
-					hGPU[1] = NULL;
+					else
+						BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("Cannot enumerate OpenGL devices"));
 					HDC affDC = wglCreateAffinityDCNV(hGPU);
 					PIXELFORMATDESCRIPTOR pfd;
 					int pf = ChoosePixelFormat(affDC, &pfd);
-					SetPixelFormat(affDC, pf, &pfd);
-					DescribePixelFormat(affDC, pf, sizeof(PIXELFORMATDESCRIPTOR), &pfd);
+					if (!pf)
+						BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("Cannot ChoosePixelFormat"));
+					if (!SetPixelFormat(affDC, pf, &pfd))
+						BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("Cannot SetPixelFormat"));
+					if (DescribePixelFormat(affDC, pf, sizeof(PIXELFORMATDESCRIPTOR), &pfd) == 0)
+						BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("Cannot DescribePixelFormat"));
 					offscreen_rendering_context_ = wglCreateContext(affDC);
+					if (!offscreen_rendering_context_)
+						BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("Offscreen rendering context not created"));
 					if (!wglMakeCurrent(affDC, offscreen_rendering_context_))
-						CASPAR_LOG(error) << L"Unable to set OpenGL context.";
+						BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("Unable to select offscreen OpenGL context"));
 				}
 				else
 					CASPAR_LOG(error) << L"Selected OpenGL device not found.";
 			}
 			else
-				CASPAR_LOG(error) << L"Cannot select GPU " << gpu_index << L" to render on, WGLEW_NV_gpu_affinity not supported";
+				CASPAR_LOG(error) << L"Cannot select GPU " << gpu_index << L" to render on, WGLEW_NV_gpu_affinity not supported.";
 
 
-		CASPAR_LOG(info) << L"OpenGL " << version();
+		CASPAR_LOG(info) << L"OpenGL " << widen(std::string(reinterpret_cast<const char*>(glGetString(GL_VERSION))) + " " + std::string(reinterpret_cast<const char*>(glGetString(GL_VENDOR))));
 
 		if(!GLEW_VERSION_3_0)
 			BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("Your graphics card does not meet the minimum hardware requirements since it does not support OpenGL 3.0 or higher. CasparCG Server will not be able to continue."));
@@ -300,20 +307,6 @@ boost::unique_future<void> ogl_device::gc()
 		}
 	}, high_priority);
 }
-
-std::wstring ogl_device::version()
-{	
-	static std::wstring ver = L"Not found";
-	try
-	{
-		ver = widen(invoke([]{return std::string(reinterpret_cast<const char*>(glGetString(GL_VERSION)));})
-		+ " "	+ invoke([]{return std::string(reinterpret_cast<const char*>(glGetString(GL_VENDOR)));}));			
-	}
-	catch(...){}
-
-	return ver;
-}
-
 
 void ogl_device::enable(GLenum cap)
 {
