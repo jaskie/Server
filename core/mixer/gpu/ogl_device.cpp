@@ -59,7 +59,6 @@ ogl_device::ogl_device(int gpu_index)
 	invoke([=]
 	{
 		context_.reset(new sf::Context());
-		context_->SetActive(true);
 
 		if (glewInit() != GLEW_OK)
 			BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("Failed to initialize GLEW."));		

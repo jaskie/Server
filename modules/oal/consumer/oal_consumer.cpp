@@ -88,7 +88,7 @@ public:
 		is_running_ = false;
 		input_.try_push(std::make_pair(std::shared_ptr<core::read_frame>(), std::make_shared<audio_buffer_16>()));
 		input_.try_push(std::make_pair(std::shared_ptr<core::read_frame>(), std::make_shared<audio_buffer_16>()));
-		Stop();
+		stop();
 		input_.try_push(std::make_pair(std::shared_ptr<core::read_frame>(), std::make_shared<audio_buffer_16>()));
 		input_.try_push(std::make_pair(std::shared_ptr<core::read_frame>(), std::make_shared<audio_buffer_16>()));
 
@@ -153,8 +153,8 @@ public:
 
 		if (Status() != Playing && !started_)
 		{
-			sf::SoundStream::Initialize(2, format_desc_.audio_sample_rate);
-			Play();
+			sf::SoundStream::initialize(2, format_desc_.audio_sample_rate);
+			play();
 			started_ = true;
 		}
 
@@ -185,7 +185,7 @@ public:
 
 	// oal_consumer
 	
-	virtual bool OnGetData(sf::SoundStream::Chunk& data) override
+	virtual bool onGetData(sf::SoundStream::Chunk& data) override
 	{		
 		win32_exception::ensure_handler_installed_for_thread(
 				"sfml-audio-thread");
@@ -197,14 +197,19 @@ public:
 		perf_timer_.restart();
 
 		container_.push_back(std::move(*audio_data.second));
-		data.Samples = container_.back().data();
-		data.NbSamples = container_.back().size();	
+		data.samples = container_.back().data();
+		data.sampleCount = container_.back().size();	
 		
 
 		if (audio_data.first)
 			presentation_age_ = audio_data.first->get_age_millis();
 
 		return is_running_;
+	}
+
+	virtual void onSeek(sf::Time timeOffset) override
+	{
+
 	}
 
 	virtual int index() const override

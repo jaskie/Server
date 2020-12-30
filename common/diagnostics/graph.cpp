@@ -65,11 +65,14 @@ std::tuple<float, float, float, float> color(int code)
 	return std::make_tuple(r, g, b, a);
 }
 
-struct drawable : public sf::Drawable
+struct drawable : public sf::Drawable, public sf::Transformable
 {
 	virtual ~drawable(){}
 	virtual void render(sf::RenderTarget& target) = 0;
-	virtual void Render(sf::RenderTarget& target) const { const_cast<drawable*>(this)->render(target);}
+	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override
+	{
+		const_cast<drawable*>(this)->render(target);
+	}
 };
 
 class context : public drawable
@@ -113,8 +116,9 @@ private:
 			if(!window_)
 			{
 				window_.reset(new sf::RenderWindow(sf::VideoMode(750, 750), "CasparCG Diagnostics"));
-				window_->SetPosition(0, 0);
-				window_->SetActive();
+				sf::Vector2i position(0, 0);
+				window_->setPosition(position);
+				window_->setActive();
 				glEnable(GL_BLEND);
 				glEnable(GL_LINE_SMOOTH);
 				glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
@@ -132,9 +136,9 @@ private:
 			return;
 
 		sf::Event e;
-		while(window_->GetEvent(e))
+		while(window_->pollEvent(e))
 		{
-			if(e.Type == sf::Event::Closed)
+			if(e.type == sf::Event::Closed)
 			{
 				window_.reset();
 				return;
@@ -144,8 +148,8 @@ private:
 		try
 		{
 			glClear(GL_COLOR_BUFFER_BIT);
-			window_->Draw(*this);
-			window_->Display();
+			window_->draw(*this);
+			window_->display();
 			boost::this_thread::sleep(boost::posix_time::milliseconds(10));
 		}
 		catch (...)
@@ -172,10 +176,10 @@ private:
 			auto drawable = it->lock();
 			if(drawable)
 			{
-				drawable->SetScale(static_cast<float>(window_->GetWidth()), static_cast<float>(target_dy*window_->GetHeight()));
-				float target_y = std::max(last_y, static_cast<float>(n * window_->GetHeight())*target_dy);
-				drawable->SetPosition(0.0f, target_y);			
-				target.Draw(*drawable);				
+				drawable->setScale(static_cast<float>(window_->getSize().x), static_cast<float>(target_dy*window_->getSize().y));
+				float target_y = std::max(last_y, static_cast<float>(n * window_->getSize().y)*target_dy);
+				drawable->setPosition(0.0f, target_y);			
+				target.draw(*drawable);				
 				++it;		
 			}
 			else	
@@ -285,7 +289,7 @@ struct graph::impl : public drawable
 		: auto_reset_(false)
 	{
 	}
-		
+
 	void set_text(const std::wstring& value)
 	{
 		auto temp = value;
@@ -333,24 +337,28 @@ private:
 			auto_reset = auto_reset_;
 		}
 
-		sf::String text(text_str.c_str(), sf::Font::GetDefaultFont(), text_size);
-		text.SetStyle(sf::String::Italic);
-		text.Move(text_margin, text_margin);
+		sf::String str(text_str.c_str());
+		sf::Font font;
+		
+		sf::Text text(str, font);
+		text.setStyle(sf::Text::Italic);
+		text.move(text_margin, text_margin);
 		
 		glPushMatrix();
-			glScaled(1.0f/GetScale().x, 1.0f/GetScale().y, 1.0f);
-			target.Draw(text);
+			glScaled(1.0f/getScale().x, 1.0f/getScale().y, 1.0f);
+			target.draw(text);
 			float x_offset = text_margin;
 			for(auto it = lines_.begin(); it != lines_.end(); ++it)
 			{						
-				sf::String line_text(it->first, sf::Font::GetDefaultFont(), text_size);
-				line_text.SetPosition(x_offset, text_margin+text_offset/2);
+				sf::String line_str(it->first.c_str());
+				sf::Text line_text(line_str, font, text_size);
+				line_text.setPosition(x_offset, text_margin+text_offset/2);
 				auto c = it->second.get_color();
-				line_text.SetColor(sf::Color((c >> 24) & 255, (c >> 16) & 255, (c >> 8) & 255, (c >> 0) & 255));
-				target.Draw(line_text);
-				x_offset = line_text.GetRect().Right + text_margin*2;
+				line_text.setColor(sf::Color((c >> 24) & 255, (c >> 16) & 255, (c >> 8) & 255, (c >> 0) & 255));
+				target.draw(line_text);
+				x_offset = line_text.getGlobalBounds().left + line_text.getGlobalBounds().width + text_margin*2;
 			}
-
+			
 			glDisable(GL_TEXTURE_2D);
 		glPopMatrix();
 
@@ -363,8 +371,8 @@ private:
 		glEnd();
 
 		glPushMatrix();
-			glTranslated(0.0f, text_offset/GetScale().y, 1.0f);
-			glScaled(1.0f, 1.0-text_offset/GetScale().y, 1.0f);
+			glTranslated(0.0f, text_offset/getScale().y, 1.0f);
+			glScaled(1.0f, 1.0-text_offset/getScale().y, 1.0f);
 		
 			glEnable(GL_LINE_STIPPLE);
 			glLineStipple(3, 0xAAAA);
@@ -388,7 +396,7 @@ private:
 
 			for(auto it = lines_.begin(); it != lines_.end(); ++it)
 			{
-				target.Draw(it->second);
+				target.draw(it->second);
 
 				if (auto_reset)
 					it->second.set_value(0.0f);
