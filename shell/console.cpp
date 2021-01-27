@@ -52,7 +52,7 @@ console::console(bool hide_on_start)
 
     // Set console title.
     std::wstringstream str;
-    str << CASPAR_NAME << caspar::env::version();
+    str << CASPAR_NAME << L" " << caspar::env::version();
 #ifdef COMPILE_RELEASE
     str << " Release";
 #elif  COMPILE_PROFILE

@@ -5,8 +5,10 @@
 #include <string>
 
 const UINT WM_TRAY = WM_USER + 1;
+const UINT WM_RESTORE = WM_USER + 2;
+const LRESULT WM_RESPONSE_OK = 1;
 
-void show_and_restore_if_minimized()
+BOOL show_and_restore_if_minimized()
 {
 	HWND h_console = ::GetConsoleWindow();
 	::ShowWindow(h_console, SW_SHOW);
@@ -16,7 +18,7 @@ void show_and_restore_if_minimized()
 	::GetWindowPlacement(h_console, &place);
 	if (place.showCmd == SW_SHOWMINIMIZED)
 		::ShowWindow(h_console, SW_RESTORE);
-	::SetForegroundWindow(h_console);
+	return ::SetForegroundWindow(h_console);
 }
 
 void hide_console_window()
@@ -83,6 +85,11 @@ LRESULT CALLBACK HiddenWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 		}
 		return 0;
 
+	case WM_RESTORE:
+		if (show_and_restore_if_minimized())
+			return WM_RESPONSE_OK;
+		return 0;
+
 	case WM_COMMAND:
 		switch (LOWORD(wParam))
 		{
@@ -129,5 +136,15 @@ tray_icon::~tray_icon()
 void tray_icon::close()
 {
 	::PostMessage(hidden_window_, WM_QUIT, 0, 0);
+}
+
+bool tray_icon::show_previous_instance()
+{
+	HWND window = ::FindWindow(CASPAR_NAME, CASPAR_NAME);
+	if (window == NULL)
+		return false;
+	if (SendMessage(window, WM_RESTORE, 0, 0) == WM_RESPONSE_OK)
+		return true;
+	return false;
 }
 

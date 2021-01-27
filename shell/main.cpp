@@ -156,13 +156,20 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 	int n_args;
 	auto argv = ::CommandLineToArgvW(::GetCommandLineW(), &n_args);
 	bool hide_on_startup = false;
+	bool allow_multiple_instances = false;
 
 	for (int i = 0; i < n_args; i++)
 	{
 		auto arg_upper = make_upper_case(argv[i]);
 		if (arg_upper == L"-HIDE")
 			hide_on_startup = true;
+		if (arg_upper == L"-MULTIPLE")
+			allow_multiple_instances = true;
 	}
+
+	if (!allow_multiple_instances && tray_icon::show_previous_instance())
+		return 0;
+
 
 	// Create and setup console window
 	console console(hide_on_startup);
@@ -286,7 +293,7 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 					{
 						// This is just dummy code for testing.
 						if (wcmd.substr(0, 1) == L"1")
-							wcmd = L"PLAY 1-0 udp://225.100.10.25:5500";
+							wcmd = L"PLAY 1-0 UHDKielce";
 						else if (wcmd.substr(0, 1) == L"2")
 							wcmd = L"CALL 1-0 SEEK 100";
 						else if (wcmd.substr(0, 1) == L"3")

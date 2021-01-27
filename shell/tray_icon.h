@@ -13,6 +13,7 @@ public:
     tray_icon(HINSTANCE h_instance);
     ~tray_icon();
     void close();
+    static bool show_previous_instance();
 private:
     HWND hidden_window_;
     const HINSTANCE h_instance_;
