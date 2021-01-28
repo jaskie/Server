@@ -45,38 +45,51 @@ namespace caspar { namespace core {
 
 class layer_consumer : public write_frame_consumer
 {	
+	const int												layer_;
 	tbb::concurrent_bounded_queue<safe_ptr<basic_frame>>	frame_buffer_;
+	boost::promise<void>									first_frame_promise_;
+	boost::unique_future<void>								first_frame_available_;
+	bool													first_frame_reported_;
 
 public:
-	layer_consumer() 
+	layer_consumer(int layer) 
+		: layer_(layer)
+		, first_frame_available_(first_frame_promise_.get_future())
+		, first_frame_reported_(false)
 	{
 		frame_buffer_.set_capacity(2);
-	}
-
-	~layer_consumer()
-	{
 	}
 
 	// write_frame_consumer
 
 	virtual void send(const safe_ptr<basic_frame>& src_frame) override
 	{
-		frame_buffer_.try_push(src_frame);
+		bool pushed = frame_buffer_.try_push(src_frame);
+
+		if (pushed && !first_frame_reported_)
+		{
+			first_frame_promise_.set_value();
+			first_frame_reported_ = true;
+		}
 	}
 
 	virtual std::wstring print() const override
 	{
-		return L"[layer_consumer]";
+		return L"layer-consumer:[" + boost::lexical_cast<std::wstring>(layer_) + L"]";
 	}
 
 	safe_ptr<basic_frame> receive()
 	{
 		safe_ptr<basic_frame> frame;
 		if (!frame_buffer_.try_pop(frame))
-		{
 			return basic_frame::late();
-		}
 		return frame;
+	}
+
+	void block_until_first_frame_available()
+	{
+		if (!first_frame_available_.timed_wait(boost::posix_time::seconds(1)))
+			CASPAR_LOG(warning) << print() << L" Timed out while waiting for first frame";
 	}
 };
 
@@ -98,11 +111,12 @@ public:
 		: frame_factory_(frame_factory)
 		, layer_(layer)
 		, stage_(stage)
-		, consumer_(new layer_consumer())
+		, consumer_(new layer_consumer(layer))
 		, last_frame_(basic_frame::empty())
 		, frame_number_(0)
 	{
 		stage_->add_layer_consumer(this, layer_, consumer_);
+		consumer_->block_until_first_frame_available();
 		CASPAR_LOG(info) << print() << L" Initialized";
 	}
 
