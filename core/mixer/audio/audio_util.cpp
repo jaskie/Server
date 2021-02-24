@@ -168,10 +168,11 @@ void register_default_channel_layouts(channel_layout_repository& repository)
 			L"mono",         L"1.0",           1, L"C"));
 	repository.register_layout(channel_layout::stereo());
 	repository.register_layout(create_layout_from_string(
+			L"dual-stereo",	 L"2+2",		   4, L"L R Laux Raux"));
+	repository.register_layout(create_layout_from_string(
 			L"dts",          L"5.1",           6, L"C L R Ls Rs LFE"));
 	repository.register_layout(create_layout_from_string(
-			L"dolbye",       L"5.1+stereomix", 8, L"L R C LFE Ls Rs Lmix Rmix"
-	));
+			L"dolbye",       L"5.1+stereomix", 8, L"L R C LFE Ls Rs Lmix Rmix" ));
 	repository.register_layout(create_layout_from_string(
 			L"dolbydigital", L"5.1",           6, L"L C R Ls Rs LFE"));
 	repository.register_layout(create_layout_from_string(
@@ -287,6 +288,13 @@ void register_default_mix_configs(mix_config_repository& repository)
 					(L"C R 1.0")
 	));
 	repository.register_mix_config(create_mix_config_from_string(
+		L"1.0", L"2+2", mix_config::add, list_of
+		            (L"C L    1.0")
+		            (L"C R    1.0")
+		            (L"C Laux 1.0")
+		            (L"C Raux 1.0")
+	));
+	repository.register_mix_config(create_mix_config_from_string(
 			L"1.0", L"5.1", mix_config::add, list_of
 					(L"C L 1.0")
 					(L"C R 1.0")
@@ -305,12 +313,42 @@ void register_default_mix_configs(mix_config_repository& repository)
 					(L"R C 1.0")
 	));
 	repository.register_mix_config(create_mix_config_from_string(
+		L"2.0", L"2+2", mix_config::add, list_of
+					(L"L L 1.0")
+					(L"R R 1.0")
+					(L"L Laux 1.0")
+					(L"R Raux 1.0")
+	));
+	repository.register_mix_config(create_mix_config_from_string(
 			L"2.0", L"5.1", mix_config::add, list_of
 					(L"L L    1.0")
 					(L"R R    1.0")
 	));
 	repository.register_mix_config(create_mix_config_from_string(
 			L"2.0", L"5.1+stereomix", mix_config::add, list_of
+					(L"L L    1.0")
+					(L"R R    1.0")
+					(L"L Lmix 1.0")
+					(L"R Rmix 1.0")
+	));
+	// From 2+2
+	repository.register_mix_config(create_mix_config_from_string(
+		L"2+2", L"1.0", mix_config::add, list_of
+					(L"L C 1.0")
+					(L"R C 1.0")
+	));
+	repository.register_mix_config(create_mix_config_from_string(
+		L"2+2", L"2.0", mix_config::add, list_of
+					(L"L L 1.0")
+					(L"R R 1.0")
+	));
+	repository.register_mix_config(create_mix_config_from_string(
+		L"2+2", L"5.1", mix_config::add, list_of
+					(L"L L    1.0")
+					(L"R R    1.0")
+	));
+	repository.register_mix_config(create_mix_config_from_string(
+		L"2+2", L"5.1+stereomix", mix_config::add, list_of
 					(L"L L    1.0")
 					(L"R R    1.0")
 					(L"L Lmix 1.0")
@@ -333,6 +371,21 @@ void register_default_mix_configs(mix_config_repository& repository)
 					(L"C  R 0.707")
 					(L"Ls L 0.707")
 					(L"Rs R 0.707")
+	));
+	repository.register_mix_config(create_mix_config_from_string(
+			L"5.1", L"2+2", mix_config::average, list_of
+					(L"L  L 1.0")
+					(L"R  R 1.0")
+					(L"C  L 0.707")
+					(L"C  R 0.707")
+					(L"Ls L 0.707")
+					(L"Rs R 0.707")
+					(L"L  Laux 1.0")
+					(L"R  Raux 1.0")
+					(L"C  Laux 0.707")
+					(L"C  Raux 0.707")
+					(L"Ls Laux 0.707")
+					(L"Rs Raux 0.707")
 	));
 	repository.register_mix_config(create_mix_config_from_string(
 			L"5.1", L"5.1+stereomix", mix_config::average, list_of
@@ -360,6 +413,13 @@ void register_default_mix_configs(mix_config_repository& repository)
 			L"5.1+stereomix", L"2.0", mix_config::add, list_of
 					(L"Lmix L 1.0")
 					(L"Rmix R 1.0")
+	));	
+	repository.register_mix_config(create_mix_config_from_string(
+			L"5.1+stereomix", L"2.0", mix_config::add, list_of
+					(L"Lmix L 1.0")
+					(L"Rmix R 1.0")
+					(L"Lmix Laux 1.0")
+					(L"Rmix Raux 1.0")
 	));
 	repository.register_mix_config(create_mix_config_from_string(
 			L"5.1+stereomix", L"5.1", mix_config::add, list_of
