@@ -183,7 +183,9 @@ public:
 
 		if(!video_decoder_ && !audio_decoder_)
 			BOOST_THROW_EXCEPTION(averror_stream_not_found() << msg_info("No streams found"));
-		muxer_.reset(new frame_muxer(video_decoder_->frame_rate(), video_decoder_->time_base(), frame_factory, thumbnail_mode_, audio_channel_layout_, filter_str_));
+		muxer_.reset(new frame_muxer(video_decoder_ ? video_decoder_->frame_rate() : boost::rational<int>(format_desc_.time_scale, format_desc_.duration),
+			video_decoder_ ? video_decoder_->time_base() : boost::rational<int>(format_desc_.duration, format_desc_.time_scale),
+			frame_factory, thumbnail_mode_, audio_channel_layout_, filter_str_));
 		if (is_stream)
 			input_.tick();
 		else
