@@ -90,7 +90,7 @@ class decklink_producer : boost::noncopyable, public IDeckLinkInputCallback
 	CComPtr<IDeckLink>											decklink_;
 	CComQIPtr<IDeckLinkInput>									input_;
 	CComQIPtr<IDeckLinkAttributes>								attributes_;
-	CComQIPtr<IDeckLinkDisplayMode>								current_display_mode_;
+	CComPtr<IDeckLinkDisplayMode>								current_display_mode_;
 
 	const std::wstring											model_name_;
 	const size_t												device_index_;
@@ -185,7 +185,7 @@ public:
 
 	void open_input(BMDDisplayMode displayMode, BMDVideoInputFlags bmdVideoInputFlags)
 	{
-		if(FAILED(input_->EnableVideoInput(displayMode, bmdFormat8BitYUV, bmdVideoInputFlags))) 
+		if(FAILED(input_->EnableVideoInput(displayMode, bmdFormat8BitYUV, bmdVideoInputFlags)))
 			BOOST_THROW_EXCEPTION(caspar_exception() 
 									<< msg_info(narrow(print()) + " Could not enable video input.")
 									<< boost::errinfo_api_function("EnableVideoInput"));
@@ -204,12 +204,11 @@ public:
 
 	void close_input()
 	{
-		if(input_ != nullptr) 
-		{
-			input_->StopStreams();
-			input_->DisableAudioInput();
-			input_->DisableVideoInput();
-		}
+		if (!input_)
+			return;
+		input_->StopStreams();
+		input_->DisableAudioInput();
+		input_->DisableVideoInput();
 	}
 
 	virtual HRESULT STDMETHODCALLTYPE	QueryInterface (REFIID, LPVOID*)	{return E_NOINTERFACE;}
