@@ -122,7 +122,7 @@ struct frame_muxer::implementation : boost::noncopyable
 			return;
 		bool need_update_filter = false;
 
-		if (!filter_ || (video_frame->data[0] && filter_->is_frame_format_changed(video_frame)))
+		if (video_frame != empty_video() && (!filter_ || filter_->is_frame_format_changed(video_frame)))
 		{
 			CASPAR_LOG(debug) << L"[frame_muxer] Frame format has changed. Resetting filter mode.";
 			need_update_filter = true;
@@ -136,7 +136,6 @@ struct frame_muxer::implementation : boost::noncopyable
 		else if(video_frame == empty_video())
 		{
 			video_streams_.back().push(make_safe<core::write_frame>(this, audio_channel_layout_));
-			CASPAR_LOG(trace) << "Muxer::push empty video";
 		}
 		else
 		{
