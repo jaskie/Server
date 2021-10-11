@@ -267,10 +267,10 @@ public:
 			av_frame->interlaced_frame	= fieldDominance == bmdLowerFieldFirst || fieldDominance == bmdUpperFieldFirst;
 			av_frame->top_field_first	= fieldDominance == bmdUpperFieldFirst;
 			av_frame->pts = frame_pts_++;
-			IDeckLinkTimecode * decklink_timecode_bcd = NULL;
+			CComPtr<IDeckLinkTimecode> decklink_timecode;
 			int frame_timecode = std::numeric_limits<int>().max();
-			if (SUCCEEDED(video->GetTimecode(timecode_source_, &decklink_timecode_bcd)) && decklink_timecode_bcd)
-				frame_timecode = bcd2frame(decklink_timecode_bcd->GetBCD(), static_cast<byte>(time_scale_/frame_duration_));
+			if (SUCCEEDED(video->GetTimecode(timecode_source_, &decklink_timecode)) && decklink_timecode)
+				frame_timecode = bcd2frame(decklink_timecode->GetBCD(), static_cast<byte>(time_scale_/frame_duration_));
 			
 			std::shared_ptr<core::audio_buffer> audio_buffer;
 
