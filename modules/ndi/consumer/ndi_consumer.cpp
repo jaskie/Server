@@ -255,7 +255,6 @@ namespace caspar {
 			const std::string						groups_;
 			const bool								is_alpha_;
 			const bool								is_blocking_;
-			int										channel_index_;
 
 		public:
 
@@ -269,7 +268,7 @@ namespace caspar {
 
 			virtual void initialize(const core::video_format_desc& format_desc, const core::channel_layout& audio_channel_layout, int channel_index) override
 			{
-				consumer_.reset(new ndi_consumer(channel_index_, format_desc, audio_channel_layout, ndi_name_, groups_, is_alpha_, is_blocking_));
+				consumer_.reset(new ndi_consumer(channel_index, format_desc, audio_channel_layout, ndi_name_, groups_, is_alpha_, is_blocking_));
 			}
 
 			virtual bool has_synchronization_clock() const override
