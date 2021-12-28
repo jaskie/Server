@@ -51,7 +51,7 @@
 
 namespace caspar { namespace decklink { 
 
-struct decklink_consumer : public IDeckLinkVideoOutputCallback, boost::noncopyable
+struct decklink_consumer : public IDeckLinkVideoOutputCallback, IDeckLinkAudioOutputCallback, boost::noncopyable
 {
 	const int										channel_index_;
 	const configuration								config_;
@@ -74,18 +74,16 @@ struct decklink_consumer : public IDeckLinkVideoOutputCallback, boost::noncopyab
 	long long										video_scheduled_;
 	long long										audio_scheduled_;
 
-	size_t											preroll_count_;
-		
-	boost::circular_buffer<std::vector<int32_t>>	audio_container_;
-
 	tbb::concurrent_bounded_queue<std::shared_ptr<core::read_frame>> frame_buffer_;
-	
+	std::vector<int32_t>							rearranged_audio_;
+
 	safe_ptr<diagnostics::graph>					graph_;
 	boost::timer									tick_timer_;
 	retry_task<bool>								send_completion_;
 	reference_signal_detector						reference_signal_detector_;
 
 	tbb::atomic<int64_t>							current_presentation_delay_;
+	bool											audio_buffer_notified_;
 
 public:
 	decklink_consumer(const configuration& config, const core::video_format_desc& format_desc, int channel_index, int num_audio_channels) 
@@ -101,8 +99,6 @@ public:
 		, buffer_size_(config.buffer_depth()) // Minimum buffer-size 3.
 		, video_scheduled_(0)
 		, audio_scheduled_(0)
-		, preroll_count_(0)
-		, audio_container_(buffer_size_+1)
 		, reference_signal_detector_(output_)
 	{
 		is_running_ = true;
@@ -118,11 +114,27 @@ public:
 		graph_->set_color("buffered-video", diagnostics::color(0.2f, 0.9f, 0.9f));
 		graph_->set_text(print());
 		diagnostics::register_graph(graph_);
-		
-		enable_video(get_display_mode(output_, format_desc_.format, bmdFormat8BitBGRA, bmdVideoOutputFlagDefault)->GetDisplayMode());
-				
+
+		if (FAILED(output_->SetScheduledFrameCompletionCallback(this)))
+			BOOST_THROW_EXCEPTION(caspar_exception()
+				<< msg_info(narrow(print()) + " Failed to set playback completion callback.")
+				<< boost::errinfo_api_function("SetScheduledFrameCompletionCallback"));
+
+		if (config.embedded_audio && FAILED(output_->SetAudioCallback(this)))
+			CASPAR_LOG(warning) << print() << L" Failed to register audio callback.";
+
+
+		BMDDisplayMode display_mode = get_display_mode(output_, format_desc_.format, bmdFormat8BitBGRA, bmdVideoOutputFlagDefault)->GetDisplayMode();
+		if (FAILED(output_->EnableVideoOutput(display_mode, bmdVideoOutputFlagDefault)))
+			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Could not enable video output."));
+
 		if(config.embedded_audio)
-			enable_audio();
+		{
+			if (FAILED(output_->EnableAudioOutput(BMDAudioSampleRate::bmdAudioSampleRate48kHz, BMDAudioSampleType::bmdAudioSampleType32bitInteger, num_audio_channels_, BMDAudioOutputStreamType::bmdAudioOutputStreamTimestamped)))
+				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Could not enable audio output."));
+			CASPAR_LOG(info) << print() << L" Enabled embedded-audio.";
+		}
+
 
 		set_latency(CComQIPtr<IDeckLinkConfiguration_v10_2>(decklink_), config.latency, print());
 		set_keyer(attributes_, keyer_, config.keyer, print());
@@ -134,7 +146,7 @@ public:
 		{
 			if (config.embedded_audio)
 			{
-				core::audio_buffer silent_audio_buffer(format_desc_.audio_cadence[preroll_count_ % format_desc_.audio_cadence.size()] * num_audio_channels_, 0);
+				core::audio_buffer silent_audio_buffer(format_desc_.audio_cadence[n % format_desc_.audio_cadence.size()] * num_audio_channels_, 0);
 				auto audio = core::make_multichannel_view<int32_t>(silent_audio_buffer.begin(), silent_audio_buffer.end(), config_.audio_layout, num_audio_channels_);;
 				schedule_next_audio(audio);
 			}
@@ -144,7 +156,9 @@ public:
 		if (config.embedded_audio)
 			output_->EndAudioPreroll();
 
-		start_playback();
+		if (FAILED(output_->StartScheduledPlayback(0, format_desc_.time_scale, 1.0)))
+			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Failed to schedule playback."));
+
 		CASPAR_LOG(info) << print() << L" successfully initialized.";
 	}
 
@@ -155,6 +169,8 @@ public:
 
 		if(output_ != nullptr) 
 		{
+			output_->SetScheduledFrameCompletionCallback(nullptr);
+			output_->SetAudioCallback(nullptr);
 			output_->StopScheduledPlayback(0, nullptr, 0);
 			if(config_.embedded_audio)
 				output_->DisableAudioOutput();
@@ -162,29 +178,6 @@ public:
 		}
 	}
 	
-	void enable_audio()
-	{
-		if(FAILED(output_->EnableAudioOutput(bmdAudioSampleRate48kHz, bmdAudioSampleType32bitInteger, num_audio_channels_, bmdAudioOutputStreamTimestamped)))
-				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Could not enable audio output."));
-		CASPAR_LOG(info) << print() << L" Enabled embedded-audio.";
-	}
-
-	void enable_video(BMDDisplayMode display_mode)
-	{
-		if(FAILED(output_->EnableVideoOutput(display_mode, bmdVideoOutputFlagDefault))) 
-			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Could not enable video output."));
-		
-		if(FAILED(output_->SetScheduledFrameCompletionCallback(this)))
-			BOOST_THROW_EXCEPTION(caspar_exception() 
-									<< msg_info(narrow(print()) + " Failed to set playback completion callback.")
-									<< boost::errinfo_api_function("SetScheduledFrameCompletionCallback"));
-	}
-
-	void start_playback()
-	{
-		if(FAILED(output_->StartScheduledPlayback(0, format_desc_.time_scale, 1.0))) 
-			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Failed to schedule playback."));
-	}
 
 	STDMETHOD (QueryInterface(REFIID, LPVOID*))	{return E_NOINTERFACE;}
 	STDMETHOD_(ULONG, AddRef())					{return 1;}
@@ -210,8 +203,6 @@ public:
 			if(result == bmdOutputFrameDisplayedLate)
 			{
 				graph_->set_tag("late-frame");
-				video_scheduled_ += format_desc_.duration;
-				audio_scheduled_ += dframe->audio_data().size()/num_audio_channels_;
 				CASPAR_LOG(warning) << print() << L" Frame late.";
 			}
 			else if (result == bmdOutputFrameDropped)
@@ -233,26 +224,16 @@ public:
 			if (SUCCEEDED(output_->GetBufferedVideoFrameCount(&buffered_video)))
 			{
 				graph_->set_value("buffered-video", static_cast<double>(buffered_video) / buffer_size_);
-				if (buffered_video >= static_cast<unsigned int>(format_desc_.fps))
-					CASPAR_LOG(error) << print() << L" Video buffer overflow.";
+				if (buffered_video * format_desc_.duration >= format_desc_.time_scale)
+					CASPAR_LOG(error) << print() << L" Video buffer overflow: " << buffered_video << " frames";
 				if (buffered_video == 0)
 					CASPAR_LOG(warning) << print() << L" Video buffer empty. Consider increasing the buffer depth.";
 			}
 
-			schedule_next_video(frame);
-
 			if (config_.embedded_audio)
-			{
-				unsigned int buffered_audio;
-				if (SUCCEEDED(output_->GetBufferedAudioSampleFrameCount(&buffered_audio)))
-				{
-					graph_->set_value("buffered-audio", static_cast<double>(buffered_audio) / (format_desc_.audio_cadence[0] * num_audio_channels_ * 2));
-					if (buffered_audio >= bmdAudioSampleRate48kHz)
-						CASPAR_LOG(error) << print() << L" Audio buffer overflow.";
-				}
 				schedule_next_audio(frame->multichannel_view());
-			}
 
+			schedule_next_video(frame);
 		}
 		catch(...)
 		{
@@ -264,6 +245,43 @@ public:
 		return S_OK;
 	}
 		
+	STDMETHOD(RenderAudioSamples(BOOL preroll)) 
+	{
+		if (preroll)
+			return S_OK;
+		unsigned int buffered_audio;
+		if (SUCCEEDED(output_->GetBufferedAudioSampleFrameCount(&buffered_audio)))
+		{
+			graph_->set_value("buffered-audio", static_cast<double>(buffered_audio) / (format_desc_.audio_cadence[0] * num_audio_channels_ * 2));
+			if (buffered_audio >= bmdAudioSampleRate48kHz)
+			{
+				if (!audio_buffer_notified_)
+				{
+					CASPAR_LOG(error) << print() << L" Audio buffer overflow: " << buffered_audio << " samples. Further errors will not be notified";
+					audio_buffer_notified_ = true;
+				}
+			}
+			else if (buffered_audio < bmdAudioSampleRate48kHz * format_desc_.duration / format_desc_.time_scale)
+			{
+				if (!audio_buffer_notified_)
+				{
+					CASPAR_LOG(error) << print() << L" Audio buffer underflow: " << buffered_audio << " samples. Further errors will not be notified";
+					audio_buffer_notified_ = true;
+				}
+			}
+			else if (audio_buffer_notified_)
+			{
+				audio_buffer_notified_ = false;
+				CASPAR_LOG(error) << print() << L" Previously notified audio buffer size error corrected.";
+			}
+		}
+		else
+			CASPAR_LOG(warning) << print() << L" GetBufferedAudioSampleFrameCount failed.";
+
+		return S_OK;
+	}
+
+
 	template<typename View>
 	void schedule_next_audio(const View& view)
 	{
@@ -272,13 +290,12 @@ public:
 		if (core::needs_rearranging(
 				view, config_.audio_layout, num_audio_channels_))
 		{
-			std::vector<int32_t> resulting_audio_data;
-			resulting_audio_data.resize(
+			rearranged_audio_.resize(
 					sample_frame_count * num_audio_channels_);
 
 			auto dest_view = core::make_multichannel_view<int32_t>(
-					resulting_audio_data.begin(), 
-					resulting_audio_data.end(),
+					rearranged_audio_.begin(),
+					rearranged_audio_.end(),
 					config_.audio_layout,
 					num_audio_channels_);
 
@@ -289,22 +306,19 @@ public:
 				boost::copy(                            // duplicate L to R
 						dest_view.channel(0),
 						dest_view.channel(1).begin());
-
-			audio_container_.push_back(std::move(resulting_audio_data));
 		}
 		else
 		{
-			audio_container_.push_back(
-					std::vector<int32_t>(view.raw_begin(), view.raw_end()));
+			rearranged_audio_ = std::vector<int32_t>(view.raw_begin(), view.raw_end());
 		}
 		
 		unsigned int samples_written;
-		if(FAILED(output_->ScheduleAudioSamples(
-				audio_container_.back().data(),
-				sample_frame_count,
-				audio_scheduled_,
-				format_desc_.audio_sample_rate,
-				&samples_written)))
+		if (FAILED(output_->ScheduleAudioSamples(
+			rearranged_audio_.data(),
+			sample_frame_count,
+			audio_scheduled_,
+			format_desc_.audio_sample_rate,
+			&samples_written)))
 			CASPAR_LOG(error) << print() << L" Failed to schedule audio.";
 		if (samples_written != static_cast<unsigned int>(sample_frame_count))
 			CASPAR_LOG(warning) << print() << L" Not all available audio samples has been scheduled (" << samples_written << L" of " << sample_frame_count << L")";
