@@ -774,6 +774,7 @@ namespace caspar {
 							CASPAR_LOG(warning) << print_() << L" Failed to set flash container to transparent mode.";
 						//spFlash->put_WMode(TEXT("GPU"));
 						hResultQuality = spFlash->put_Quality2(TEXT("Best"));
+						spFlash->DisableLocalSecurity();
 					}
 					if (SUCCEEDED(DispEventAdvise(spFlash, &DIID__IShockwaveFlashEvents)))
 					{

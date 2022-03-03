@@ -34,6 +34,7 @@
 #include <common/exception/win32_exception.h>
 #include <common/log/log.h>
 #include <common/utility/string.h>
+#include <common/memory/memcpy.h>
 
 #include <core/producer/frame_producer.h>
 #include <core/parameters/parameters.h>
@@ -268,7 +269,6 @@ public:
 		graph_->set_value("tick-time", tick_timer_.elapsed()*format_desc_.fps*0.5);
 		tick_timer_.restart();
 		std::shared_ptr<AVFrame> av_frame(av_frame_alloc(), [](AVFrame* frame) {av_frame_free(&frame); });
-		av_frame->data[0] = ndi_video->p_data;
 		av_frame->linesize[0] = ndi_video->line_stride_in_bytes;
 		switch (ndi_video->FourCC)
 		{
@@ -298,6 +298,8 @@ public:
 		av_frame->interlaced_frame = ndi_video->frame_format_type == NDIlib_frame_format_type_interleaved ? 1 : 0;
 		av_frame->top_field_first = av_frame->interlaced_frame;
 		av_frame->pts = frame_pts_++;
+		av_frame_get_buffer(av_frame.get(), 0);
+		fast_memcpy(av_frame->data[0], ndi_video->p_data, av_frame->linesize[0] * av_frame->height);
 		video_ = std::make_pair(ndi_video->timecode, av_frame);
 	}
 
