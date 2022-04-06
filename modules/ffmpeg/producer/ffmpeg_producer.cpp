@@ -108,7 +108,6 @@ struct ffmpeg_producer : public core::frame_producer
 	std::unique_ptr<audio_decoder>								audio_decoder_;	
 	std::unique_ptr<frame_muxer>								muxer_;
 	core::channel_layout										audio_channel_layout_;
-	const std::wstring											custom_channel_order_;	
 
 	const boost::rational<int>									out_fps_;
 	const int64_t												start_time_;
@@ -137,7 +136,6 @@ public:
 		, alpha_mode_(alpha_mode)
 		, last_frame_(core::basic_frame::empty())
 		, filter_str_(narrow(filter))
-		, custom_channel_order_(custom_channel_order)
 		, loop_(loop)
 		, start_time_(frame_to_time(start))
 	{
@@ -544,6 +542,8 @@ safe_ptr<core::frame_producer> create_producer(
 	boost::replace_all(filter_str, L"DEINTERLACE", L"YADIF=0:-1");
 	boost::replace_all(filter_str, L"DEINTERLACE_BOB", L"YADIF=1:-1");
 	auto custom_channel_order = params.get(L"CHANNEL_LAYOUT", L"");
+	if (custom_channel_order.empty())
+		custom_channel_order = frame_factory->audio_channel_layout().name;
 	auto field_order_inverted = params.has(L"FIELD_ORDER_INVERTED");
 	bool is_alpha = params.has(L"IS_ALPHA");
 	if (protocol.empty())
