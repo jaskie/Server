@@ -41,6 +41,7 @@
 #include <core/producer/media_info/media_info.h>
 #include <core/producer/media_info/media_info_repository.h>
 #include <core/producer/media_info/in_memory_media_info_repository.h>
+#include <core/system_watcher.h>
 #include <windows.h>
 
 #include <modules/bluefish/bluefish.h>
@@ -55,7 +56,6 @@
 #include <modules/oal/consumer/oal_consumer.h>
 #include <modules/bluefish/consumer/bluefish_consumer.h>
 #include <modules/decklink/consumer/decklink_consumer.h>
-#include <modules/decklink/consumer/blocking_decklink_consumer.h>
 #include <modules/ogl/consumer/ogl_consumer.h>
 #include <modules/ffmpeg/consumer/ffmpeg_consumer.h>
 #include <modules/decklink/producer/decklink_producer.h>
@@ -177,6 +177,9 @@ struct server::implementation : boost::noncopyable
 		setup_osc(env::properties());
 		CASPAR_LOG(info) << L"Initialized osc.";
 
+		setup_system_watcher(env::properties());
+		CASPAR_LOG(info) << L"Initialized system watcher.";
+
 		start_initial_media_info_scan();
 		CASPAR_LOG(info) << L"Started initial media information retrieval.";
 	}
@@ -279,8 +282,6 @@ struct server::implementation : boost::noncopyable
 					on_consumer(bluefish::create_consumer(xml_consumer.second));
 				else if (name == L"decklink")
 					on_consumer(decklink::create_consumer(xml_consumer.second));
-				else if (name == L"blocking-decklink")
-					on_consumer(decklink::create_blocking_consumer(xml_consumer.second));
 				else if (/*name == L"file" || */name == L"stream")
 					on_consumer(ffmpeg::create_consumer(xml_consumer.second));
 				else if (name == L"system-audio")
@@ -407,6 +408,11 @@ struct server::implementation : boost::noncopyable
 										address_v4::from_string(ipv4_address),
 										default_port));
 					});
+	}
+
+	void setup_system_watcher(const boost::property_tree::wptree& pt)
+	{
+		init_system_watcher(pt);
 	}
 
 	void setup_thumbnail_generation(const boost::property_tree::wptree& pt)

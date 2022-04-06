@@ -108,17 +108,17 @@ namespace caspar {
 			const bool														is_blocking_;
 			const NDIlib_v2*												ndi_lib_;
 			const NDIlib_send_instance_t									ndi_send_;
-			executor														executor_;
 			std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>     send_frame_buffer_;
 			int																input_audio_channel_count_;
-			std::unique_ptr<SwrContext, std::function<void(SwrContext*)>>	swr_;
-			std::unique_ptr<SwsContext, std::function<void(SwsContext*)>>	sws_;
 			safe_ptr<diagnostics::graph>									graph_;
 			tbb::atomic<int64_t>											current_encoding_delay_;
 			boost::timer													audio_send_timer_;
 			boost::timer													video_send_timer_;
 			boost::timer													tick_timer_;
 			boost::timer													frame_convert_timer_;
+			std::unique_ptr<SwrContext, std::function<void(SwrContext*)>>	swr_;
+			std::unique_ptr<SwsContext, std::function<void(SwsContext*)>>	sws_;
+			executor														executor_;
 
 		public:
 
@@ -133,12 +133,12 @@ namespace caspar {
 				, is_blocking_(is_blocking)
 				, ndi_lib_(load_ndi())
 				, ndi_send_(create_ndi_send(ndi_lib_, ndi_name, groups))
-				, executor_(print())
 				, input_audio_channel_count_(channel_layout.num_channels)
 				, sws_(is_alpha ? nullptr : sws_getContext(format_desc.width, format_desc.height, AV_PIX_FMT_BGRA, format_desc.width, format_desc.height, AV_PIX_FMT_UYVY422, SWS_POINT, NULL, NULL, NULL), [](SwsContext * ctx) { sws_freeContext(ctx); })
 				, swr_(create_swr(format_desc_, channel_layout_, input_audio_channel_count_), [](SwrContext * ctx) { swr_free(&ctx); })
 				, send_frame_buffer_(is_alpha ? 0 : av_image_get_buffer_size(AV_PIX_FMT_BGRA, format_desc.width, format_desc.height, 16))
-		{
+				, executor_(print())
+			{
 				current_encoding_delay_ = 0;
 				executor_.set_capacity(1);
 				graph_->set_text(print());
@@ -153,8 +153,6 @@ namespace caspar {
 
 			~ndi_consumer()
 			{
-				executor_.stop();
-				executor_.join();
 				if (ndi_send_)
 					ndi_lib_->NDIlib_send_destroy(ndi_send_);
 				CASPAR_LOG(info) << print() << L" Successfully Uninitialized.";
@@ -224,12 +222,6 @@ namespace caspar {
 
 			void send_audio(const safe_ptr<core::read_frame>& frame)
 			{
-				if (input_audio_channel_count_ != frame->num_channels())
-				{
-					swr_.reset(create_swr(format_desc_, channel_layout_, frame->num_channels()));
-					input_audio_channel_count_ = frame->num_channels();
-					CASPAR_LOG(trace) << print() << L" Replaced audio resampler.";
-				}
 				auto audio_frame = create_audio_frame(channel_layout_, frame->multichannel_view().num_samples(), format_desc_.audio_sample_rate);
 				const uint8_t* in[] = { reinterpret_cast<const uint8_t*>(frame->audio_data().begin()) };
 				int converted_sample_count = swr_convert(swr_.get(),
@@ -242,7 +234,7 @@ namespace caspar {
 
 			std::wstring print() const
 			{
-				return L"NewTek NDI[" + std::to_wstring(static_cast<long long>(channel_index_)) + L":" + ndi_name_ + L"]";
+				return L"NewTek NDI Channel:" + std::to_wstring(static_cast<long long>(channel_index_)) + L" Name:" + ndi_name_ + L"";
 			}
 		};
 

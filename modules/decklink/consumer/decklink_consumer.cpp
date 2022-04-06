@@ -39,6 +39,7 @@
 #include <core/parameters/parameters.h>
 #include <core/consumer/frame_consumer.h>
 #include <core/mixer/audio/audio_util.h>
+#include <core/system_watcher.h>
 
 #include <tbb/concurrent_queue.h>
 #include <tbb/cache_aligned_allocator.h>
@@ -51,16 +52,19 @@
 
 namespace caspar { namespace decklink { 
 
-struct decklink_consumer : public IDeckLinkVideoOutputCallback, IDeckLinkAudioOutputCallback, boost::noncopyable
+struct decklink_consumer : public IDeckLinkVideoOutputCallback, IDeckLinkAudioOutputCallback, IDeckLinkNotificationCallback, boost::noncopyable
 {
 	const int										channel_index_;
 	const configuration								config_;
 	const unsigned int								num_audio_channels_;
+	int64_t											prev_temperature_;
 
 	CComPtr<IDeckLink>								decklink_;
 	CComQIPtr<IDeckLinkOutput>						output_;
 	CComQIPtr<IDeckLinkKeyer>						keyer_;
-	CComQIPtr<IDeckLinkAttributes>					attributes_;
+	CComQIPtr<IDeckLinkProfileAttributes>			attributes_;
+	CComQIPtr<IDeckLinkNotification>				notification_;
+	CComQIPtr<IDeckLinkStatus>						status_;
 
 	tbb::spin_mutex									exception_mutex_;
 	std::exception_ptr								exception_;
@@ -80,7 +84,6 @@ struct decklink_consumer : public IDeckLinkVideoOutputCallback, IDeckLinkAudioOu
 	safe_ptr<diagnostics::graph>					graph_;
 	boost::timer									tick_timer_;
 	retry_task<bool>								send_completion_;
-	reference_signal_detector						reference_signal_detector_;
 
 	tbb::atomic<int64_t>							current_presentation_delay_;
 	bool											audio_buffer_notified_;
@@ -94,12 +97,13 @@ public:
 		, output_(decklink_)
 		, keyer_(decklink_)
 		, attributes_(decklink_)
+		, notification_(decklink_)
+		, status_(decklink_)
 		, model_name_(get_model_name(decklink_))
 		, format_desc_(format_desc)
 		, buffer_size_(config.buffer_depth()) // Minimum buffer-size 3.
 		, video_scheduled_(0)
 		, audio_scheduled_(0)
-		, reference_signal_detector_(output_)
 	{
 		is_running_ = true;
 		current_presentation_delay_ = 0;
@@ -124,7 +128,7 @@ public:
 			CASPAR_LOG(warning) << print() << L" Failed to register audio callback.";
 
 
-		BMDDisplayMode display_mode = get_display_mode(output_, format_desc_.format, bmdFormat8BitBGRA, bmdVideoOutputFlagDefault)->GetDisplayMode();
+		BMDDisplayMode display_mode = get_display_mode(output_, format_desc_.format, bmdFormat8BitBGRA)->GetDisplayMode();
 		if (FAILED(output_->EnableVideoOutput(display_mode, bmdVideoOutputFlagDefault)))
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Could not enable video output."));
 
@@ -159,11 +163,35 @@ public:
 		if (FAILED(output_->StartScheduledPlayback(0, format_desc_.time_scale, 1.0)))
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Failed to schedule playback."));
 
-		CASPAR_LOG(info) << print() << L" successfully initialized.";
+		if (FAILED(notification_->Subscribe(BMDNotifications::bmdStatusChanged, this)))
+			CASPAR_LOG(warning) << print() << L" Failed to register notification callback.";
+		if (SUCCEEDED(status_->GetInt(BMDDeckLinkStatusID::bmdDeckLinkStatusDeviceTemperature, &prev_temperature_)))
+			CASPAR_LOG(info) << print() << L" Temperature: " << prev_temperature_ << " C.";
+
+		BMDReferenceStatus reference_status;
+		if (FAILED(output_->GetReferenceStatus(&reference_status)))
+			CASPAR_LOG(error) << print() << L" Reference signal: failed while querying status";
+		else
+			if (reference_status == 0)
+				CASPAR_LOG(info) << print() << L" Reference signal: not detected.";
+			else if (reference_status & bmdReferenceNotSupportedByHardware)
+				CASPAR_LOG(info) << print() << L" Reference signal: not supported by hardware.";
+			else if (reference_status & bmdReferenceLocked)
+				CASPAR_LOG(info) << print() << L" Reference signal: locked.";
+			else
+				CASPAR_LOG(info) << print() << L" Reference signal: Unhandled enum bitfield: " << reference_status;
+
+		int64_t pci_version = 0, pci_width = 0;
+		status_->GetInt(BMDDeckLinkStatusID::bmdDeckLinkStatusPCIExpressLinkWidth, &pci_width);
+		status_->GetInt(BMDDeckLinkStatusID::bmdDeckLinkStatusPCIExpressLinkSpeed, &pci_version);
+		CASPAR_LOG(info) << print() << L" successfully initialized" 
+			<< (pci_version == 0 ? L"." : L" on PCIe v" + std::to_wstring(pci_version)) 
+			<< (pci_width == 0 ? L"" : L" x" + std::to_wstring(pci_width) + L".");
 	}
 
 	~decklink_consumer()
-	{		
+	{	
+		notification_->Unsubscribe(BMDNotifications::bmdStatusChanged, this);
 		is_running_ = false;
 		frame_buffer_.try_push(std::make_shared<core::read_frame>());
 
@@ -281,6 +309,36 @@ public:
 		return S_OK;
 	}
 
+	STDMETHOD(Notify(/* [in] */ BMDNotifications topic, /* [in] */ ULONGLONG param1, /* [in] */ ULONGLONG param2))
+	{
+		if (topic != BMDNotifications::bmdStatusChanged)
+			return S_OK;
+		int64_t int_value;
+		BOOL flag;
+		switch (param1)
+		{
+		case BMDDeckLinkStatusID::bmdDeckLinkStatusDeviceTemperature:
+			if (SUCCEEDED(status_->GetInt(BMDDeckLinkStatusID::bmdDeckLinkStatusDeviceTemperature, &int_value)) && std::abs(int_value - prev_temperature_) > 1)
+			{
+				prev_temperature_ = int_value;
+				CASPAR_LOG(info) << print() << L" Temperature changed: " << int_value << " C";
+			}
+			break;
+		case BMDDeckLinkStatusID::bmdDeckLinkStatusReferenceSignalLocked:
+			if (SUCCEEDED(status_->GetFlag(BMDDeckLinkStatusID::bmdDeckLinkStatusReferenceSignalLocked, &flag))) 
+				CASPAR_LOG(info) << print() << L" Reference signal: " << (flag ? L"locked" : L"missing");
+			break;
+		case BMDDeckLinkStatusID::bmdDeckLinkStatusPCIExpressLinkWidth:
+			if (SUCCEEDED(status_->GetInt(BMDDeckLinkStatusID::bmdDeckLinkStatusPCIExpressLinkWidth, &int_value)))
+				CASPAR_LOG(info) << print() << L" PCIe width changed: " << int_value << "x";;
+			break;
+		default:
+			break;
+		}
+		
+		return S_OK;
+	}
+
 
 	template<typename View>
 	void schedule_next_audio(const View& view)
@@ -335,8 +393,6 @@ public:
 
 		graph_->set_value("tick-time", tick_timer_.elapsed()*format_desc_.fps*0.5);
 		tick_timer_.restart();
-
-		reference_signal_detector_.detect_change([this]() { return print(); });
 	}
 
 	boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame)
@@ -373,9 +429,12 @@ public:
 	
 	std::wstring print() const
 	{
-		return model_name_ + L"[decklink_consumer] [" + boost::lexical_cast<std::wstring>(channel_index_) + L"-" +
-			boost::lexical_cast<std::wstring>(config_.device_index) + L"|" +  format_desc_.name + L"]";
+		return model_name_ + L" Ch:" + boost::lexical_cast<std::wstring>(channel_index_) + L" Id:" +
+			boost::lexical_cast<std::wstring>(config_.device_index) + L" Fmt: " +  format_desc_.name;
 	}
+
+
+
 };
 
 struct decklink_consumer_proxy : public core::frame_consumer
@@ -450,6 +509,7 @@ public:
 	{
 		return context_ ? context_->current_presentation_delay_ : 0;
 	}
+
 };	
 
 safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params) 

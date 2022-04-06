@@ -358,7 +358,8 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 				DispatchMessage(&stMsg);
 			}
 		} // end of server scope
-
+		if (_CrtDumpMemoryLeaks())
+			OutputDebugStringA("\nMemory leak!\n");
 		CASPAR_LOG(info) << "Successfully shutdown CasparCG Server.";
 	}
 	catch (boost::property_tree::file_parser_error&)

@@ -1,7 +1,5 @@
 /*
-* Copyright 2013 Sveriges Television AB http://casparcg.com/
-*
-* This file is part of CasparCG (www.casparcg.com).
+* This file is part of TVP's fork CasparCG (www.casparcg.com).
 *
 * CasparCG is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -16,30 +14,16 @@
 * You should have received a copy of the GNU General Public License
 * along with CasparCG. If not, see <http://www.gnu.org/licenses/>.
 *
-* Author: Robert Nagy, ronag89@gmail.com
 */
 
 #pragma once
 
-#include <common/memory/safe_ptr.h>
-
-#include <core/video_format.h>
-
-#include <boost/property_tree/ptree.hpp>
-
-#include <string>
-#include <vector>
+#include <memory>
 
 namespace caspar {
-
-namespace core {
-	struct frame_consumer;
-	class parameters;
+	namespace core {
+		typedef std::function<void()> watcher_callback_t;
+		void init_system_watcher(const boost::property_tree::wptree& pt);
+		void register_callback(watcher_callback_t& callback);
+	}
 }
-
-namespace decklink {
-
-safe_ptr<core::frame_consumer> create_blocking_consumer(const core::parameters& params);
-safe_ptr<core::frame_consumer> create_blocking_consumer(const boost::property_tree::wptree& ptree);
-
-}}

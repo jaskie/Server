@@ -48,7 +48,7 @@ struct read_frame::implementation : boost::noncopyable
 	safe_ptr<host_buffer>		image_data_;
 	tbb::mutex					mutex_;
 	audio_buffer				audio_data_;
-	const channel_layout&		audio_channel_layout_;
+	const channel_layout		audio_channel_layout_;
 	int64_t						created_timestamp_;
 	const int					frame_timecode_;
 

@@ -34,9 +34,6 @@
     <ClCompile Include="interop\DeckLinkAPI_i.c">
       <Filter>source\interop</Filter>
     </ClCompile>
-    <ClCompile Include="consumer\blocking_decklink_consumer.cpp">
-      <Filter>source\consumer</Filter>
-    </ClCompile>
     <ClCompile Include="recorder\decklink_recorder.cpp">
       <Filter>source\recorder</Filter>
     </ClCompile>
@@ -60,9 +57,6 @@
     </ClInclude>
     <ClInclude Include="interop\DeckLinkAPI_h.h">
       <Filter>source\interop</Filter>
-    </ClInclude>
-    <ClInclude Include="consumer\blocking_decklink_consumer.h">
-      <Filter>source\consumer</Filter>
     </ClInclude>
     <ClInclude Include="recorder\decklink_recorder.h">
       <Filter>source\recorder</Filter>

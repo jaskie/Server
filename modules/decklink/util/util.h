@@ -51,14 +51,14 @@ static BMDDisplayMode get_decklink_video_format(core::video_format::type fmt)
 	{
 	case core::video_format::pal:			return bmdModePAL;
 	case core::video_format::ntsc:			return bmdModeNTSC;
-	case core::video_format::x576p2500:		return (BMDDisplayMode)ULONG_MAX;
-	case core::video_format::x720p2398:		return (BMDDisplayMode)ULONG_MAX;
-	case core::video_format::x720p2400:		return (BMDDisplayMode)ULONG_MAX;
-	case core::video_format::x720p2500:		return (BMDDisplayMode)ULONG_MAX;
+	case core::video_format::x576p2500:		return bmdModePALp;
+	case core::video_format::x720p2398:		return bmdModeNTSCp;
+	case core::video_format::x720p2400:		return bmdModeUnknown;
+	case core::video_format::x720p2500:		return bmdModeUnknown;
 	case core::video_format::x720p5000:		return bmdModeHD720p50;
-	case core::video_format::x720p2997:		return (BMDDisplayMode)ULONG_MAX;
+	case core::video_format::x720p2997:		return bmdModeUnknown;
 	case core::video_format::x720p5994:		return bmdModeHD720p5994;
-	case core::video_format::x720p3000:		return (BMDDisplayMode)ULONG_MAX;
+	case core::video_format::x720p3000:		return bmdModeUnknown;
 	case core::video_format::x720p6000:		return bmdModeHD720p60;
 	case core::video_format::x1080p2398:	return bmdModeHD1080p2398;
 	case core::video_format::x1080p2400:	return bmdModeHD1080p24;
@@ -81,7 +81,7 @@ static BMDDisplayMode get_decklink_video_format(core::video_format::type fmt)
 	case core::video_format::x2160p3000:	return bmdMode4K2160p30;
 	case core::video_format::x2160p5000:	return bmdMode4K2160p50;
 	case core::video_format::x2160p6000:	return bmdMode4K2160p60;
-	default:								return (BMDDisplayMode)ULONG_MAX;
+	default:								return bmdModeUnknown;
 	}
 }
 
@@ -137,40 +137,16 @@ static BMDTimecodeBCD frame2bcd(int frames, byte fps)
 	return (frame % 10) | ((frame / 10) << 4) | ((sec % 10) << 8) | ((sec / 10) << 12) | ((min % 10) << 16) | ((min / 10) << 20) | ((hour % 10) << 24) | ((hour / 10) << 28);
 }
 
-template<typename T, typename F>
-CComPtr<IDeckLinkDisplayMode> get_display_mode(const T& device, BMDDisplayMode format, BMDPixelFormat pix_fmt, F flag)
+
+template<typename T>
+static CComPtr<IDeckLinkDisplayMode> get_display_mode(const CComQIPtr<T>& device, core::video_format::type fmt, BMDPixelFormat pix_fmt)
 {
-	CComPtr<IDeckLinkDisplayModeIterator> iterator;
-	CComPtr<IDeckLinkDisplayMode>    	  mode;
-	
-	if(SUCCEEDED(device->GetDisplayModeIterator(&iterator)))
-	{
-		while(SUCCEEDED(iterator->Next(&mode)) && 
-				mode != nullptr && 
-				mode->GetDisplayMode() != format){}
-	}
-
-	if(!mode)
-		BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Device could not find requested video-format.") 
-												 << arg_value_info(boost::lexical_cast<std::string>(format))
-												 << arg_name_info("format"));
-		
-	BMDDisplayModeSupport displayModeSupport;
-	if(FAILED(device->DoesSupportVideoMode(mode->GetDisplayMode(), pix_fmt, flag, &displayModeSupport, nullptr)) || displayModeSupport == bmdDisplayModeNotSupported)
-		CASPAR_LOG(warning) << L"Device does not support video-format: " << mode->GetDisplayMode();
-		//BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Device does not support requested video-format.")
-		//										 << arg_value_info(boost::lexical_cast<std::string>(format))
-		//										 << arg_name_info("format"));
-	else if(displayModeSupport == bmdDisplayModeSupportedWithConversion)
-		CASPAR_LOG(warning) << L"Device supports video-format with conversion: " << mode->GetDisplayMode();
-
-	return mode;
-}
-
-template<typename T, typename F>
-static CComPtr<IDeckLinkDisplayMode> get_display_mode(const T& device, core::video_format::type fmt, BMDPixelFormat pix_fmt, F flag)
-{	
-	return get_display_mode(device, get_decklink_video_format(fmt), pix_fmt, flag);
+	CComPtr<IDeckLinkDisplayMode> result;
+	if (FAILED(device->GetDisplayMode(get_decklink_video_format(fmt), &result)) || !result)
+		BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Device could not find requested video-format.")
+			<< arg_value_info(boost::lexical_cast<std::string>(fmt))
+			<< arg_name_info("format"));
+	return result;
 }
 
 static unsigned int num_decklink_out_channels(int input_channels) 
@@ -403,7 +379,7 @@ static void set_latency(
 }
 
 static void set_keyer(
-		const CComQIPtr<IDeckLinkAttributes>& attributes,
+		const CComQIPtr<IDeckLinkProfileAttributes>& attributes,
 		const CComQIPtr<IDeckLinkKeyer>& decklink_keyer,
 		configuration::keyer_t keyer,
 		const std::wstring& print)
@@ -433,41 +409,5 @@ static void set_keyer(
 			CASPAR_LOG(info) << print << L" Enabled external keyer.";			
 	}
 }
-
-class reference_signal_detector
-{
-	CComQIPtr<IDeckLinkOutput> output_;
-	BMDReferenceStatus last_reference_status_;
-public:
-	reference_signal_detector(const CComQIPtr<IDeckLinkOutput>& output)
-		: output_(output)
-		, last_reference_status_(static_cast<BMDReferenceStatus>(-1))
-	{
-	}
-
-	template<typename Print>
-	void detect_change(const Print& print)
-	{
-		BMDReferenceStatus reference_status;
-
-		if (output_->GetReferenceStatus(&reference_status) != S_OK)
-		{
-			CASPAR_LOG(error) << print() << L" Reference signal: failed while querying status";
-		}
-		else if (reference_status != last_reference_status_)
-		{
-			last_reference_status_ = reference_status;
-
-			if (reference_status == 0)
-				CASPAR_LOG(info) << print() << L" Reference signal: not detected.";
-			else if (reference_status & bmdReferenceNotSupportedByHardware)
-				CASPAR_LOG(info) << print() << L" Reference signal: not supported by hardware.";
-			else if (reference_status & bmdReferenceLocked)
-				CASPAR_LOG(info) << print() << L" Reference signal: locked.";
-			else
-				CASPAR_LOG(info) << print() << L" Reference signal: Unhandled enum bitfield: " << reference_status;
-		}
-	}
-};
 
 }}

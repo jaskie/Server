@@ -89,7 +89,7 @@ class decklink_producer : boost::noncopyable, public IDeckLinkInputCallback
 
 	CComPtr<IDeckLink>											decklink_;
 	CComQIPtr<IDeckLinkInput>									input_;
-	CComQIPtr<IDeckLinkAttributes>								attributes_;
+	CComQIPtr<IDeckLinkProfileAttributes>								attributes_;
 	CComPtr<IDeckLinkDisplayMode>								current_display_mode_;
 
 	const std::wstring											model_name_;
@@ -138,7 +138,7 @@ public:
 		, frame_factory_(frame_factory)
 		, audio_channel_layout_(audio_channel_layout)
 		, timecode_source_(timecode_source)
-		, current_display_mode_(get_display_mode(input_, format_desc_.format, bmdFormat8BitYUV, bmdVideoInputFlagDefault))
+		, current_display_mode_(get_display_mode(input_, format_desc_.format, bmdFormat8BitYUV))
 		, frame_duration_(format_desc_.duration)
 		, time_scale_(format_desc_.time_scale)
 		, frame_pts_(0)

@@ -336,7 +336,7 @@ namespace caspar {
 
 			std::wstring print() const
 			{
-				return L"ffmpeg_consumer[" + widen(output_params_.file_name_) + L"]:" + boost::lexical_cast<std::wstring>(out_frame_number_);
+				return L"ffmpeg_consumer URL:" + widen(output_params_.file_name_) + L" Frame:" + boost::lexical_cast<std::wstring>(out_frame_number_);
 			}
 
 			void create_output(const AVCodec* video_codec, const AVCodec * audio_codec, const int width, const int height, const AVPixelFormat pix_fmt, const AVRational frame_rate, const AVRational time_base, const AVRational sample_aspect_ratio)
