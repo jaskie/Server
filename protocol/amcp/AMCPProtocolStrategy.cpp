@@ -56,12 +56,10 @@ inline std::shared_ptr<core::video_channel> GetChannelSafe(unsigned int index, c
 AMCPProtocolStrategy::AMCPProtocolStrategy(
 		const std::vector<safe_ptr<core::video_channel>>& channels,
 		const std::vector<safe_ptr<core::recorder>>& recorders,
-		const std::shared_ptr<core::thumbnail_generator>& thumb_gen,
 		const safe_ptr<core::media_info_repository>& media_info_repo
 )
 	: channels_(channels)
 	, recorders_(recorders)
-	, thumb_gen_(thumb_gen)
 	, media_info_repo_(media_info_repo)
 {
 	AMCPCommandQueuePtr pGeneralCommandQueue(new AMCPCommandQueue());
@@ -203,7 +201,6 @@ AMCPCommandPtr AMCPProtocolStrategy::InterpretCommandString(const std::wstring& 
 			{
 				pCommand->SetChannels(channels_);
 				pCommand->SetRecorders(recorders_);
-				pCommand->SetThumbGenerator(thumb_gen_);
 				pCommand->SetMediaInfoRepo(media_info_repo_);
 				//Set scheduling
 				if(commandSwitch.size() > 0) {
@@ -338,7 +335,6 @@ AMCPCommandPtr AMCPProtocolStrategy::CommandFactory(const std::wstring& str)
 	else if(s == TEXT("TLS"))			return std::make_shared<TlsCommand>();
 	else if(s == TEXT("VERSION"))		return std::make_shared<VersionCommand>();
 	else if(s == TEXT("BYE"))			return std::make_shared<ByeCommand>();
-	else if(s == TEXT("THUMBNAIL"))		return std::make_shared<ThumbnailCommand>();
 	//else if(s == TEXT("MONITOR"))
 	//{
 	//	result = AMCPCommandPtr(new MonitorCommand());

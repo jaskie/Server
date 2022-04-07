@@ -256,7 +256,6 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 				caspar::protocol::amcp::AMCPProtocolStrategy amcp(
 					caspar_server.get_channels(),
 					caspar_server.get_recorders(),
-					caspar_server.get_thumbnail_generator(),
 					caspar_server.get_media_info_repo()
 				);
 

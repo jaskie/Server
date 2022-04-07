@@ -24,7 +24,6 @@
 #include "../util/protocolstrategy.h"
 #include <core/video_channel.h>
 #include <core/recorder.h>
-#include <core/thumbnail_generator.h>
 #include <core/producer/media_info/media_info_repository.h>
 
 #include "AMCPCommand.h"
@@ -53,7 +52,6 @@ public:
 	AMCPProtocolStrategy(
 			const std::vector<safe_ptr<core::video_channel>>& channels,
 			const std::vector<safe_ptr<core::recorder>>& recorders,
-			const std::shared_ptr<core::thumbnail_generator>& thumb_gen,
 			const safe_ptr<core::media_info_repository>& media_info_repo
 		);
 	virtual ~AMCPProtocolStrategy();
@@ -76,7 +74,6 @@ private:
 
 	std::vector<safe_ptr<core::video_channel>> channels_;
 	std::vector<safe_ptr<core::recorder>> recorders_;
-	std::shared_ptr<core::thumbnail_generator> thumb_gen_;
 	safe_ptr<core::media_info_repository> media_info_repo_;
 	std::vector<AMCPCommandQueuePtr> commandQueues_;
 	static const std::wstring MessageDelimiter;

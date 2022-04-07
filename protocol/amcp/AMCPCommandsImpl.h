@@ -181,16 +181,6 @@ class DataCommand : public AMCPCommandBase<false, 1>
 	bool DoExecuteList();
 };
 
-class ThumbnailCommand : public AMCPCommandBase<false, 1>
-{
-	std::wstring print() const { return L"ThumbnailCommand";}
-	bool DoExecute();
-	bool DoExecuteRetrieve();
-	bool DoExecuteList();
-	bool DoExecuteGenerate();
-	bool DoExecuteGenerateAll();
-};
-
 class CaptureCommand : public AMCPCommandBase<true, 1>
 {
 	std::wstring print() const { return L"CaptureCommand"; }

@@ -46,7 +46,7 @@ namespace ffmpeg {
 class input
 {
 public:
-	explicit input(const safe_ptr<diagnostics::graph> graph, const std::wstring& filename, bool thumbnail_mode);
+	explicit input(const safe_ptr<diagnostics::graph> graph, const std::wstring& filename);
 	safe_ptr<AVCodecContext> open_audio_codec(AVStream** stream);
 	safe_ptr<AVCodecContext> open_video_codec(AVStream** stream);
 

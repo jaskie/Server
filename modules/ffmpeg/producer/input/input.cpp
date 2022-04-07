@@ -73,7 +73,6 @@ struct input::implementation : boost::noncopyable
 	const safe_ptr<AVFormatContext>								format_context_; // Destroy this last
 			
 	const std::wstring											filename_;
-	const bool													thumbnail_mode_;
 	tbb::atomic<bool>											is_eof_;
 	tbb::atomic<int>											video_stream_index_;
 	tbb::atomic<int>											audio_stream_index_;
@@ -84,20 +83,13 @@ struct input::implementation : boost::noncopyable
 
 	
 	explicit implementation(const safe_ptr<diagnostics::graph> graph, 
-		const std::wstring& filename, 
-		bool thumbnail_mode
+		const std::wstring& filename
 		)
 		: graph_(graph)
 		, filename_(filename)
 		, format_context_(open_input(filename))
-		, thumbnail_mode_(thumbnail_mode)
 		, executor_(print())
 	{
-		if (thumbnail_mode_)
-			executor_.invoke([]
-			{
-				disable_logging_for_thread();
-			});
 		is_eof_			= false;
 		video_buffer_.set_capacity(MAX_BUFFER_COUNT);
 		audio_buffer_.set_capacity(MAX_BUFFER_COUNT);
@@ -172,12 +164,6 @@ struct input::implementation : boost::noncopyable
 		graph_->set_value("video-buffer-count", (static_cast<double>(video_buffer_.size()) + 0.001)/MAX_BUFFER_COUNT);
 	}
 
-
-	int get_min_buffer_count() const
-	{
-		return thumbnail_mode_ ? 0 : MIN_BUFFER_COUNT;
-	}
-
 	std::wstring print() const
 	{
 		return L"ffmpeg_input[" + filename_ + L")]";
@@ -185,8 +171,8 @@ struct input::implementation : boost::noncopyable
 	
 	bool full() const
 	{
-		return (audio_stream_index_ == -1 || audio_buffer_.size() > get_min_buffer_count())
-			&& (video_stream_index_ == -1 || video_buffer_.size() > get_min_buffer_count());
+		return (audio_stream_index_ == -1 || audio_buffer_.size() > MIN_BUFFER_COUNT)
+			&& (video_stream_index_ == -1 || video_buffer_.size() > MIN_BUFFER_COUNT);
 	}
 
 	bool is_eof() const
@@ -238,8 +224,7 @@ struct input::implementation : boost::noncopyable
 				}
 				catch (...)
 				{
-					if (!thumbnail_mode_)
-						CASPAR_LOG_CURRENT_EXCEPTION();
+					CASPAR_LOG_CURRENT_EXCEPTION();
 				}
 			}
 		});
@@ -263,8 +248,7 @@ struct input::implementation : boost::noncopyable
 			LOG_ON_ERROR2(avformat_flush(format_context_.get()), "FFMpeg input avformat_flush");
 			graph_->set_value("audio-buffer-count", (static_cast<double>(audio_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
 			graph_->set_value("video-buffer-count", (static_cast<double>(video_buffer_.size()) + 0.001) / MAX_BUFFER_COUNT);
-			if (!thumbnail_mode_)
-				CASPAR_LOG(trace) << print() << " Seeking: " << target_time / 1000 << " ms";
+			CASPAR_LOG(trace) << print() << " Seeking: " << target_time / 1000 << " ms";
 			is_eof_ = false;
 			int ret = av_seek_frame(format_context_.get(), -1, target_time - AV_TIME_BASE, AVSEEK_FLAG_BACKWARD);
 			if (ret < 0)
@@ -275,8 +259,8 @@ struct input::implementation : boost::noncopyable
 	}
 };
 
-input::input(const safe_ptr<diagnostics::graph> graph, const std::wstring& filename, bool thumbnail_mode)
-	: impl_(new implementation(graph, filename, thumbnail_mode)){}
+input::input(const safe_ptr<diagnostics::graph> graph, const std::wstring& filename)
+	: impl_(new implementation(graph, filename)){}
 bool input::eof() const { return impl_->is_eof(); }
 void input::try_pop_audio(std::shared_ptr<AVPacket>& packet) { impl_->try_pop_audio(packet); }
 void input::try_pop_video(std::shared_ptr<AVPacket>& packet) { impl_->try_pop_video(packet); }

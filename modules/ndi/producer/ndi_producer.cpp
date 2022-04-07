@@ -308,7 +308,7 @@ public:
 		if (!muxer_ || in_frame_rate_ != in_frame_rate_)
 		{
 			in_frame_rate_ = in_frame_rate;
-			muxer_.reset(new ffmpeg::frame_muxer(in_frame_rate_, boost::rational<int>(in_frame_rate.denominator(), in_frame_rate.numerator()), frame_factory_, false, audio_channel_layout_, ""));
+			muxer_.reset(new ffmpeg::frame_muxer(in_frame_rate_, boost::rational<int>(in_frame_rate.denominator(), in_frame_rate.numerator()), frame_factory_, audio_channel_layout_, ""));
 		}
 	}
 

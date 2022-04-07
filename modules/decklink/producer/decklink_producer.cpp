@@ -133,7 +133,7 @@ public:
 		, filter_(filter)
 		, format_desc_(format_desc)
 		, audio_cadence_(format_desc.audio_cadence)
-		, muxer_(boost::rational<int>(format_desc.time_scale, format_desc.duration), boost::rational<int>(format_desc.duration, format_desc.time_scale), frame_factory, false, audio_channel_layout, narrow(filter))
+		, muxer_(boost::rational<int>(format_desc.time_scale, format_desc.duration), boost::rational<int>(format_desc.duration, format_desc.time_scale), frame_factory, audio_channel_layout, narrow(filter))
 		, sync_buffer_(format_desc.audio_cadence.size())
 		, frame_factory_(frame_factory)
 		, audio_channel_layout_(audio_channel_layout)

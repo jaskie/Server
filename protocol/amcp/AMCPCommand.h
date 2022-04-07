@@ -27,7 +27,7 @@
 #include <core/parameters/parameters.h>
 #include <core/video_channel.h>
 #include <core/recorder.h>
-#include <core/thumbnail_generator.h>
+#include <core/producer/media_info/media_info_repository.h>
 
 #include <boost/algorithm/string.hpp>
 
@@ -65,9 +65,6 @@ namespace caspar { namespace protocol { namespace amcp {
 		void SetRecorders(const std::vector<safe_ptr<core::recorder>>& recorders) { recorders_ = recorders; }
 		const std::vector<safe_ptr<core::recorder>>& GetRecorders() { return recorders_; }
 
-		void SetThumbGenerator(const std::shared_ptr<core::thumbnail_generator>& thumb_gen) {thumb_gen_ = thumb_gen;}
-		std::shared_ptr<core::thumbnail_generator> GetThumbGenerator() { return thumb_gen_; }
-
 		void SetMediaInfoRepo(const safe_ptr<core::media_info_repository>& media_info_repo) {media_info_repo_ = media_info_repo;}
 		std::shared_ptr<core::media_info_repository> GetMediaInfoRepo() { return media_info_repo_; }
 
@@ -93,7 +90,6 @@ namespace caspar { namespace protocol { namespace amcp {
 		std::shared_ptr<core::video_channel> pChannel_;
 		std::vector<safe_ptr<core::video_channel>> channels_;
 		std::vector<safe_ptr<core::recorder>> recorders_;
-		std::shared_ptr<core::thumbnail_generator> thumb_gen_;
 		std::shared_ptr<core::media_info_repository> media_info_repo_;
 		std::wstring replyString_;
 	};

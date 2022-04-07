@@ -96,11 +96,6 @@ struct image_producer : public core::frame_producer
 		return frame_;
 	}
 
-	virtual safe_ptr<core::basic_frame> create_thumbnail_frame() override
-	{
-		return frame_;
-	}
-		
 	virtual std::wstring print() const override
 	{
 		return L"image_producer[" + description_ + L"]";
@@ -158,13 +153,6 @@ safe_ptr<core::frame_producer> create_producer(
 		return raw_producer;
 
 	return create_producer_print_proxy(raw_producer);
-}
-
-safe_ptr<core::frame_producer> create_thumbnail_producer(
-		const safe_ptr<core::frame_factory>& frame_factory,
-		const core::parameters& params)
-{
-	return create_raw_producer(frame_factory, params);
 }
 
 }}

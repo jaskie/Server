@@ -157,9 +157,6 @@
     <ClInclude Include="consumer\write_frame_consumer.h">
       <Filter>source\consumer</Filter>
     </ClInclude>
-    <ClInclude Include="thumbnail_generator.h">
-      <Filter>source</Filter>
-    </ClInclude>
     <ClInclude Include="monitor\monitor.h">
       <Filter>source\monitor</Filter>
     </ClInclude>
@@ -264,9 +261,6 @@
     </ClCompile>
     <ClCompile Include="producer\channel\channel_producer.cpp">
       <Filter>source\producer\channel</Filter>
-    </ClCompile>
-    <ClCompile Include="thumbnail_generator.cpp">
-      <Filter>source</Filter>
     </ClCompile>
     <ClCompile Include="producer\layer\layer_producer.cpp">
       <Filter>source\producer\layer</Filter>

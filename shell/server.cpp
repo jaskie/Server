@@ -37,7 +37,6 @@
 #include <core/producer/stage.h>
 #include <core/consumer/output.h>
 #include <core/consumer/synchronizing/synchronizing_consumer.h>
-#include <core/thumbnail_generator.h>
 #include <core/producer/media_info/media_info.h>
 #include <core/producer/media_info/media_info_repository.h>
 #include <core/producer/media_info/in_memory_media_info_repository.h>
@@ -125,7 +124,6 @@ struct server::implementation : boost::noncopyable
 	safe_ptr<media_info_repository>				media_info_repo_;
 	boost::thread								initial_media_info_thread_;
 	tbb::atomic<bool>							running_;
-	std::shared_ptr<thumbnail_generator>		thumbnail_generator_;
 
 	implementation()
 		: io_service_(create_running_io_service())
@@ -169,16 +167,16 @@ struct server::implementation : boost::noncopyable
 		setup_recorders(env::properties());
 		CASPAR_LOG(info) << L"Initialized recorders.";
 
-		setup_thumbnail_generation(env::properties());
-
 		setup_controllers(env::properties());
 		CASPAR_LOG(info) << L"Initialized controllers.";
 
 		setup_osc(env::properties());
 		CASPAR_LOG(info) << L"Initialized osc.";
 
+		/*
 		setup_system_watcher(env::properties());
 		CASPAR_LOG(info) << L"Initialized system watcher.";
+		*/
 
 		start_initial_media_info_scan();
 		CASPAR_LOG(info) << L"Started initial media information retrieval.";
@@ -188,7 +186,6 @@ struct server::implementation : boost::noncopyable
 	{
 		running_ = false;
 		initial_media_info_thread_.join();
-		thumbnail_generator_.reset();
 		primary_amcp_server_.reset();
 		async_servers_.clear();
 		destroy_producers_synchronously();
@@ -415,30 +412,6 @@ struct server::implementation : boost::noncopyable
 		init_system_watcher(pt);
 	}
 
-	void setup_thumbnail_generation(const boost::property_tree::wptree& pt)
-	{
-		if (!pt.get(L"configuration.thumbnails.generate-thumbnails", true))
-			return;
-
-		auto scan_interval_millis = pt.get(L"configuration.thumbnails.scan-interval-millis", 5000);
-
-		polling_filesystem_monitor_factory monitor_factory(
-				io_service_, scan_interval_millis);
-		thumbnail_generator_.reset(new thumbnail_generator(
-				monitor_factory, 
-				env::media_folder(),
-				env::thumbnails_folder(),
-				pt.get(L"configuration.thumbnails.width", 256),
-				pt.get(L"configuration.thumbnails.height", 144),
-				core::video_format_desc::get(pt.get(L"configuration.thumbnails.video-mode", L"720p2500")),
-				ogl_,
-				pt.get(L"configuration.thumbnails.generate-delay-millis", 2000),
-				&image::write_cropped_png,
-				media_info_repo_));
-
-		CASPAR_LOG(info) << L"Initialized thumbnail generator.";
-	}
-
 	void setup_recorders(const boost::property_tree::wptree& pt)
 	{
 		using boost::property_tree::wptree;
@@ -468,7 +441,7 @@ struct server::implementation : boost::noncopyable
 	safe_ptr<IO::IProtocolStrategy> create_protocol(const std::wstring& name) const
 	{
 		if(boost::iequals(name, L"AMCP"))
-			return make_safe<amcp::AMCPProtocolStrategy>(channels_, recorders_, thumbnail_generator_, media_info_repo_);
+			return make_safe<amcp::AMCPProtocolStrategy>(channels_, recorders_, media_info_repo_);
 		else if(boost::iequals(name, L"CII"))
 			return make_safe<cii::CIIProtocolStrategy>(channels_);
 		else if(boost::iequals(name, L"CLOCK"))
@@ -511,11 +484,6 @@ const std::vector<safe_ptr<video_channel>> server::get_channels() const
 const std::vector<safe_ptr<recorder>> server::get_recorders() const
 {
 	return impl_->recorders_;
-}
-
-std::shared_ptr<thumbnail_generator> server::get_thumbnail_generator() const
-{
-	return impl_->thumbnail_generator_;
 }
 
 safe_ptr<media_info_repository> server::get_media_info_repo() const

@@ -52,7 +52,6 @@ public:
 			boost::rational<int> in_fps,
 			boost::rational<int> in_timebase,
 			const safe_ptr<core::frame_factory>& frame_factory,
-			bool thumbnail_mode,
 			const core::channel_layout& audio_channel_layout,
 			const std::string& filter = "");
 	

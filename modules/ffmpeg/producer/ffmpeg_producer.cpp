@@ -101,8 +101,6 @@ struct ffmpeg_producer : public core::frame_producer
 	const safe_ptr<core::frame_factory>							frame_factory_;
 	const core::video_format_desc								format_desc_;
 
-	std::shared_ptr<void>										initial_logger_disabler_;
-
 	input														input_;	
 	std::unique_ptr<video_decoder>								video_decoder_;
 	std::unique_ptr<audio_decoder>								audio_decoder_;	
@@ -112,7 +110,6 @@ struct ffmpeg_producer : public core::frame_producer
 	const boost::rational<int>									out_fps_;
 	const int64_t												start_time_;
 	const int64_t												length_;
-	const bool													thumbnail_mode_;
 	const bool													alpha_mode_;
 	const std::string											filter_str_;
 	bool														loop_;
@@ -123,16 +120,14 @@ struct ffmpeg_producer : public core::frame_producer
 
 		
 public:
-	explicit ffmpeg_producer(const safe_ptr<core::frame_factory>& frame_factory, const std::wstring& filename, const std::wstring& filter, bool loop, uint32_t start, uint32_t length, bool thumbnail_mode, bool alpha_mode, const std::wstring& custom_channel_order, bool field_order_inverted, bool is_stream)
+	explicit ffmpeg_producer(const safe_ptr<core::frame_factory>& frame_factory, const std::wstring& filename, const std::wstring& filter, bool loop, uint32_t start, uint32_t length, bool alpha_mode, const std::wstring& custom_channel_order, bool field_order_inverted, bool is_stream)
 		: filename_(filename)
 		, path_relative_to_media_(get_relative_or_original(filename, env::media_folder()))
 		, frame_factory_(frame_factory)
 		, format_desc_(frame_factory->get_video_format_desc())
-		, initial_logger_disabler_(temporary_disable_logging_for_thread(thumbnail_mode))
-		, input_(graph_, filename_, thumbnail_mode)
+		, input_(graph_, filename_)
 		, out_fps_(boost::rational<int>(format_desc_.time_scale, format_desc_.duration))
 		, length_(frame_to_time(length))
-		, thumbnail_mode_(thumbnail_mode)
 		, alpha_mode_(alpha_mode)
 		, last_frame_(core::basic_frame::empty())
 		, filter_str_(narrow(filter))
@@ -152,45 +147,39 @@ public:
 		}
 		catch(...)
 		{
-			if (!thumbnail_mode_)
-			{
-				CASPAR_LOG_CURRENT_EXCEPTION();
-				CASPAR_LOG(warning) << print() << "Failed to open video-stream. Running without video.";	
-			}
+			CASPAR_LOG_CURRENT_EXCEPTION();
+			CASPAR_LOG(warning) << print() << "Failed to open video-stream. Running without video.";	
 		}
 
 		audio_channel_layout_ = core::default_channel_layout_repository().get_by_name(L"STEREO");
 
-		if (!thumbnail_mode_)
+		try
 		{
-			try
-			{
-				audio_decoder_.reset(new audio_decoder(input_, frame_factory->get_video_format_desc(), custom_channel_order));
-				audio_channel_layout_ = audio_decoder_->channel_layout();
-			}
-			catch(averror_stream_not_found&)
-			{
-				CASPAR_LOG(warning) << print() << " No audio-stream found. Running without audio.";	
-			}
-			catch(...)
-			{
-				CASPAR_LOG_CURRENT_EXCEPTION();
-				CASPAR_LOG(warning) << print() << " Failed to open audio-stream. Running without audio.";		
-			}
+			audio_decoder_.reset(new audio_decoder(input_, frame_factory->get_video_format_desc(), custom_channel_order));
+			audio_channel_layout_ = audio_decoder_->channel_layout();
+		}
+		catch(averror_stream_not_found&)
+		{
+			CASPAR_LOG(warning) << print() << " No audio-stream found. Running without audio.";	
+		}
+		catch(...)
+		{
+			CASPAR_LOG_CURRENT_EXCEPTION();
+			CASPAR_LOG(warning) << print() << " Failed to open audio-stream. Running without audio.";		
 		}
 
 		if(!video_decoder_ && !audio_decoder_)
 			BOOST_THROW_EXCEPTION(averror_stream_not_found() << msg_info("No streams found"));
 		muxer_.reset(new frame_muxer(video_decoder_ ? video_decoder_->frame_rate() : boost::rational<int>(format_desc_.time_scale, format_desc_.duration),
 			video_decoder_ ? video_decoder_->time_base() : boost::rational<int>(format_desc_.duration, format_desc_.time_scale),
-			frame_factory, thumbnail_mode_, audio_channel_layout_, filter_str_));
+			frame_factory, audio_channel_layout_, filter_str_));
 		if (is_stream)
 			input_.tick();
 		else
 			if (!seek(start_time_, false))
 				CASPAR_LOG(warning) << print() << " Initial seek failed.";
 		for (int n = 0; n < 32 && frame_buffer_.size() < 2 && !is_eof_; ++n)
-			try_decode_frame(thumbnail_mode ? core::frame_producer::DEINTERLACE_HINT : alpha_mode ? core::frame_producer::ALPHA_HINT : core::frame_producer::NO_HINT);
+			try_decode_frame(alpha_mode ? core::frame_producer::ALPHA_HINT : core::frame_producer::NO_HINT);
 	}
 
 	// frame_producer
@@ -208,7 +197,6 @@ public:
 	safe_ptr<core::basic_frame> render_frame(int hints)
 	{		
 		frame_timer_.restart();
-		auto disable_logging = temporary_disable_logging_for_thread(thumbnail_mode_);
 				
 		for (int n = 0; n < 32 && frame_buffer_.size() < 2 && !is_eof_; ++n)
 			try_decode_frame(hints);
@@ -268,54 +256,6 @@ public:
 			return frame;
 		}
 		return caspar::core::basic_frame::empty();
-	}
-
-	virtual safe_ptr<core::basic_frame> create_thumbnail_frame() override
-	{
-		auto disable_logging = temporary_disable_logging_for_thread(thumbnail_mode_);
-
-		auto total_frames = nb_frames();
-		auto grid = env::properties().get(L"configuration.thumbnails.video-grid", 2);
-
-		if (grid < 1)
-		{
-			CASPAR_LOG(error) << L"configuration/thumbnails/video-grid cannot be less than 1";
-			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("configuration/thumbnails/video-grid cannot be less than 1"));
-		}
-
-		if (grid == 1)
-		{
-			return render_specific_frame(total_frames / 2, 0/*DEINTERLACE_HINT*/);
-		}
-
-		auto num_snapshots = grid * grid;
-
-		std::vector<safe_ptr<core::basic_frame>> frames;
-
-		for (int i = 0; i < num_snapshots; ++i)
-		{
-			int x = i % grid;
-			int y = i / grid;
-			int desired_frame;
-			
-			if (i == 0)
-				desired_frame = 0; // first
-			else if (i == num_snapshots - 1)
-				desired_frame = total_frames - 1; // last
-			else
-				// evenly distributed across the file.
-				desired_frame = total_frames * i / (num_snapshots - 1);
-
-			auto frame = render_specific_frame(desired_frame, DEINTERLACE_HINT);
-			frame->get_frame_transform().fill_scale[0] = 1.0 / static_cast<double>(grid);
-			frame->get_frame_transform().fill_scale[1] = 1.0 / static_cast<double>(grid);
-			frame->get_frame_transform().fill_translation[0] = 1.0 / static_cast<double>(grid) * x;
-			frame->get_frame_transform().fill_translation[1] = 1.0 / static_cast<double>(grid) * y;
-
-			frames.push_back(frame);
-		}
-
-		return make_safe<core::basic_frame>(frames);
 	}
 
 	virtual uint32_t nb_frames() const override
@@ -558,25 +498,10 @@ safe_ptr<core::frame_producer> create_producer(
 		auto loop = params.has(L"LOOP");
 		auto start = params.get(L"SEEK", static_cast<uint32_t>(0));
 		auto length = params.get(L"LENGTH", std::numeric_limits<uint32_t>::max());
-		return create_producer_destroy_proxy(make_safe<ffmpeg_producer>(frame_factory, filename, filter_str, loop, start, length, false, is_alpha, custom_channel_order, field_order_inverted, false));
+		return create_producer_destroy_proxy(make_safe<ffmpeg_producer>(frame_factory, filename, filter_str, loop, start, length, is_alpha, custom_channel_order, field_order_inverted, false));
 	}
 	else
-		return create_producer_destroy_proxy(make_safe<ffmpeg_producer>(frame_factory, params.at_original(0), filter_str, false, 0, -1, false, is_alpha, custom_channel_order, field_order_inverted, true));
-}
-
-safe_ptr<core::frame_producer> create_thumbnail_producer(
-		const safe_ptr<core::frame_factory>& frame_factory,
-		const core::parameters& params)
-{		
-	static const std::vector<std::wstring> invalid_exts = boost::assign::list_of
-			(L".png")(L".tga")(L".bmp")(L".jpg")(L".jpeg")(L".gif")(L".tiff")(L".tif")(L".jp2")(L".jpx")(L".j2k")(L".j2c")(L".swf")(L".ct")
-			(L".wav")(L".mp3"); // audio shall not have thumbnails
-	auto filename = probe_stem(env::media_folder() + L"\\" + params.at_original(0), invalid_exts);
-
-	if(filename.empty())
-		return core::frame_producer::empty();
-	
-	return make_safe<ffmpeg_producer>(frame_factory, filename, L"", false, 0, std::numeric_limits<uint32_t>::max(), true, false, L"", false, false);
+		return create_producer_destroy_proxy(make_safe<ffmpeg_producer>(frame_factory, params.at_original(0), filter_str, false, 0, -1, is_alpha, custom_channel_order, field_order_inverted, true));
 }
 
 }}

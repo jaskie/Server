@@ -203,7 +203,6 @@ void init(const safe_ptr<core::media_info_repository>& media_info_repo)
 	
 	core::register_consumer_factory([](const core::parameters& params){return ffmpeg::create_consumer(params);});
 	core::register_producer_factory(create_producer);
-	core::register_thumbnail_producer_factory(create_thumbnail_producer);
 
 	media_info_repo->register_extractor(
 			[](const std::wstring& file, core::media_info& info) -> bool
