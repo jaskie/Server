@@ -63,10 +63,6 @@ std::wstring get_cg_version()
 				return core::video_format_desc::get(L"PAL");
 			}
 
-			virtual const core::channel_layout& audio_channel_layout() const {
-				return core::default_channel_layout_repository().get_by_name(L"STEREO");
-			}
-
 			virtual bool get_use_software_scaler() const 
 			{
 				return false;
