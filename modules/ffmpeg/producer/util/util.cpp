@@ -238,7 +238,8 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 						
 		if(!pool.try_pop(sws_context))
 		{
-			sws_context.reset(sws_getContext(width, height, static_cast<AVPixelFormat>(pix_fmt), width, height, target_pix_fmt, SWS_BILINEAR, nullptr, nullptr, NULL), sws_freeContext);
+			sws_context.reset(sws_getContext(width, height, static_cast<AVPixelFormat>(pix_fmt), width, height, target_pix_fmt, SWS_FAST_BILINEAR, nullptr, nullptr, NULL), sws_freeContext);
+			CASPAR_LOG(trace) << L"Created new SWS context w=" << width << L", h=" << height << ", input pix_fmt=" << pix_fmt << L", output pix_fmt=" << target_pix_fmt;
 		}
 			
 		if(!sws_context)

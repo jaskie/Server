@@ -242,22 +242,6 @@ public:
 							<< core::monitor::message("/loop")				% loop_;
 	}
 	
-	safe_ptr<core::basic_frame> render_specific_frame(uint32_t file_position, int hints)
-	{
-		// Some trial and error and undeterministic stuff here
-		static const int NUM_RETRIES = 32;
-		
-		seek(frame_to_time(file_position), false);
-
-		for (int i = 0; i < NUM_RETRIES; ++i)
-		{
-			boost::this_thread::sleep(boost::posix_time::milliseconds(40));
-			auto frame = render_frame(hints);
-			return frame;
-		}
-		return caspar::core::basic_frame::empty();
-	}
-
 	virtual uint32_t nb_frames() const override
 	{
 		if(loop_) 
