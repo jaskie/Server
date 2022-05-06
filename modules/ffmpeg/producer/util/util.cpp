@@ -519,8 +519,8 @@ core::channel_layout get_audio_channel_layout(
 	case AV_CH_LAYOUT_5POINT1:
 	case AV_CH_LAYOUT_5POINT1_BACK:
 		return core::default_channel_layout_repository().get_by_name(L"SMPTE");
-	case AV_CH_LAYOUT_7POINT1:
-		return core::default_channel_layout_repository().get_by_name(L"DOLBYE");
+	//case AV_CH_LAYOUT_7POINT1:
+	//	return core::default_channel_layout_repository().get_by_name(L"DOLBYE");
 	}
 
 	return core::create_unspecified_layout(context.channels);

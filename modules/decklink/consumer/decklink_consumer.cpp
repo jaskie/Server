@@ -318,7 +318,7 @@ public:
 		switch (param1)
 		{
 		case BMDDeckLinkStatusID::bmdDeckLinkStatusDeviceTemperature:
-			if (SUCCEEDED(status_->GetInt(BMDDeckLinkStatusID::bmdDeckLinkStatusDeviceTemperature, &int_value)) && std::abs(int_value - prev_temperature_) > 1)
+			if (SUCCEEDED(status_->GetInt(BMDDeckLinkStatusID::bmdDeckLinkStatusDeviceTemperature, &int_value)) && std::abs(int_value - prev_temperature_) > 4)
 			{
 				prev_temperature_ = int_value;
 				CASPAR_LOG(info) << print() << L" Temperature changed: " << int_value << " C";

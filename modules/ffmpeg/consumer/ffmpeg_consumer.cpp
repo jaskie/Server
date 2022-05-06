@@ -103,16 +103,6 @@ namespace caspar {
 			return pix_fmt;
 		}
 
-		int64_t get_channel_layout_bitmask(int num_channels)
-		{
-			if (num_channels > MAX_CHANNELS)
-				BOOST_THROW_EXCEPTION(caspar_exception("FFMpeg cannot handle more than 63 audio channels"));
-			const auto ALL_CHANNELS = 0x7FFFFFFFFFFFFFFFULL;
-			auto to_shift = MAX_CHANNELS - num_channels;
-			auto result = ALL_CHANNELS >> to_shift;
-			return static_cast<int64_t>(result);
-		}
-
 		AVRational get_channel_sample_aspect_ratio(const core::video_format::type format, bool is_narrow)
 		{
 			switch (format) {
@@ -732,7 +722,7 @@ namespace caspar {
 				std::fill(audio_channel_map_.begin(), audio_channel_map_.end(), -1);
 				std::copy(output_params_.channel_map_.begin(), output_params_.channel_map_.end(), audio_channel_map_.begin());
 				uint64_t out_channel_layout = av_get_default_channel_layout(audio_codec_ctx_->channels);
-				uint64_t in_channel_layout = get_channel_layout_bitmask(audio_channel_layout_.num_channels);
+				uint64_t in_channel_layout = create_channel_layout_bitmask(audio_channel_layout_.num_channels);
 				swr_ = SwrContextPtr(
 					swr_alloc_set_opts(nullptr,
 						out_channel_layout,	audio_codec_ctx_->sample_fmt, audio_codec_ctx_->sample_rate,
