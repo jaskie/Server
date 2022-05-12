@@ -52,7 +52,7 @@
 
 namespace caspar { namespace decklink { 
 
-struct decklink_consumer : public IDeckLinkVideoOutputCallback, IDeckLinkAudioOutputCallback, IDeckLinkNotificationCallback, boost::noncopyable
+struct decklink_consumer : public IDeckLinkVideoOutputCallback, IDeckLinkNotificationCallback, boost::noncopyable
 {
 	const int										channel_index_;
 	const configuration								config_;
@@ -123,10 +123,6 @@ public:
 			BOOST_THROW_EXCEPTION(caspar_exception()
 				<< msg_info(narrow(print()) + " Failed to set playback completion callback.")
 				<< boost::errinfo_api_function("SetScheduledFrameCompletionCallback"));
-
-		if (config.embedded_audio && FAILED(output_->SetAudioCallback(this)))
-			CASPAR_LOG(warning) << print() << L" Failed to register audio callback.";
-
 
 		BMDDisplayMode display_mode = get_display_mode(output_, format_desc_.format, bmdFormat8BitBGRA)->GetDisplayMode();
 		if (FAILED(output_->EnableVideoOutput(display_mode, bmdVideoOutputFlagDefault)))
@@ -244,10 +240,38 @@ public:
 				CASPAR_LOG(warning) << print() << L" Frame flushed.";
 			}
 
-			std::shared_ptr<core::read_frame> frame;	
-			frame_buffer_.pop(frame);
-			send_completion_.try_completion();
-				
+			if (config_.embedded_audio)
+			{
+				unsigned int buffered_audio;
+				if (SUCCEEDED(output_->GetBufferedAudioSampleFrameCount(&buffered_audio)))
+				{
+					graph_->set_value("buffered-audio", static_cast<double>(buffered_audio) / (format_desc_.audio_cadence[0] * buffer_size_));
+					if (buffered_audio >= bmdAudioSampleRate48kHz)
+					{
+						if (!audio_buffer_notified_)
+						{
+							CASPAR_LOG(error) << print() << L" Audio buffer overflow: " << buffered_audio << " samples. Further errors will not be notified";
+							audio_buffer_notified_ = true;
+						}
+					}
+					else if (buffered_audio < format_desc_.audio_cadence[0])
+					{
+						if (!audio_buffer_notified_)
+						{
+							CASPAR_LOG(error) << print() << L" Audio buffer underflow: " << buffered_audio << " samples. Further errors will not be notified";
+							audio_buffer_notified_ = true;
+						}
+					}
+					else if (audio_buffer_notified_)
+					{
+						audio_buffer_notified_ = false;
+						CASPAR_LOG(error) << print() << L" Previously notified audio buffer size error corrected.";
+					}
+				}
+				else
+					CASPAR_LOG(warning) << print() << L" GetBufferedAudioSampleFrameCount failed.";
+			}
+
 			unsigned int buffered_video;
 			if (SUCCEEDED(output_->GetBufferedVideoFrameCount(&buffered_video)))
 			{
@@ -257,10 +281,15 @@ public:
 				if (buffered_video == 0)
 					CASPAR_LOG(warning) << print() << L" Video buffer empty. Consider increasing the buffer depth.";
 			}
+			else
+				CASPAR_LOG(warning) << print() << L" GetBufferedVideoFrameCount failed.";
+
+			std::shared_ptr<core::read_frame> frame;
+			frame_buffer_.pop(frame);
+			send_completion_.try_completion();
 
 			if (config_.embedded_audio)
 				schedule_next_audio(frame->multichannel_view());
-
 			schedule_next_video(frame);
 		}
 		catch(...)
@@ -269,46 +298,9 @@ public:
 			exception_ = std::current_exception();
 			return E_FAIL;
 		}
-
 		return S_OK;
 	}
 		
-	STDMETHOD(RenderAudioSamples(BOOL preroll)) 
-	{
-		if (preroll)
-			return S_OK;
-		unsigned int buffered_audio;
-		if (SUCCEEDED(output_->GetBufferedAudioSampleFrameCount(&buffered_audio)))
-		{
-			graph_->set_value("buffered-audio", static_cast<double>(buffered_audio) / (format_desc_.audio_cadence[0] * num_audio_channels_ * 2));
-			if (buffered_audio >= bmdAudioSampleRate48kHz)
-			{
-				if (!audio_buffer_notified_)
-				{
-					CASPAR_LOG(error) << print() << L" Audio buffer overflow: " << buffered_audio << " samples. Further errors will not be notified";
-					audio_buffer_notified_ = true;
-				}
-			}
-			else if (buffered_audio < bmdAudioSampleRate48kHz * format_desc_.duration / format_desc_.time_scale)
-			{
-				if (!audio_buffer_notified_)
-				{
-					CASPAR_LOG(error) << print() << L" Audio buffer underflow: " << buffered_audio << " samples. Further errors will not be notified";
-					audio_buffer_notified_ = true;
-				}
-			}
-			else if (audio_buffer_notified_)
-			{
-				audio_buffer_notified_ = false;
-				CASPAR_LOG(error) << print() << L" Previously notified audio buffer size error corrected.";
-			}
-		}
-		else
-			CASPAR_LOG(warning) << print() << L" GetBufferedAudioSampleFrameCount failed.";
-
-		return S_OK;
-	}
-
 	STDMETHOD(Notify(/* [in] */ BMDNotifications topic, /* [in] */ ULONGLONG param1, /* [in] */ ULONGLONG param2))
 	{
 		if (topic != BMDNotifications::bmdStatusChanged)
@@ -326,7 +318,11 @@ public:
 			break;
 		case BMDDeckLinkStatusID::bmdDeckLinkStatusReferenceSignalLocked:
 			if (SUCCEEDED(status_->GetFlag(BMDDeckLinkStatusID::bmdDeckLinkStatusReferenceSignalLocked, &flag))) 
+			{
 				CASPAR_LOG(info) << print() << L" Reference signal: " << (flag ? L"locked" : L"missing");
+				if (flag && config_.embedded_audio)
+					fill_audio_buffer_after_reference_lock();
+			}
 			break;
 		case BMDDeckLinkStatusID::bmdDeckLinkStatusPCIExpressLinkWidth:
 			if (SUCCEEDED(status_->GetInt(BMDDeckLinkStatusID::bmdDeckLinkStatusPCIExpressLinkWidth, &int_value)))
@@ -338,7 +334,6 @@ public:
 		
 		return S_OK;
 	}
-
 
 	template<typename View>
 	void schedule_next_audio(const View& view)
@@ -386,13 +381,28 @@ public:
 	void schedule_next_video(const std::shared_ptr<core::read_frame>& frame)
 	{
 		CComPtr<IDeckLinkVideoFrame> frame2(new decklink_frame(frame, format_desc_, config_.key_only));
-		if(FAILED(output_->ScheduleVideoFrame(frame2, video_scheduled_, format_desc_.duration, format_desc_.time_scale)))
+		if (FAILED(output_->ScheduleVideoFrame(frame2, video_scheduled_, format_desc_.duration, format_desc_.time_scale)))
 			CASPAR_LOG(error) << print() << L" Failed to schedule video.";
 
 		video_scheduled_ += format_desc_.duration;
-
 		graph_->set_value("tick-time", tick_timer_.elapsed()*format_desc_.fps*0.5);
 		tick_timer_.restart();
+	}
+
+	// decklinks usually sync video to reference input delaying video frame, without stopping audio playout
+	// this causes audio buffer is consumed gradually to empty after few synces.
+	void fill_audio_buffer_after_reference_lock()
+	{
+		unsigned int buffered_video, buffered_audio;
+		if (FAILED(output_->GetBufferedAudioSampleFrameCount(&buffered_audio)) || FAILED(output_->GetBufferedVideoFrameCount(&buffered_video)))
+			return;
+		size_t audio_samples_required = (((buffered_video - 1) * format_desc_.audio_cadence[0]) - buffered_audio) * num_audio_channels_;
+		if (audio_samples_required < format_desc_.audio_cadence[0] / (5 * num_audio_channels_)) // ignore, if there is less than 1/5 frame samples missing
+			return;
+		core::audio_buffer silent_audio_buffer(audio_samples_required, 0);
+		auto audio = core::make_multichannel_view<int32_t>(silent_audio_buffer.begin(), silent_audio_buffer.end(), config_.audio_layout, num_audio_channels_);;
+		schedule_next_audio(audio);
+		CASPAR_LOG(warning) << print() << L" " << audio_samples_required / num_audio_channels_ << L" audio frames were added after reference lock.";
 	}
 
 	boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame)
