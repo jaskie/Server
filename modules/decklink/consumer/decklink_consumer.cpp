@@ -52,6 +52,8 @@
 
 namespace caspar { namespace decklink { 
 
+	const int TEMPERATURE_WARNING = 75;
+
 struct decklink_consumer : public IDeckLinkVideoOutputCallback, IDeckLinkNotificationCallback, boost::noncopyable
 {
 	const int										channel_index_;
@@ -102,10 +104,7 @@ public:
 		, model_name_(get_model_name(decklink_))
 		, format_desc_(format_desc)
 		, buffer_size_(config.buffer_depth()) // Minimum buffer-size 3.
-		, video_scheduled_(0)
-		, audio_scheduled_(0)
 	{
-		is_running_ = true;
 		current_presentation_delay_ = 0;
 				
 		frame_buffer_.set_capacity(1);
@@ -139,31 +138,17 @@ public:
 		set_latency(CComQIPtr<IDeckLinkConfiguration_v10_2>(decklink_), config.latency, print());
 		set_keyer(attributes_, keyer_, config.keyer, print());
 				
-		if (config.embedded_audio)
-			output_->BeginAudioPreroll();
-
-		for (uint32_t n = 0; n < buffer_size_; ++n)
-		{
-			if (config.embedded_audio)
-			{
-				core::audio_buffer silent_audio_buffer(format_desc_.audio_cadence[n % format_desc_.audio_cadence.size()] * num_audio_channels_, 0);
-				auto audio = core::make_multichannel_view<int32_t>(silent_audio_buffer.begin(), silent_audio_buffer.end(), config_.audio_layout, num_audio_channels_);;
-				schedule_next_audio(audio);
-			}
-			schedule_next_video(make_safe<core::read_frame>());
-		}
-
-		if (config.embedded_audio)
-			output_->EndAudioPreroll();
-
-		if (FAILED(output_->StartScheduledPlayback(0, format_desc_.time_scale, 1.0)))
-			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Failed to schedule playback."));
-
+		start_playback();
+		 
 		if (FAILED(notification_->Subscribe(BMDNotifications::bmdStatusChanged, this)))
 			CASPAR_LOG(warning) << print() << L" Failed to register notification callback.";
 		if (SUCCEEDED(status_->GetInt(BMDDeckLinkStatusID::bmdDeckLinkStatusDeviceTemperature, &prev_temperature_)))
-			CASPAR_LOG(info) << print() << L" Temperature: " << prev_temperature_ << " C.";
-
+		{
+			if (prev_temperature_ >= TEMPERATURE_WARNING)
+				CASPAR_LOG(warning) << print() << L" Temperature: " << prev_temperature_ << " C.";
+			else
+				CASPAR_LOG(info) << print() << L" Temperature: " << prev_temperature_ << " C.";
+		}
 		BMDReferenceStatus reference_status;
 		if (FAILED(output_->GetReferenceStatus(&reference_status)))
 			CASPAR_LOG(error) << print() << L" Reference signal: failed while querying status";
@@ -206,12 +191,8 @@ public:
 	STDMETHOD (QueryInterface(REFIID, LPVOID*))	{return E_NOINTERFACE;}
 	STDMETHOD_(ULONG, AddRef())					{return 1;}
 	STDMETHOD_(ULONG, Release())				{return 1;}
-	
-	STDMETHOD(ScheduledPlaybackHasStopped())
-	{
-		CASPAR_LOG(info) << print() << L" Scheduled playback has stopped.";
-		return S_OK;
-	}
+
+	STDMETHOD(ScheduledPlaybackHasStopped())    {return S_OK;}
 
 	STDMETHOD(ScheduledFrameCompleted(IDeckLinkVideoFrame* completed_frame, BMDOutputFrameCompletionResult result))
 	{
@@ -250,7 +231,7 @@ public:
 					{
 						if (!audio_buffer_notified_)
 						{
-							CASPAR_LOG(error) << print() << L" Audio buffer overflow: " << buffered_audio << " samples. Further errors will not be notified";
+							CASPAR_LOG(warning) << print() << L" Audio buffer overflow: " << buffered_audio << " samples. Further errors will not be notified";
 							audio_buffer_notified_ = true;
 						}
 					}
@@ -258,14 +239,14 @@ public:
 					{
 						if (!audio_buffer_notified_)
 						{
-							CASPAR_LOG(error) << print() << L" Audio buffer underflow: " << buffered_audio << " samples. Further errors will not be notified";
+							CASPAR_LOG(warning) << print() << L" Audio buffer underflow: " << buffered_audio << " samples. Further errors will not be notified";
 							audio_buffer_notified_ = true;
 						}
 					}
 					else if (audio_buffer_notified_)
 					{
 						audio_buffer_notified_ = false;
-						CASPAR_LOG(error) << print() << L" Previously notified audio buffer size error corrected.";
+						CASPAR_LOG(warning) << print() << L" Previously notified audio buffer size error corrected.";
 					}
 				}
 				else
@@ -310,18 +291,35 @@ public:
 		switch (param1)
 		{
 		case BMDDeckLinkStatusID::bmdDeckLinkStatusDeviceTemperature:
-			if (SUCCEEDED(status_->GetInt(BMDDeckLinkStatusID::bmdDeckLinkStatusDeviceTemperature, &int_value)) && std::abs(int_value - prev_temperature_) > 4)
+			if (SUCCEEDED(status_->GetInt(BMDDeckLinkStatusID::bmdDeckLinkStatusDeviceTemperature, &int_value)))
 			{
-				prev_temperature_ = int_value;
-				CASPAR_LOG(info) << print() << L" Temperature changed: " << int_value << " C";
+				if (int_value >= TEMPERATURE_WARNING && std::abs(int_value - prev_temperature_) > 1)
+				{
+					prev_temperature_ = int_value;
+					CASPAR_LOG(warning) << print() << L" Temperature changed: " << int_value << " C";
+				}
+				else if (std::abs(int_value - prev_temperature_) > 4)
+				{
+					prev_temperature_ = int_value;
+					CASPAR_LOG(info) << print() << L" Temperature changed: " << int_value << " C";
+				}
 			}
 			break;
 		case BMDDeckLinkStatusID::bmdDeckLinkStatusReferenceSignalLocked:
 			if (SUCCEEDED(status_->GetFlag(BMDDeckLinkStatusID::bmdDeckLinkStatusReferenceSignalLocked, &flag))) 
 			{
 				CASPAR_LOG(info) << print() << L" Reference signal: " << (flag ? L"locked" : L"missing");
-				if (flag && config_.embedded_audio)
-					fill_audio_buffer_after_reference_lock();
+				if (flag && config_.embedded_audio) 
+				{
+					// decklinks usually sync video to reference input delaying video frame, without stopping audio playout
+					// this causes audio buffer is consumed gradually to empty after few synces. The only solid solution is to restart playback
+					if (SUCCEEDED(output_->StopScheduledPlayback(0, nullptr, 0)))
+					{
+						CASPAR_LOG(debug) << print() << L" Scheduled playback stopped.";
+						is_running_ = false;
+						start_playback();
+					}
+				}
 			}
 			break;
 		case BMDDeckLinkStatusID::bmdDeckLinkStatusPCIExpressLinkWidth:
@@ -389,31 +387,11 @@ public:
 		tick_timer_.restart();
 	}
 
-	// decklinks usually sync video to reference input delaying video frame, without stopping audio playout
-	// this causes audio buffer is consumed gradually to empty after few synces.
-	void fill_audio_buffer_after_reference_lock()
-	{
-		unsigned int buffered_video, buffered_audio;
-		if (FAILED(output_->GetBufferedAudioSampleFrameCount(&buffered_audio)) || FAILED(output_->GetBufferedVideoFrameCount(&buffered_video)))
-			return;
-		size_t audio_samples_required = (((buffered_video - 1) * format_desc_.audio_cadence[0]) - buffered_audio) * num_audio_channels_;
-		if (audio_samples_required < format_desc_.audio_cadence[0] / (5 * num_audio_channels_)) // ignore, if there is less than 1/5 frame samples missing
-			return;
-		core::audio_buffer silent_audio_buffer(audio_samples_required, 0);
-		auto audio = core::make_multichannel_view<int32_t>(silent_audio_buffer.begin(), silent_audio_buffer.end(), config_.audio_layout, num_audio_channels_);;
-		schedule_next_audio(audio);
-		CASPAR_LOG(warning) << print() << L" " << audio_samples_required / num_audio_channels_ << L" audio frames were added after reference lock.";
-	}
-
 	boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame)
 	{
 		tbb::spin_mutex::scoped_lock lock(exception_mutex_);
 		if (exception_ != nullptr)
 			std::rethrow_exception(exception_);
-
-
-		if (!is_running_)
-			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Is not running."));
 
 		bool buffer_ready = false;
 
@@ -443,7 +421,32 @@ public:
 			boost::lexical_cast<std::wstring>(config_.device_index) + L" Fmt: " +  format_desc_.name;
 	}
 
+	void start_playback() 
+	{
+		video_scheduled_ = 0LL;
+		audio_scheduled_ = 0LL;
+		if (config_.embedded_audio)
+			output_->BeginAudioPreroll();
 
+		for (uint32_t n = 0; n < buffer_size_; ++n)
+		{
+			if (config_.embedded_audio)
+			{
+				core::audio_buffer silent_audio_buffer(format_desc_.audio_cadence[n % format_desc_.audio_cadence.size()] * num_audio_channels_, 0);
+				auto audio = core::make_multichannel_view<int32_t>(silent_audio_buffer.begin(), silent_audio_buffer.end(), config_.audio_layout, num_audio_channels_);;
+				schedule_next_audio(audio);
+			}
+			schedule_next_video(make_safe<core::read_frame>());
+		}
+
+		if (config_.embedded_audio)
+			output_->EndAudioPreroll();
+
+		if (FAILED(output_->StartScheduledPlayback(0, format_desc_.time_scale, 1.0)))
+			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Failed to schedule playback."));
+		is_running_ = true;
+		CASPAR_LOG(debug) << print() << L" Scheduled playback started.";
+	}
 
 };
 
