@@ -274,36 +274,42 @@ struct frame_muxer::implementation : boost::noncopyable
 		if (force_deinterlace)
 			filter_str = append_filter(filter_str, "yadif");
 
-		auto filtered_fps = in_fps_;
-
 		if (filter_str_.empty())
 		{
-			if (format_desc_.field_mode != field_mode::progressive && frame_mode != field_mode::progressive 
-				&& (format_desc_.width > static_cast<uint32_t>(frame->width) || format_desc_.height > static_cast<uint32_t>(fixed_height)))
+			auto filtered_fps = in_fps_;
+			auto format_fps = boost::rational<int>(format_desc_.time_scale, format_desc_.duration);
+			if ((format_desc_.width > static_cast<uint32_t>(frame->width) || format_desc_.height > static_cast<uint32_t>(fixed_height))) // upscaling
 			{
-				filter_str = append_filter(filter_str, "bwdif");
-				filter_str = append_filter(filter_str, (boost::format("scale=w=%1%:h=%2%") % format_desc_.width %format_desc_.height).str());
-				filter_str = append_filter(filter_str, format_desc_.field_mode == field_mode::lower ? "interlace=scan=bff" : "interlace=scan=tff");
+				if (frame_mode != field_mode::progressive)
+				{
+					filter_str = append_filter(filter_str, "bwdif");
+					filtered_fps *= 2;
+				}
+				filter_str = append_filter(filter_str, (boost::format("scale=w=%1%:h=%2%") % format_desc_.width % format_desc_.height).str());
+				if (format_fps * 2 == filtered_fps && format_desc_.field_mode != field_mode::progressive)
+				{
+					filter_str = append_filter(filter_str, format_desc_.field_mode == field_mode::lower ? "interlace=scan=bff" : "interlace=scan=tff");
+					filtered_fps /= 2;
+				}
 			}
-			else
-				if (format_desc_.width != static_cast<uint32_t>(frame->width) || format_desc_.height != static_cast<uint32_t>(fixed_height))
-					filter_str = append_filter(filter_str, (boost::format("scale=w=%1%:h=%2%:interl=1") %format_desc_.width %format_desc_.height).str());
-
-			if (format_desc_.field_mode == field_mode::progressive && frame_mode != field_mode::progressive)
+			else if (format_desc_.width != static_cast<uint32_t>(frame->width) || format_desc_.height != static_cast<uint32_t>(fixed_height)) // downscaling
 			{
-				filter_str = append_filter(filter_str, "bwdif");
-				filtered_fps *= 2;
-			}
+				if (frame_mode == field_mode::progressive)
+					filter_str = append_filter(filter_str, (boost::format("scale=w=%1%:h=%2%") % format_desc_.width % format_desc_.height).str());
+				else
+					filter_str = append_filter(filter_str, (boost::format("scale=w=%1%:h=%2%:interl=1") % format_desc_.width % format_desc_.height).str());
 
-			if (format_desc_.field_mode != field_mode::progressive && frame_mode == field_mode::progressive && filtered_fps >= boost::rational<int>(format_desc_.time_scale * 2, format_desc_.duration))
+				if (format_fps * 2 == filtered_fps && format_desc_.field_mode != field_mode::progressive)
+				{
+					filter_str = append_filter(filter_str, format_desc_.field_mode == field_mode::lower ? "interlace=scan=bff" : "interlace=scan=tff");
+					filtered_fps /= 2;
+				} else if (format_desc_.field_mode == field_mode::progressive)
+					filter_str = append_filter(filter_str, "yadif");
+			}
+			if (format_fps != filtered_fps)
 			{
-				filter_str = append_filter(filter_str, format_desc_.field_mode == field_mode::lower ? "interlace=scan=bff" : "interlace=scan=tff");
-				filtered_fps /= 2;
+				filter_str = append_filter(filter_str, (boost::format("fps=fps=%1%/%2%") % format_desc_.time_scale % format_desc_.duration).str());
 			}
-
-			if (filtered_fps != boost::rational<int>(format_desc_.time_scale, format_desc_.duration))
-				filter_str = append_filter(filter_str, (boost::format("fps=fps=%1%/%2%") % format_desc_.time_scale %format_desc_.duration).str());
-
 		}
 		auto out_pix_fmts = std::vector<AVPixelFormat>();
 		out_pix_fmts.push_back(AV_PIX_FMT_BGRA);
