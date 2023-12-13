@@ -303,10 +303,30 @@ struct frame_muxer::implementation : boost::noncopyable
 				{
 					filter_str = append_filter(filter_str, format_desc_.field_mode == field_mode::lower ? "interlace=scan=bff" : "interlace=scan=tff");
 					filtered_fps /= 2;
-				} else if (format_desc_.field_mode == field_mode::progressive)
-					filter_str = append_filter(filter_str, "yadif");
+				}
+				else if (frame_mode != field_mode::progressive && format_desc_.field_mode == field_mode::progressive)
+				{
+					if (format_fps == filtered_fps || format_fps * 2 == filtered_fps)
+						filter_str = append_filter(filter_str, "yadif");
+					else
+					{
+						filter_str = append_filter(filter_str, "yadif=mode=1");
+						filtered_fps *= 2;
+					}
+				}
 			}
-			if (format_fps != filtered_fps)
+			else // no scaling
+				if (frame_mode != field_mode::progressive && format_desc_.field_mode == field_mode::progressive)
+				{
+					if (format_fps == filtered_fps || format_fps * 2 == filtered_fps)
+						filter_str = append_filter(filter_str, "yadif");
+					else
+					{
+						filter_str = append_filter(filter_str, "yadif=mode=1");
+						filtered_fps *= 2;
+					}
+				}
+			if (format_fps != filtered_fps) // fps adjust
 			{
 				filter_str = append_filter(filter_str, (boost::format("fps=fps=%1%/%2%") % format_desc_.time_scale % format_desc_.duration).str());
 			}
