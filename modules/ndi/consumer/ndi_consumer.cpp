@@ -140,7 +140,7 @@ namespace caspar {
 				, executor_(print())
 			{
 				current_encoding_delay_ = 0;
-				executor_.set_capacity(1);
+				executor_.set_capacity(3);
 				graph_->set_text(print());
 				graph_->set_color("audio-send-time", diagnostics::color(0.5f, 1.0f, 0.1f));
 				graph_->set_color("video-send-time", diagnostics::color(1.0f, 1.0f, 0.1f));
@@ -153,9 +153,12 @@ namespace caspar {
 
 			~ndi_consumer()
 			{
-				if (ndi_send_)
-					ndi_lib_->NDIlib_send_destroy(ndi_send_);
-				CASPAR_LOG(info) << print() << L" Successfully Uninitialized.";
+				executor_.invoke([&]
+				{
+					if (ndi_send_)
+						ndi_lib_->NDIlib_send_destroy(ndi_send_);
+					CASPAR_LOG(info) << print() << L" Successfully Uninitialized.";
+				});
 			}
 
 			bool do_send(const safe_ptr<core::read_frame>& frame)
