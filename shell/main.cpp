@@ -167,9 +167,19 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 			allow_multiple_instances = true;
 	}
 
-	if (!allow_multiple_instances && tray_icon::show_previous_instance())
-		return 0;
+	HANDLE single_instance_mutex = nullptr;
 
+	if (!allow_multiple_instances)
+	{
+		single_instance_mutex = CreateMutex(NULL, TRUE, CASPAR_NAME);
+		if (GetLastError() == ERROR_ALREADY_EXISTS)
+		{
+			tray_icon::show_previous_instance();
+			if (single_instance_mutex)
+				CloseHandle(single_instance_mutex);
+			return 0;
+		}
+	}
 
 	// Create and setup console window
 	console console(hide_on_startup);
@@ -376,6 +386,8 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 		std::wcout << L"\n\nCasparCG will automatically shutdown. See the log file located at the configured log-path folder for more information.\n\n";
 		Sleep(4000);
 	}
+	if (single_instance_mutex)
+		CloseHandle(single_instance_mutex);
 	if (wait_for_keypress)
 		system("pause");
 	console.terminate();
