@@ -57,6 +57,8 @@ enum severity_level
 	fatal
 };
 
+size_t peak_memory_usage();
+
 template< typename CharT, typename TraitsT >
 inline std::basic_ostream< CharT, TraitsT >& operator<< (
 	std::basic_ostream< CharT, TraitsT >& strm, severity_level lvl)
@@ -93,7 +95,7 @@ BOOST_LOG_DECLARE_GLOBAL_LOGGER_INIT(logger, caspar_logger)
 
 #define CASPAR_LOG_CURRENT_EXCEPTION() \
 	try\
-	{CASPAR_LOG(error) << boost::current_exception_diagnostic_information().c_str();}\
+	{CASPAR_LOG(error) << boost::current_exception_diagnostic_information().c_str() << L"MaxMem=" << caspar::log::peak_memory_usage();}\
 	catch(...){}
 
 void set_log_level(const std::wstring& lvl);

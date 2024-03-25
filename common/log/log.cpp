@@ -34,6 +34,7 @@
 #include <iomanip>
 #include <string>
 #include <ostream>
+#include <Psapi.h>
 
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
@@ -189,6 +190,14 @@ void add_file_sink(const std::wstring& folder)
 	{
 		std::wcerr << L"Failed to Setup File Logging Sink" << std::endl << std::endl;
 	}
+}
+
+size_t peak_memory_usage()
+{
+	PROCESS_MEMORY_COUNTERS pmc;
+	if (::GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc)))
+		return pmc.PeakWorkingSetSize / 1048576;
+	return 0;
 }
 
 void set_log_level(const std::wstring& lvl)
