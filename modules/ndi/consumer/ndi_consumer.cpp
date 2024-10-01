@@ -68,11 +68,11 @@ namespace caspar {
 			return result.checksum();
 		}
 
-		NDIlib_send_instance_t create_ndi_send(const NDIlib_v2* ndi_lib, const std::string ndi_name, const std::string groups)
+		NDIlib_send_instance_t create_ndi_send(const NDIlib_v2* ndi_lib, const std::string ndi_name, const std::string groups, bool clock_video)
 		{
 			if (!ndi_lib)
 				BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(" NDI library not loaded"));
-			NDIlib_send_create_t NDI_send_create_desc = { ndi_name.c_str(), groups.c_str(), true, false };
+			NDIlib_send_create_t NDI_send_create_desc = { ndi_name.c_str(), groups.c_str(), clock_video, false };
 			return ndi_lib->NDIlib_send_create(&NDI_send_create_desc);
 		}
 
@@ -132,7 +132,7 @@ namespace caspar {
 				, is_alpha_(is_alpha)
 				, is_blocking_(is_blocking)
 				, ndi_lib_(load_ndi())
-				, ndi_send_(create_ndi_send(ndi_lib_, ndi_name, groups))
+				, ndi_send_(create_ndi_send(ndi_lib_, ndi_name, groups, is_blocking))
 				, input_audio_channel_count_(channel_layout.num_channels)
 				, sws_(is_alpha ? nullptr : sws_getContext(format_desc.width, format_desc.height, AV_PIX_FMT_BGRA, format_desc.width, format_desc.height, AV_PIX_FMT_UYVY422, SWS_POINT, NULL, NULL, NULL), [](SwsContext * ctx) { sws_freeContext(ctx); })
 				, swr_(create_swr(format_desc_, channel_layout_, input_audio_channel_count_), [](SwrContext * ctx) { swr_free(&ctx); })
@@ -166,9 +166,7 @@ namespace caspar {
 				try
 				{
 					send_video(frame);
-					audio_send_timer_.restart();
 					send_audio(frame);
-					graph_->set_value("audio-send-time", audio_send_timer_.elapsed() * format_desc_.fps * 0.5f);
 					current_encoding_delay_ = frame->get_age_millis();
 					graph_->set_value("tick-time", tick_timer_.elapsed() * format_desc_.fps * 0.5f);
 					tick_timer_.restart();
@@ -180,7 +178,7 @@ namespace caspar {
 				}
 				return true;
 			}
-						
+
 			boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame)
 			{
 				if (is_blocking_)
@@ -215,16 +213,17 @@ namespace caspar {
 					av_image_fill_arrays(src_data, src_linesize, frame->image_data().begin(), AV_PIX_FMT_BGRA, format_desc_.width, format_desc_.height, 1);
 					av_image_fill_arrays(dest_data, dst_linesize, &send_frame_buffer_.front(), AV_PIX_FMT_UYVY422, format_desc_.width, format_desc_.height, 16);
 					sws_scale(sws_.get(), src_data, src_linesize, 0, format_desc_.height, dest_data, dst_linesize);
-					graph_->set_value("frame-convert-time", frame_convert_timer_.elapsed() * format_desc_.fps * 0.5f);
+					graph_->set_value("frame-convert-time", frame_convert_timer_.elapsed() * format_desc_.fps);
 					ndi_frame->p_data = &send_frame_buffer_.front();
 				}
 				video_send_timer_.restart();
 				ndi_lib_->NDIlib_send_send_video(ndi_send_, ndi_frame.get());
-				graph_->set_value("video-send-time", video_send_timer_.elapsed() * format_desc_.fps * 0.5f);
+				graph_->set_value("video-send-time", video_send_timer_.elapsed() * format_desc_.fps);
 			}
 
 			void send_audio(const safe_ptr<core::read_frame>& frame)
 			{
+				audio_send_timer_.restart();
 				auto audio_frame = create_audio_frame(channel_layout_, frame->multichannel_view().num_samples(), format_desc_.audio_sample_rate);
 				const uint8_t* in[] = { reinterpret_cast<const uint8_t*>(frame->audio_data().begin()) };
 				int converted_sample_count = swr_convert(swr_.get(),
@@ -233,6 +232,7 @@ namespace caspar {
 				if (converted_sample_count != audio_frame->no_samples)
 					CASPAR_LOG(warning) << print() << L" Not all samples were converted (" << converted_sample_count << L" of " << audio_frame->no_samples << L").";
 				ndi_lib_->NDIlib_util_send_send_audio_interleaved_32f(ndi_send_, audio_frame.get());
+				graph_->set_value("audio-send-time", audio_send_timer_.elapsed() * format_desc_.fps);
 			}
 
 			std::wstring print() const

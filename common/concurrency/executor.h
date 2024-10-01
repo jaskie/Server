@@ -89,14 +89,14 @@ class executor : boost::noncopyable
 	
 	typedef tbb::concurrent_bounded_queue<std::function<void()>> function_queue;
 	function_queue execution_queue_[priority_count];
-		
+
 	template<typename Func>
 	auto create_task(Func&& func) -> boost::packaged_task<decltype(func())> // noexcept
 	{	
 		typedef boost::packaged_task<decltype(func())> task_type;
-				
+
 		auto task = task_type(std::forward<Func>(func));
-		
+
 		task.set_wait_callback(std::function<void(task_type&)>([=](task_type& my_task) // The std::function wrapper is required in order to add ::result_type to functor class.
 		{
 			try
@@ -106,12 +106,12 @@ class executor : boost::noncopyable
 			}
 			catch(boost::task_already_started&){}
 		}));
-				
+
 		return std::move(task);
 	}
 
 public:
-		
+
 	explicit executor(const std::wstring& name) : name_(narrow(name)) // noexcept
 	{
 		is_running_ = true;
@@ -143,17 +143,17 @@ public:
 				SetThreadPriority(GetCurrentThread(), BELOW_NORMAL_PRIORITY_CLASS);
 		});
 	}
-	
+
 	void clear()
-	{		
+	{
 		std::function<void()> func;
 		while(execution_queue_[normal_priority].try_pop(func));
 		while(execution_queue_[high_priority].try_pop(func));
 	}
-				
+
 	void stop() // noexcept
 	{
-		is_running_ = false;	
+		is_running_ = false;
 		execution_queue_[normal_priority].try_push([]{}); // Wake the execution thread.
 	}
 
@@ -167,10 +167,10 @@ public:
 		if(boost::this_thread::get_id() != thread_.get_id())
 			thread_.join();
 	}
-				
+
 	template<typename Func>
 	auto begin_invoke(Func&& func, task_priority priority = normal_priority) -> boost::unique_future<decltype(func())> // noexcept
-	{	
+	{
 		if(!is_running_)
 			BOOST_THROW_EXCEPTION(invalid_operation() << msg_info("executor not running."));
 
@@ -196,10 +196,10 @@ public:
 
 		if(priority != normal_priority)
 			execution_queue_[normal_priority].push(nullptr);
-					
-		return std::move(future);		
+
+		return std::move(future);
 	}
-	
+
 	template<typename Func>
 	auto invoke(Func&& func, task_priority prioriy = normal_priority) -> decltype(func()) // noexcept
 	{
@@ -219,14 +219,14 @@ public:
 		{
 			if(func)
 				func();
-		}	
+		}
 	}
-	
+
 	function_queue::size_type capacity() const /*noexcept*/ { return execution_queue_[normal_priority].capacity();	}
 	function_queue::size_type size() const /*noexcept*/ { return execution_queue_[normal_priority].size();	}
 	bool empty() const /*noexcept*/	{ return execution_queue_[normal_priority].empty();	}
 	bool is_running() const /*noexcept*/ { return is_running_; }	
-		
+
 private:
 	
 	void execute() // noexcept
@@ -272,7 +272,7 @@ private:
 		{
 			CASPAR_LOG_CURRENT_EXCEPTION();
 		}
-	}	
+	}
 };
 
 }
