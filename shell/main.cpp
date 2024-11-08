@@ -104,7 +104,7 @@ void print_info()
 	CASPAR_LOG(info) << caspar::get_cpu_info();
 	CASPAR_LOG(info) << caspar::get_system_product_name();
 	
-	CASPAR_LOG(info) << L"Decklink: " << caspar::decklink::get_version();
+	CASPAR_LOG(info) << L"Decklink: " << caspar::decklink::get_version() << L" (required: " << caspar::decklink::required_version() << L")";
 	BOOST_FOREACH(auto device, caspar::decklink::get_device_list())
 		CASPAR_LOG(info) << L" - " << device;	
 		

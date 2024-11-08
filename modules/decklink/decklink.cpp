@@ -33,6 +33,7 @@
 #include <core/producer/frame/frame_factory.h>
 
 #include "interop/DeckLinkAPI_h.h"
+#include "interop/DeckLinkAPIVersion.h"
 
 #pragma warning(push)
 #pragma warning(disable : 4996)
@@ -67,12 +68,17 @@ std::wstring get_version()
 	try
 	{
 		CComPtr<IDeckLinkIterator> pDecklinkIterator;
-		if(SUCCEEDED(pDecklinkIterator.CoCreateInstance(CLSID_CDeckLinkIterator)))		
+		if(SUCCEEDED(pDecklinkIterator.CoCreateInstance(CLSID_CDeckLinkIterator)))
 			version = get_version(pDecklinkIterator);
 	}
 	catch(...){}
 
 	return version;
+}
+
+std::wstring required_version()
+{
+	return widen(BLACKMAGIC_DECKLINK_API_VERSION_STRING);
 }
 
 std::vector<std::wstring> get_device_list()

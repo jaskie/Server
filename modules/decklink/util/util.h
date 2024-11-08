@@ -44,8 +44,8 @@ namespace caspar { namespace decklink {
 		~com_initializer() { if (SUCCEEDED(result_)) ::CoUninitialize(); }
 	};
 
-	
-static BMDDisplayMode get_decklink_video_format(core::video_format::type fmt) 
+
+static BMDDisplayMode get_decklink_video_format(core::video_format::type fmt)
 {
 	switch(fmt)
 	{
@@ -89,33 +89,33 @@ static core::video_format::type get_caspar_video_format(BMDDisplayMode fmt)
 {
 	switch(fmt)
 	{
-	case bmdModePAL:						return core::video_format::pal;		
-	case bmdModeNTSC:						return core::video_format::ntsc;		
-	case bmdModeHD720p50:					return core::video_format::x720p5000;	
-	case bmdModeHD720p5994:					return core::video_format::x720p5994;	
-	case bmdModeHD720p60:					return core::video_format::x720p6000;	
-	case bmdModeHD1080p2398:				return core::video_format::x1080p2398;	
-	case bmdModeHD1080p24:					return core::video_format::x1080p2400;	
-	case bmdModeHD1080i50:					return core::video_format::x1080i5000;	
-	case bmdModeHD1080i5994:				return core::video_format::x1080i5994;	
-	case bmdModeHD1080i6000:				return core::video_format::x1080i6000;	
-	case bmdModeHD1080p25:					return core::video_format::x1080p2500;	
-	case bmdModeHD1080p2997:				return core::video_format::x1080p2997;	
-	case bmdModeHD1080p30:					return core::video_format::x1080p3000;	
-	case bmdModeHD1080p50:					return core::video_format::x1080p5000;	
-	case bmdModeHD1080p5994:				return core::video_format::x1080p5994;	
-	case bmdModeHD1080p6000:				return core::video_format::x1080p6000;	
-	case bmdMode2k2398:						return core::video_format::x1556p2398;	
-	case bmdMode2k24:						return core::video_format::x1556p2400;	
-	case bmdMode2k25:						return core::video_format::x1556p2500;	
-	case bmdMode4K2160p2398:				return core::video_format::x2160p2398;	
-	case bmdMode4K2160p24:					return core::video_format::x2160p2400;	
-	case bmdMode4K2160p25:					return core::video_format::x2160p2500;	
-	case bmdMode4K2160p2997:				return core::video_format::x2160p2997;	
-	case bmdMode4K2160p30:					return core::video_format::x2160p3000;	
-	case bmdMode4K2160p50:					return core::video_format::x2160p5000;	
+	case bmdModePAL:						return core::video_format::pal;
+	case bmdModeNTSC:						return core::video_format::ntsc;
+	case bmdModeHD720p50:					return core::video_format::x720p5000;
+	case bmdModeHD720p5994:					return core::video_format::x720p5994;
+	case bmdModeHD720p60:					return core::video_format::x720p6000;
+	case bmdModeHD1080p2398:				return core::video_format::x1080p2398;
+	case bmdModeHD1080p24:					return core::video_format::x1080p2400;
+	case bmdModeHD1080i50:					return core::video_format::x1080i5000;
+	case bmdModeHD1080i5994:				return core::video_format::x1080i5994;
+	case bmdModeHD1080i6000:				return core::video_format::x1080i6000;
+	case bmdModeHD1080p25:					return core::video_format::x1080p2500;
+	case bmdModeHD1080p2997:				return core::video_format::x1080p2997;
+	case bmdModeHD1080p30:					return core::video_format::x1080p3000;
+	case bmdModeHD1080p50:					return core::video_format::x1080p5000;
+	case bmdModeHD1080p5994:				return core::video_format::x1080p5994;
+	case bmdModeHD1080p6000:				return core::video_format::x1080p6000;
+	case bmdMode2k2398:						return core::video_format::x1556p2398;
+	case bmdMode2k24:						return core::video_format::x1556p2400;
+	case bmdMode2k25:						return core::video_format::x1556p2500;
+	case bmdMode4K2160p2398:				return core::video_format::x2160p2398;
+	case bmdMode4K2160p24:					return core::video_format::x2160p2400;
+	case bmdMode4K2160p25:					return core::video_format::x2160p2500;
+	case bmdMode4K2160p2997:				return core::video_format::x2160p2997;
+	case bmdMode4K2160p30:					return core::video_format::x2160p3000;
+	case bmdMode4K2160p50:					return core::video_format::x2160p5000;
 	case bmdMode4K2160p60:					return core::video_format::x2160p6000;
-	default:								return core::video_format::invalid;	
+	default:								return core::video_format::invalid;
 	}
 }
 
@@ -166,11 +166,11 @@ static std::wstring get_version(T& iterator)
 	CComQIPtr<IDeckLinkAPIInformation> info = iterator;
 	if (!info)
 		return L"Unknown";
-	
-	BSTR ver;		
+
+	BSTR ver;
 	info->GetString(BMDDeckLinkAPIVersion, &ver);
-		
-	return ver;					
+
+	return ver;
 }
 
 static CComPtr<IDeckLink> get_device(size_t device_index)
@@ -185,7 +185,7 @@ static CComPtr<IDeckLink> get_device(size_t device_index)
 
 	if(n != device_index || !decklink)
 		BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Decklink device not found.") << arg_name_info("device_index") << arg_value_info(boost::lexical_cast<std::string>(device_index)));
-		
+
 	return decklink;
 }
 
@@ -248,17 +248,17 @@ public:
 	
 	// IUnknown
 
-	STDMETHOD (QueryInterface(REFIID, LPVOID*))		
+	STDMETHOD (QueryInterface(REFIID, LPVOID*))
 	{
 		return E_NOINTERFACE;
 	}
 	
-	STDMETHOD_(ULONG,			AddRef())			
+	STDMETHOD_(ULONG,			AddRef())
 	{
 		return ++ref_count_;
 	}
 
-	STDMETHOD_(ULONG,			Release())			
+	STDMETHOD_(ULONG,			Release())
 	{
 		if(--ref_count_ == 0)
 			delete this;
@@ -267,10 +267,10 @@ public:
 
 	// IDecklinkVideoFrame
 
-	STDMETHOD_(long,			GetWidth())			{return format_desc_.width;}        
-    STDMETHOD_(long,			GetHeight())		{return format_desc_.height;}        
-    STDMETHOD_(long,			GetRowBytes())		{return format_desc_.width*4;}        
-	STDMETHOD_(BMDPixelFormat,	GetPixelFormat())	{return bmdFormat8BitBGRA;}        
+	STDMETHOD_(long,			GetWidth())			{return format_desc_.width;}
+    STDMETHOD_(long,			GetHeight())		{return format_desc_.height;}
+    STDMETHOD_(long,			GetRowBytes())		{return format_desc_.width*4;}
+	STDMETHOD_(BMDPixelFormat,	GetPixelFormat())	{return bmdFormat8BitBGRA;}
     STDMETHOD_(BMDFrameFlags,	GetFlags())			{return bmdFrameFlagDefault;}
         
     STDMETHOD(GetBytes(void** buffer))
@@ -303,10 +303,10 @@ public:
 		return S_OK;
 	}
         
-    STDMETHOD(GetTimecode(BMDTimecodeFormat format, IDeckLinkTimecode** timecode)){return S_FALSE;}        
-    STDMETHOD(GetAncillaryData(IDeckLinkVideoFrameAncillary** ancillary))		  {return S_FALSE;}
+    STDMETHOD(GetTimecode(BMDTimecodeFormat format, IDeckLinkTimecode** timecode))	{return S_FALSE;}
+    STDMETHOD(GetAncillaryData(IDeckLinkVideoFrameAncillary** ancillary))			{return S_FALSE;}
 
-	// decklink_frame	
+	// decklink_frame
 
 	const boost::iterator_range<const int32_t*> audio_data()
 	{
@@ -388,25 +388,25 @@ static void set_keyer(
 	{
 		BOOL value = true;
 		if (SUCCEEDED(attributes->GetFlag(BMDDeckLinkSupportsInternalKeying, &value)) && !value)
-			CASPAR_LOG(error) << print << L" Failed to enable internal keyer.";	
-		else if (FAILED(decklink_keyer->Enable(FALSE)))			
-			CASPAR_LOG(error) << print << L" Failed to enable internal keyer.";			
-		else if (FAILED(decklink_keyer->SetLevel(255)))			
+			CASPAR_LOG(error) << print << L" Failed to enable internal keyer.";
+		else if (FAILED(decklink_keyer->Enable(FALSE)))
+			CASPAR_LOG(error) << print << L" Failed to enable internal keyer.";
+		else if (FAILED(decklink_keyer->SetLevel(255)))
 			CASPAR_LOG(error) << print << L" Failed to set key-level to max.";
 		else
-			CASPAR_LOG(info) << print << L" Enabled internal keyer.";		
+			CASPAR_LOG(info) << print << L" Enabled internal keyer.";
 	}
 	else if (keyer == configuration::external_keyer)
 	{
 		BOOL value = true;
 		if (SUCCEEDED(attributes->GetFlag(BMDDeckLinkSupportsExternalKeying, &value)) && !value)
-			CASPAR_LOG(error) << print << L" Failed to enable external keyer.";	
-		else if (FAILED(decklink_keyer->Enable(TRUE)))			
-			CASPAR_LOG(error) << print << L" Failed to enable external keyer.";	
-		else if (FAILED(decklink_keyer->SetLevel(255)))			
+			CASPAR_LOG(error) << print << L" Failed to enable external keyer.";
+		else if (FAILED(decklink_keyer->Enable(TRUE)))
+			CASPAR_LOG(error) << print << L" Failed to enable external keyer.";
+		else if (FAILED(decklink_keyer->SetLevel(255)))
 			CASPAR_LOG(error) << print << L" Failed to set key-level to max.";
 		else
-			CASPAR_LOG(info) << print << L" Enabled external keyer.";			
+			CASPAR_LOG(info) << print << L" Enabled external keyer.";
 	}
 }
 
