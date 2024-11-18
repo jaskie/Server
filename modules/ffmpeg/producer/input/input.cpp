@@ -101,27 +101,38 @@ struct input::implementation : boost::noncopyable
 
 	safe_ptr<AVCodecContext> open_audio_codec(AVStream** stream)
 	{
-		AVCodec* decoder;
+		const AVCodec* decoder;
 		int index = THROW_ON_ERROR2(av_find_best_stream(format_context_.get(), AVMEDIA_TYPE_AUDIO, -1, -1, &decoder, 0), print());
-		THROW_ON_ERROR2(avcodec_open2(format_context_->streams[index]->codec, decoder, NULL), print());
+		if (!decoder)
+			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Audio decoder not found."));
+		AVCodecContext *ctx = avcodec_alloc_context3(decoder);
+		if (!ctx)
+			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Audio codec context not created."));
+		avcodec_parameters_to_context(ctx, format_context_->streams[index]->codecpar);
+		THROW_ON_ERROR2(avcodec_open2(ctx, decoder, NULL), print());
 		audio_stream_index_ = index;
 		*stream = format_context_->streams[index];
-		return safe_ptr<AVCodecContext>(format_context_->streams[index]->codec, avcodec_close);
+		return safe_ptr<AVCodecContext>(ctx, [](AVCodecContext* c) { avcodec_free_context(&c); });
 	}
 	
 	safe_ptr<AVCodecContext> open_video_codec(AVStream** stream)
 	{
-		AVCodec* decoder;
+		const AVCodec *decoder;
 		int index = THROW_ON_ERROR2(av_find_best_stream(format_context_.get(), AVMEDIA_TYPE_VIDEO, -1, -1, &decoder, 0), print());
-		if (tbb_avcodec_open(format_context_->streams[index]->codec, decoder, NULL) < 0)
+		if (!decoder)
+			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Video decoder not found."));
+		AVCodecContext* ctx = avcodec_alloc_context3(decoder);
+		if (!ctx)
+			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info(narrow(print()) + " Video codec context not created."));
+		avcodec_parameters_to_context(ctx, format_context_->streams[index]->codecpar);
+		if (tbb_avcodec_open(ctx, decoder, NULL) < 0)
 		{
 			CASPAR_LOG(debug) << print() << L" Multithreaded avcodec_open2 failed";
-			format_context_->streams[index]->codec->thread_count = 1;
-			THROW_ON_ERROR2(avcodec_open2(format_context_->streams[index]->codec, decoder, NULL), print());
+			THROW_ON_ERROR2(avcodec_open2(ctx, decoder, NULL), print());
 		}
 		video_stream_index_ = index;
-		*stream = format_context_->streams[index]; 
-		return safe_ptr<AVCodecContext>(format_context_->streams[index]->codec, avcodec_close);
+		*stream = format_context_->streams[index];
+		return safe_ptr<AVCodecContext>(ctx, [](AVCodecContext* c) { avcodec_free_context(&c); });
 	}
 
 	void try_pop_audio(std::shared_ptr<AVPacket>& packet)
@@ -200,7 +211,6 @@ struct input::implementation : boost::noncopyable
 						THROW_ON_ERROR(ret, "av_read_frame", print());
 						if (packet->stream_index == video_stream_index_ && packet->size > 0)
 						{
-							THROW_ON_ERROR2(av_dup_packet(packet.get()), print());
 							if (!video_buffer_.try_push(packet))
 							{
 								video_buffer_.clear();
@@ -211,7 +221,6 @@ struct input::implementation : boost::noncopyable
 						}
 						if (packet->stream_index == audio_stream_index_ && packet->size > 0)
 						{
-							THROW_ON_ERROR2(av_dup_packet(packet.get()), print());
 							if (!audio_buffer_.try_push(packet))
 							{
 								audio_buffer_.clear();

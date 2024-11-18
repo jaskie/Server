@@ -94,9 +94,8 @@ safe_ptr<AVPacket> create_packet()
 }
 
 std::shared_ptr<AVFrame> create_frame()
-{	
-	std::shared_ptr<AVFrame> frame(av_frame_alloc(), [](AVFrame* f) { av_frame_free(&f);});
-	return frame;
+{
+	return std::shared_ptr<AVFrame>(av_frame_alloc(), [](AVFrame* f) { av_frame_free(&f); });
 }
 
 core::field_mode::type get_mode(const AVFrame& frame)
@@ -111,7 +110,7 @@ core::pixel_format::type get_pixel_format(AVPixelFormat pix_fmt)
 {
 	switch(pix_fmt)
 	{
-	case CASPAR_PIX_FMT_LUMA:	return core::pixel_format::luma;
+	case CASPAR_PIX_FMT_LUMA:		return core::pixel_format::luma;
 	case AV_PIX_FMT_GRAY8:			return core::pixel_format::gray;
 	case AV_PIX_FMT_BGRA:			return core::pixel_format::bgra;
 	case AV_PIX_FMT_ARGB:			return core::pixel_format::argb;
@@ -123,15 +122,17 @@ core::pixel_format::type get_pixel_format(AVPixelFormat pix_fmt)
 	case AV_PIX_FMT_YUV411P:		return core::pixel_format::ycbcr;
 	case AV_PIX_FMT_YUV410P:		return core::pixel_format::ycbcr;
 	case AV_PIX_FMT_YUVA420P:		return core::pixel_format::ycbcra;
-	default:					return core::pixel_format::invalid;
+	default:						return core::pixel_format::invalid;
 	}
 }
 
 core::pixel_format_desc get_pixel_format_desc(AVPixelFormat pix_fmt, size_t width, size_t height)
 {
 	// Get linesizes
-	AVPicture dummy_pict;	
-	avpicture_fill(&dummy_pict, nullptr, (AVPixelFormat)(pix_fmt == CASPAR_PIX_FMT_LUMA ? AV_PIX_FMT_GRAY8 : pix_fmt), width, height);
+	uint8_t* data[4];
+	int linesize[4];
+
+	FF_RET(av_image_fill_arrays(data, linesize, NULL, (AVPixelFormat)(pix_fmt == CASPAR_PIX_FMT_LUMA ? AV_PIX_FMT_GRAY8 : pix_fmt), width, height, 1), "get_pixel_format_desc.av_image_fill_arrays");
 
 	core::pixel_format_desc desc;
 	desc.pix_fmt = get_pixel_format(pix_fmt);
@@ -141,7 +142,7 @@ core::pixel_format_desc get_pixel_format_desc(AVPixelFormat pix_fmt, size_t widt
 	case core::pixel_format::gray:
 	case core::pixel_format::luma:
 		{
-			desc.planes.push_back(core::pixel_format_desc::plane(dummy_pict.linesize[0], height, 1));						
+			desc.planes.push_back(core::pixel_format_desc::plane(linesize[0], height, 1));
 			return desc;
 		}
 	case core::pixel_format::bgra:
@@ -149,25 +150,25 @@ core::pixel_format_desc get_pixel_format_desc(AVPixelFormat pix_fmt, size_t widt
 	case core::pixel_format::rgba:
 	case core::pixel_format::abgr:
 		{
-			desc.planes.push_back(core::pixel_format_desc::plane(dummy_pict.linesize[0]/4, height, 4));						
+			desc.planes.push_back(core::pixel_format_desc::plane(linesize[0]/4, height, 4));
 			return desc;
 		}
 	case core::pixel_format::ycbcr:
 	case core::pixel_format::ycbcra:
-		{		
+		{
 			// Find chroma height
-			size_t size2 = dummy_pict.data[2] - dummy_pict.data[1];
-			size_t h2 = size2/dummy_pict.linesize[1];			
+			size_t size2 = data[2] - data[1];
+			size_t h2 = size2/linesize[1];
 
-			desc.planes.push_back(core::pixel_format_desc::plane(dummy_pict.linesize[0], height, 1));
-			desc.planes.push_back(core::pixel_format_desc::plane(dummy_pict.linesize[1], h2, 1));
-			desc.planes.push_back(core::pixel_format_desc::plane(dummy_pict.linesize[2], h2, 1));
+			desc.planes.push_back(core::pixel_format_desc::plane(linesize[0], height, 1));
+			desc.planes.push_back(core::pixel_format_desc::plane(linesize[1], h2, 1));
+			desc.planes.push_back(core::pixel_format_desc::plane(linesize[2], h2, 1));
 
-			if(desc.pix_fmt == core::pixel_format::ycbcra)						
-				desc.planes.push_back(core::pixel_format_desc::plane(dummy_pict.linesize[3], height, 1));	
+			if(desc.pix_fmt == core::pixel_format::ycbcra)
+				desc.planes.push_back(core::pixel_format_desc::plane(linesize[3], height, 1));
 			return desc;
-		}		
-	default:		
+		}
+	default:
 		desc.pix_fmt = core::pixel_format::invalid;
 		return desc;
 	}
@@ -223,7 +224,9 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 
 		write = frame_factory->create_frame(tag, target_desc, audio_channel_layout);
 		write->set_type(get_mode(*decoded_frame));
-		write->set_timecode(decoded_frame->display_picture_number);
+		auto time = static_cast<frame_time*>(av_buffer_get_opaque(decoded_frame->opaque_ref));
+		if (time)
+			write->set_timecode(time->FrameNumber);
 
 		std::shared_ptr<SwsContext> sws_context;
 
@@ -233,25 +236,25 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 					  ((static_cast<int64_t>(height)		 << 16) & 0xFFFF0000) | 
 					  ((static_cast<int64_t>(pix_fmt)		 <<  8) & 0xFF00) | 
 					  ((static_cast<int64_t>(target_pix_fmt) <<  0) & 0xFF);
-			
+
 		auto& pool = sws_contexts_[key];
-						
+
 		if(!pool.try_pop(sws_context))
 		{
 			sws_context.reset(sws_getContext(width, height, static_cast<AVPixelFormat>(pix_fmt), width, height, target_pix_fmt, SWS_FAST_BILINEAR, nullptr, nullptr, NULL), sws_freeContext);
 			CASPAR_LOG(trace) << L"Created new SWS context w=" << width << L", h=" << height << ", input pix_fmt=" << pix_fmt << L", output pix_fmt=" << target_pix_fmt;
 		}
-			
+
 		if(!sws_context)
 		{
 			BOOST_THROW_EXCEPTION(operation_failed() << msg_info("Could not create software scaling context.") << 
 									boost::errinfo_api_function("sws_getContext"));
 		}	
-		
+
 		std::shared_ptr<AVFrame> av_frame = create_frame();
 		if(target_pix_fmt == AV_PIX_FMT_BGRA)
 		{
-			auto size = avpicture_fill(reinterpret_cast<AVPicture*>(av_frame.get()), write->image_data().begin(), AV_PIX_FMT_BGRA, width, height);
+			auto size = av_image_fill_arrays(av_frame->data, av_frame->linesize, write->image_data().begin(), AV_PIX_FMT_BGRA, width, height, 1);
 			CASPAR_VERIFY(size == write->image_data().size()); 
 		}
 		else
@@ -268,13 +271,16 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 		sws_scale(sws_context.get(), decoded_frame->data, decoded_frame->linesize, 0, height, av_frame->data, av_frame->linesize);	
 		pool.push(sws_context);
 
-		write->commit();		
+		write->commit();
 	}
 	else
 	{
 		write = frame_factory->create_frame(tag, desc, audio_channel_layout);
 		write->set_type(get_mode(*decoded_frame));
-		write->set_timecode(decoded_frame->display_picture_number);
+		auto time = static_cast<frame_time*>(av_buffer_get_opaque(decoded_frame->opaque_ref));
+		if (time)
+			write->set_timecode(time->FrameNumber);
+
 
 		for(int n = 0; n < static_cast<int>(desc.planes.size()); ++n)
 		{
@@ -318,53 +324,25 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 	return make_safe_ptr(write);
 }
 
-bool is_sane_fps(AVRational time_base)
-{
-	double fps = static_cast<double>(time_base.den) / static_cast<double>(time_base.num);
-	return fps > 20.0 && fps < 65.0;
-}
-
-AVRational fix_time_base(AVRational time_base)
-{
-	if(time_base.num == 1)
-		time_base.num = static_cast<int>(std::pow(10.0, static_cast<int>(std::log10(static_cast<float>(time_base.den)))-1));	
-			
-	if(!is_sane_fps(time_base))
-	{
-		auto tmp = time_base;
-		tmp.den /= 2;
-		if(is_sane_fps(tmp))
-			time_base = tmp;
-	}
-
-	return time_base;
-}
-
 boost::rational<int> read_fps(AVFormatContext& context, boost::rational<int> fail_value)
-{						
+{
 	auto video_index = av_find_best_stream(&context, AVMEDIA_TYPE_VIDEO, -1, -1, 0, 0);
-	auto audio_index = av_find_best_stream(&context, AVMEDIA_TYPE_AUDIO, -1, -1, 0, 0);
-	
 	if(video_index > -1)
 	{
-		const auto video_context = context.streams[video_index]->codec;
 		const auto video_stream  = context.streams[video_index];
-					
-		auto frame_rate_time_base = av_stream_get_r_frame_rate(video_stream);
-		std::swap(frame_rate_time_base.num, frame_rate_time_base.den);
- 
-		if(is_sane_fps(frame_rate_time_base))
+		const auto video_codec_par = video_stream->codecpar;
+		const AVRational framerate = video_codec_par->framerate;
+
+		if(framerate.num > 0)
 		{
-			return boost::rational<int>(frame_rate_time_base.num, frame_rate_time_base.den);
+			return boost::rational<int>(framerate.num, framerate.den);
 		}
 
-		AVRational time_base = video_context->time_base;
-
-		if(boost::filesystem2::path(context.filename).extension() == ".flv")
+		if(boost::filesystem2::path(context.url).extension() == ".flv")
 		{
 			try
 			{
-				auto meta = read_flv_meta_info(context.filename);
+				auto meta = read_flv_meta_info(context.url);
 				return boost::rational<int>(static_cast<int>(boost::lexical_cast<double>(meta["framerate"])), 1);
 			}
 			catch(...)
@@ -372,31 +350,11 @@ boost::rational<int> read_fps(AVFormatContext& context, boost::rational<int> fai
 				return fail_value;
 			}
 		}
-		else
-		{
-			time_base.num *= video_context->ticks_per_frame;
 
-			if(!is_sane_fps(time_base))
-			{			
-				time_base = fix_time_base(time_base);
-
-				if(!is_sane_fps(time_base) && audio_index > -1)
-				{
-					auto& audio_context = *context.streams[audio_index]->codec;
-					auto& audio_stream  = *context.streams[audio_index];
-
-					double duration_sec = audio_stream.duration / static_cast<double>(audio_context.sample_rate);
-								
-					time_base.num = static_cast<int>(duration_sec*100000.0);
-					time_base.den = static_cast<int>(video_stream->nb_frames*100000);
-				}
-			}
-		}
-		
-		return boost::rational<int>(time_base.den, time_base.num);
+		return boost::rational<int>(video_stream->r_frame_rate.num, video_stream->r_frame_rate.den);
 	}
 
-	return fail_value;	
+	return fail_value;
 }
 
 std::wstring print_mode(size_t width, size_t height, boost::rational<int> fps, bool interlaced)
@@ -500,43 +458,26 @@ core::channel_layout get_audio_channel_layout(
 				custom_channel_order,
 				core::default_channel_layout_repository());
 
-		layout.num_channels = context.channels;
+		layout.num_channels = context.ch_layout.nb_channels;
 
 		return layout;
 	}
 
-	int64_t ch_layout = context.channel_layout;
+	int nb_channels = context.ch_layout.nb_channels;
 
-	if (ch_layout == 0)
-		ch_layout = av_get_default_channel_layout(context.channels);
-
-	switch (ch_layout) // TODO: refine this auto-detection
+	switch (nb_channels) // TODO: refine this auto-detection
 	{
-	case AV_CH_LAYOUT_MONO:
+	case 1:
 		return core::default_channel_layout_repository().get_by_name(L"MONO");
-	case AV_CH_LAYOUT_STEREO:
+	case 2:
 		return core::default_channel_layout_repository().get_by_name(L"STEREO");
-	case AV_CH_LAYOUT_5POINT1:
-	case AV_CH_LAYOUT_5POINT1_BACK:
+	case 4:
+		return core::default_channel_layout_repository().get_by_name(L"DUAL-STEREO");
+	case 6:
 		return core::default_channel_layout_repository().get_by_name(L"SMPTE");
-	//case AV_CH_LAYOUT_7POINT1:
-	//	return core::default_channel_layout_repository().get_by_name(L"DOLBYE");
 	}
 
-	return core::create_unspecified_layout(context.channels);
-}
-
-std::int64_t create_channel_layout_bitmask(int num_channels)
-{
-	if (num_channels > 63)
-		BOOST_THROW_EXCEPTION(caspar_exception("FFMpeg cannot handle more than 63 audio channels"));
-
-	const auto ALL_63_CHANNELS = 0x7FFFFFFFFFFFFFFFULL;
-
-	auto to_shift = 63 - num_channels;
-	auto result = ALL_63_CHANNELS >> to_shift;
-
-	return static_cast<std::int64_t>(result);
+	return core::create_unspecified_layout(nb_channels);
 }
 
 int64_t ffmpeg_time_from_frame_number(int32_t frame_number, int fps_num, int fps_den)
@@ -557,5 +498,11 @@ std::vector<int> parse_list(const std::string& list)
 		result_list.push_back(boost::lexical_cast<int>(*i));
 	return result_list;
 }
+
+void av_buffer_free(void* opaque, uint8_t* data)
+{
+	delete opaque;
+};
+
 
 }}

@@ -56,43 +56,6 @@ extern "C"
 }
 
 namespace caspar { namespace ffmpeg {
-	
-int ffmpeg_lock_callback(void **mutex, enum AVLockOp op) 
-{ 
-	win32_exception::ensure_handler_installed_for_thread("ffmpeg-thread");
-	if(!mutex)
-		return 0;
-
-	auto my_mutex = reinterpret_cast<tbb::recursive_mutex*>(*mutex);
-	
-	switch(op) 
-	{ 
-		case AV_LOCK_CREATE: 
-		{ 
-			*mutex = new tbb::recursive_mutex(); 
-			break; 
-		} 
-		case AV_LOCK_OBTAIN: 
-		{ 
-			if(my_mutex)
-				my_mutex->lock(); 
-			break; 
-		} 
-		case AV_LOCK_RELEASE: 
-		{ 
-			if(my_mutex)
-				my_mutex->unlock(); 
-			break; 
-		} 
-		case AV_LOCK_DESTROY: 
-		{ 
-			delete my_mutex;
-			*mutex = nullptr;
-			break; 
-		} 
-	} 
-	return 0; 
-} 
 
 static void sanitize(uint8_t *line)
 {
@@ -194,12 +157,8 @@ void log_for_thread(void* ptr, int level, const char* fmt, va_list vl)
 
 void init(const safe_ptr<core::media_info_repository>& media_info_repo)
 {
-	av_lockmgr_register(ffmpeg_lock_callback);
 	av_log_set_callback(log_for_thread);
-
-    avfilter_register_all();
 	avformat_network_init();
-	av_register_all();
 	
 	core::register_consumer_factory([](const core::parameters& params){return ffmpeg::create_consumer(params);});
 	core::register_producer_factory(create_producer);
@@ -216,7 +175,6 @@ void init(const safe_ptr<core::media_info_repository>& media_info_repo)
 void uninit()
 {
 	avformat_network_deinit();
-	av_lockmgr_register(nullptr);
 }
 
 std::wstring make_version(unsigned int ver)

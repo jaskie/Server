@@ -42,7 +42,7 @@ namespace ffmpeg {
 class video_decoder : boost::noncopyable
 {
 public:
-	explicit video_decoder(input input, bool invert_field_order);
+	explicit video_decoder(input &input, bool invert_field_order);
 	
 	std::shared_ptr<AVFrame> poll();
 	size_t	 width()		const;

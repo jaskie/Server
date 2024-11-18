@@ -68,7 +68,7 @@ struct audio_decoder::implementation : boost::noncopyable
 	std::vector<int32_t,  tbb::cache_aligned_allocator<int32_t>> buffer_;
 
 public:
-	explicit implementation(input input, caspar::core::video_format_desc format, const std::wstring& custom_channel_order)
+	explicit implementation(input &input, const caspar::core::video_format_desc &format, const std::wstring& custom_channel_order)
 		: input_(input)
 		, codec_context_(input.open_audio_codec(&stream_))
 		, format_(format)
@@ -97,17 +97,19 @@ public:
 
 	std::shared_ptr<SwrContext>	alloc_resampler()
 	{
+		SwrContext* ctx = NULL;
+		THROW_ON_ERROR2(swr_alloc_set_opts2(
+			&ctx,
+			&codec_context_->ch_layout,
+			AV_SAMPLE_FMT_S32,
+			format_.audio_sample_rate,
+			&codec_context_->ch_layout,
+			codec_context_->sample_fmt,
+			codec_context_->sample_rate,
+			0,
+			nullptr), print());
 		std::shared_ptr<SwrContext>	resampler(
-		swr_alloc_set_opts(
-				nullptr,
-				create_channel_layout_bitmask(codec_context_->channels),//get_ffmpeg_channel_layout(codec_context_.get()),
-				AV_SAMPLE_FMT_S32,
-				format_.audio_sample_rate,
-				create_channel_layout_bitmask(codec_context_->channels),//get_ffmpeg_channel_layout(codec_context_.get()),
-				codec_context_->sample_fmt,
-				codec_context_->sample_rate,
-				0,
-				nullptr),
+		ctx,
 		[](SwrContext* p){swr_free(&p);});
 		return resampler;
 	}
@@ -136,11 +138,11 @@ public:
 					{
 						const uint8_t** in = const_cast<const uint8_t**>(frame->extended_data);
 						uint8_t* out[] = { reinterpret_cast<uint8_t*>(buffer_.data()) };
-						int n_samples = swr_convert(swr_.get(), out, buffer_.size() / frame->channels, in, frame->nb_samples);
+						int n_samples = swr_convert(swr_.get(), out, buffer_.size() / frame->ch_layout.nb_channels, in, frame->nb_samples);
 						if (n_samples <= 0)
 							continue;
 						const auto samples = reinterpret_cast<uint32_t*>(*out);
-						return std::make_shared<core::audio_buffer>(samples, samples + n_samples * codec_context_->channels);
+						return std::make_shared<core::audio_buffer>(samples, samples + n_samples * codec_context_->ch_layout.nb_channels);
 					}
 					break;
 				case AVERROR_EOF:
@@ -161,7 +163,7 @@ public:
 		uint8_t* out[] =  { reinterpret_cast<uint8_t*>(buffer_.data()) };
 		while (swr_convert(swr_.get(),
 				out,
-				BUFFER_SIZE / codec_context_->channels,
+				BUFFER_SIZE / codec_context_->ch_layout.nb_channels,
 				NULL,
 				0)>0) {};
 	}
@@ -181,7 +183,7 @@ public:
 	}
 };
 
-audio_decoder::audio_decoder(input input, caspar::core::video_format_desc format, const std::wstring& custom_channel_order) : impl_(new implementation(input, format, custom_channel_order)){}
+audio_decoder::audio_decoder(input &input, const caspar::core::video_format_desc &format, const std::wstring& custom_channel_order) : impl_(new implementation(input, format, custom_channel_order)){}
 std::shared_ptr<core::audio_buffer> audio_decoder::poll(){return impl_->poll();}
 const core::channel_layout& audio_decoder::channel_layout() const { return impl_->channel_layout_; }
 std::wstring audio_decoder::print() const{return impl_->print();}

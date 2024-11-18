@@ -51,16 +51,14 @@ struct pixel_format_desc;
 class write_frame;
 struct frame_factory;
 struct channel_layout;
-
 }
 
 namespace ffmpeg {
-		
+
 std::shared_ptr<core::audio_buffer> flush_audio();
 std::shared_ptr<core::audio_buffer> empty_audio();
 std::shared_ptr<AVFrame>			flush_video();
 std::shared_ptr<AVFrame>			empty_video();
-std::shared_ptr<AVPacket>			flush_packet();
 
 // Utils
 
@@ -72,9 +70,6 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 
 safe_ptr<AVPacket> create_packet();
 std::shared_ptr<AVFrame> create_frame();
-
-bool is_sane_fps(AVRational time_base);
-AVRational fix_time_base(AVRational time_base);
 
 std::wstring print_mode(size_t width, size_t height, boost::rational<int> fps, bool interlaced);
 
@@ -88,6 +83,14 @@ int64_t frame_number_from_ffmpeg_time(int64_t time, int fps_num, int fps_den);
 std::vector<int> parse_list(const std::string& list);
 
 core::channel_layout get_audio_channel_layout(const AVCodecContext& context, const std::wstring& custom_channel_order);
-std::int64_t create_channel_layout_bitmask(int num_channels);
+
+struct frame_time {
+	frame_time(int frame_number)
+		: FrameNumber(frame_number)
+	{ }
+	const int FrameNumber;
+};
+
+void av_buffer_free(void* opaque, uint8_t* data);
 
 }}

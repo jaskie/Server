@@ -268,10 +268,12 @@ public:
 			av_frame->top_field_first	= fieldDominance == bmdUpperFieldFirst;
 			av_frame->pts = frame_pts_++;
 			CComPtr<IDeckLinkTimecode> decklink_timecode;
-			int frame_timecode = std::numeric_limits<int>().max();
 			if (SUCCEEDED(video->GetTimecode(timecode_source_, &decklink_timecode)) && decklink_timecode)
-				frame_timecode = bcd2frame(decklink_timecode->GetBCD(), static_cast<byte>(time_scale_/frame_duration_));
-			
+			{
+				auto time = new ffmpeg::frame_time(bcd2frame(decklink_timecode->GetBCD(), static_cast<byte>(time_scale_ / frame_duration_)));
+				av_frame->opaque_ref = av_buffer_create(NULL, sizeof(ffmpeg::frame_time), ffmpeg::av_buffer_free, time, AV_BUFFER_FLAG_READONLY);
+			}
+
 			std::shared_ptr<core::audio_buffer> audio_buffer;
 
 			// It is assumed that audio is always equal or ahead of video.
@@ -309,7 +311,7 @@ public:
 			// Note: Uses 1 step rotated cadence for 1001 modes (1602, 1602, 1601, 1602, 1601)
 			// This cadence fills the audio mixer most optimally.
 
-			sync_buffer_.push_back(audio_buffer->size() / audio_channel_layout_.num_channels);		
+			sync_buffer_.push_back(audio_buffer->size() / audio_channel_layout_.num_channels);
 			if(!boost::range::equal(sync_buffer_, audio_cadence_))
 			{
 				CASPAR_LOG(trace) << print() << L" Syncing audio.";
@@ -317,7 +319,7 @@ public:
 			}
 
 			muxer_.push(audio_buffer);
-			muxer_.push(av_frame, hints_, frame_timecode);
+			muxer_.push(av_frame, hints_);
 											
 			boost::range::rotate(audio_cadence_, std::begin(audio_cadence_)+1);
 			

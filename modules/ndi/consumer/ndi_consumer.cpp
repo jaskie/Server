@@ -78,23 +78,27 @@ namespace caspar {
 
 		SwrContext* create_swr(const core::video_format_desc format_desc, const core::channel_layout out_layout, const int input_channel_count)
 		{
-			const auto ALL_63_CHANNELS = 0x7FFFFFFFFFFFFFFFULL;
-			auto in_channel_layout = ALL_63_CHANNELS >> (63 - input_channel_count);
-			auto out_channel_layout = ALL_63_CHANNELS >> (63 - out_layout.num_channels);
-			auto swr = swr_alloc_set_opts(nullptr,
-				out_channel_layout,
+			AVChannelLayout in_channel_layout;
+			av_channel_layout_custom_init(&in_channel_layout, input_channel_count);
+			AVChannelLayout out_channel_layout;
+			av_channel_layout_custom_init(&out_channel_layout, out_layout.num_channels);
+			SwrContext* swr = NULL;
+			int ret = swr_alloc_set_opts2(&swr,
+				&out_channel_layout,
 				AV_SAMPLE_FMT_FLT,
 				format_desc.audio_sample_rate,
-				in_channel_layout,
+				&in_channel_layout,
 				AV_SAMPLE_FMT_S32,
 				format_desc.audio_sample_rate,
-				0, nullptr);
-			if (!swr)
+				0, NULL);
+			if (ret != 0 || swr == NULL)
 				BOOST_THROW_EXCEPTION(caspar_exception()
 					<< msg_info("Cannot alloc audio resampler"));
 			if (swr_init(swr) < 0)
 				BOOST_THROW_EXCEPTION(caspar_exception()
 					<< msg_info("Cannot initialize audio resampler"));
+			av_channel_layout_uninit(&in_channel_layout);
+			av_channel_layout_uninit(&out_channel_layout);
 			return swr;
 		}
 
