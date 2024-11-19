@@ -129,10 +129,12 @@ core::pixel_format::type get_pixel_format(AVPixelFormat pix_fmt)
 core::pixel_format_desc get_pixel_format_desc(AVPixelFormat pix_fmt, size_t width, size_t height)
 {
 	// Get linesizes
-	uint8_t* data[4];
+	size_t plane_size[4];
 	int linesize[4];
 
-	FF_RET(av_image_fill_arrays(data, linesize, NULL, (AVPixelFormat)(pix_fmt == CASPAR_PIX_FMT_LUMA ? AV_PIX_FMT_GRAY8 : pix_fmt), width, height, 1), "get_pixel_format_desc.av_image_fill_arrays");
+	AVPixelFormat av_pix_format = (AVPixelFormat)(pix_fmt == CASPAR_PIX_FMT_LUMA ? AV_PIX_FMT_GRAY8 : pix_fmt);
+	FF_RET(av_image_fill_linesizes(linesize, av_pix_format, width), "get_pixel_format_desc.av_image_fill_linesizes");
+	FF_RET(av_image_fill_plane_sizes(plane_size, av_pix_format, height, linesize), "get_pixel_format_desc.av_image_fill_plane_sizes");
 
 	core::pixel_format_desc desc;
 	desc.pix_fmt = get_pixel_format(pix_fmt);
@@ -156,16 +158,11 @@ core::pixel_format_desc get_pixel_format_desc(AVPixelFormat pix_fmt, size_t widt
 	case core::pixel_format::ycbcr:
 	case core::pixel_format::ycbcra:
 		{
-			// Find chroma height
-			size_t size2 = data[2] - data[1];
-			size_t h2 = size2/linesize[1];
-
-			desc.planes.push_back(core::pixel_format_desc::plane(linesize[0], height, 1));
-			desc.planes.push_back(core::pixel_format_desc::plane(linesize[1], h2, 1));
-			desc.planes.push_back(core::pixel_format_desc::plane(linesize[2], h2, 1));
-
+			desc.planes.push_back(core::pixel_format_desc::plane(linesize[0], plane_size[0] / linesize[0], 1));
+			desc.planes.push_back(core::pixel_format_desc::plane(linesize[1], plane_size[1] / linesize[1], 1));
+			desc.planes.push_back(core::pixel_format_desc::plane(linesize[2], plane_size[2] / linesize[2], 1));
 			if(desc.pix_fmt == core::pixel_format::ycbcra)
-				desc.planes.push_back(core::pixel_format_desc::plane(linesize[3], height, 1));
+				desc.planes.push_back(core::pixel_format_desc::plane(linesize[3], plane_size[3] / linesize[3], 1));
 			return desc;
 		}
 	default:
@@ -224,9 +221,12 @@ safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVF
 
 		write = frame_factory->create_frame(tag, target_desc, audio_channel_layout);
 		write->set_type(get_mode(*decoded_frame));
-		auto time = static_cast<frame_time*>(av_buffer_get_opaque(decoded_frame->opaque_ref));
-		if (time)
-			write->set_timecode(time->FrameNumber);
+		if (decoded_frame->opaque_ref)
+		{
+			auto time = static_cast<frame_time*>(av_buffer_get_opaque(decoded_frame->opaque_ref));
+			if (time)
+				write->set_timecode(time->FrameNumber);
+		}
 
 		std::shared_ptr<SwsContext> sws_context;
 

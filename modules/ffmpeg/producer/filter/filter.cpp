@@ -140,22 +140,22 @@ struct filter::implementation
 			% in_time_base_.num % in_time_base_.den
 			% in_sample_aspect_ratio_.num % in_sample_aspect_ratio_.den).str();
 
-		AVFilterContext* filt_vsrc = nullptr;			
+		AVFilterContext* filt_vsrc = nullptr;
 		FF(avfilter_graph_create_filter(
 			&filt_vsrc,
-			avfilter_get_by_name("buffer"), 
+			avfilter_get_by_name("buffer"),
 			"filter_buffer",
-			vsrc_options.c_str(), 
-			nullptr, 
+			vsrc_options.c_str(),
+			nullptr,
 			video_graph_.get()));
 				
 		AVFilterContext* filt_vsink = nullptr;
 		FF(avfilter_graph_create_filter(
 			&filt_vsink,
-			avfilter_get_by_name("buffersink"), 
+			avfilter_get_by_name("buffersink"),
 			"filter_buffersink",
-			nullptr, 
-			nullptr, 
+			nullptr,
+			nullptr,
 			video_graph_.get()));
 		
 #pragma warning (push)
