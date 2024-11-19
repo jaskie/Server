@@ -64,6 +64,19 @@
 namespace caspar {
 	namespace ffmpeg {
 
+		int field_mode2_avframe_flags(const core::field_mode::type mode)
+		{
+			switch (mode)
+			{
+			case core::field_mode::lower:
+				return AV_FRAME_FLAG_INTERLACED;
+			case core::field_mode::upper:
+				return AV_FRAME_FLAG_INTERLACED | AV_FRAME_FLAG_TOP_FIELD_FIRST;
+			default:
+				return 0;
+			}
+		}
+
 		AVFormatContext * alloc_output_params_context(const std::string filename, const AVOutputFormat * output_params)
 		{
 			AVFormatContext * ctx = nullptr;
@@ -683,8 +696,7 @@ namespace caspar {
 				out_frame->height = video_codec_ctx_->height;
 				out_frame->width = video_codec_ctx_->width;
 				out_frame->format = video_codec_ctx_->pix_fmt;
-				out_frame->interlaced_frame = channel_format_desc_.field_mode != core::field_mode::progressive;
-				out_frame->top_field_first = channel_format_desc_.field_mode == core::field_mode::upper;
+				out_frame->flags = field_mode2_avframe_flags(channel_format_desc_.field_mode);
 				out_frame->pts = out_frame_number_++;
 				return out_frame;
 			}
@@ -696,8 +708,7 @@ namespace caspar {
 				av_frame->height = height_;
 				av_frame->format = AV_PIX_FMT_BGRA;
 				av_frame->sample_aspect_ratio = channel_sample_aspect_ratio_;
-				av_frame->interlaced_frame = channel_format_desc_.field_mode != core::field_mode::progressive;
-				av_frame->top_field_first = channel_format_desc_.field_mode == core::field_mode::upper;
+				av_frame->flags = field_mode2_avframe_flags(channel_format_desc_.field_mode);
 				av_frame->pts = out_frame_number_++;
 				if (key_only_)
 				{

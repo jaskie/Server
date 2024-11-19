@@ -299,8 +299,7 @@ public:
 		av_frame->width = ndi_video->xres;
 		av_frame->height = ndi_video->yres;
 		av_frame->pict_type = AV_PICTURE_TYPE_I;
-		av_frame->interlaced_frame = ndi_video->frame_format_type == NDIlib_frame_format_type_interleaved ? 1 : 0;
-		av_frame->top_field_first = av_frame->interlaced_frame;
+		av_frame->flags = ndi_video->frame_format_type == NDIlib_frame_format_type_interleaved ? (AV_FRAME_FLAG_INTERLACED | AV_FRAME_FLAG_TOP_FIELD_FIRST) : 0;
 		av_frame->pts = frame_pts_++;
 		av_frame_get_buffer(av_frame.get(), 0);
 		fast_memcpy(av_frame->data[0], ndi_video->p_data, av_frame->linesize[0] * av_frame->height);

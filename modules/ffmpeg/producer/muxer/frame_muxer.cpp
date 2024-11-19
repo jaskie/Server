@@ -343,7 +343,7 @@ struct frame_muxer::implementation : boost::noncopyable
 			out_pix_fmts,
 			filter_str));
 
-			CASPAR_LOG(debug) << L"[frame_muxer] " << print_mode(frame->width, fixed_height, in_fps_, frame->interlaced_frame > 0);
+			CASPAR_LOG(debug) << L"[frame_muxer] " << print_mode(frame->width, fixed_height, in_fps_, (frame->flags & AV_FRAME_FLAG_INTERLACED) != 0);
 	}
 	
 	void clear()

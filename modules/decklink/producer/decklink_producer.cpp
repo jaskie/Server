@@ -264,8 +264,15 @@ public:
 			av_frame->height			= video->GetHeight();
 			av_frame->pict_type			= AV_PICTURE_TYPE_I;
 			auto fieldDominance = current_display_mode_->GetFieldDominance();
-			av_frame->interlaced_frame	= fieldDominance == bmdLowerFieldFirst || fieldDominance == bmdUpperFieldFirst;
-			av_frame->top_field_first	= fieldDominance == bmdUpperFieldFirst;
+			switch (fieldDominance)
+			{
+			case bmdLowerFieldFirst:
+				av_frame->flags = AV_FRAME_FLAG_INTERLACED;
+				break;
+			case bmdUpperFieldFirst:
+				av_frame->flags = AV_FRAME_FLAG_INTERLACED | AV_FRAME_FLAG_TOP_FIELD_FIRST;
+				break;
+			}
 			av_frame->pts = frame_pts_++;
 			CComPtr<IDeckLinkTimecode> decklink_timecode;
 			if (SUCCEEDED(video->GetTimecode(timecode_source_, &decklink_timecode)) && decklink_timecode)

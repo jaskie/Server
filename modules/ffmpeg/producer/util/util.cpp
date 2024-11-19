@@ -100,10 +100,9 @@ std::shared_ptr<AVFrame> create_frame()
 
 core::field_mode::type get_mode(const AVFrame& frame)
 {
-	if(!frame.interlaced_frame)
-		return core::field_mode::progressive;
-
-	return frame.top_field_first ? core::field_mode::upper : core::field_mode::lower;
+	if(frame.flags & AV_FRAME_FLAG_INTERLACED)
+		return frame.flags & AV_FRAME_FLAG_TOP_FIELD_FIRST ? core::field_mode::upper : core::field_mode::lower;
+	return core::field_mode::progressive;
 }
 
 core::pixel_format::type get_pixel_format(AVPixelFormat pix_fmt)
@@ -184,7 +183,7 @@ int make_alpha_format(int format)
 }
 
 safe_ptr<core::write_frame> make_write_frame(const void* tag, const safe_ptr<AVFrame>& decoded_frame, const safe_ptr<core::frame_factory>& frame_factory, int hints, const core::channel_layout& audio_channel_layout)
-{			
+{
 	static tbb::concurrent_unordered_map<int64_t, tbb::concurrent_queue<std::shared_ptr<SwsContext>>> sws_contexts_;
 	
 	if(decoded_frame->width < 1 || decoded_frame->height < 1)

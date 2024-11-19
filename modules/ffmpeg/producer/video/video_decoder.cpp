@@ -103,10 +103,10 @@ public:
 			switch (ret)
 			{
 			case 0:
-				is_progressive_ = !decoded_frame->interlaced_frame;
+				is_progressive_ = (decoded_frame->flags & AV_FRAME_FLAG_INTERLACED) == 0;
 
 				if (invert_field_order_)
-					decoded_frame->top_field_first = (!decoded_frame->top_field_first & 0x1);
+					decoded_frame->flags = decoded_frame->flags ^ AV_FRAME_FLAG_TOP_FIELD_FIRST;
 				if (decoded_frame->pts == AV_NOPTS_VALUE)
 					decoded_frame->pts = decoded_frame->best_effort_timestamp;
 				if (decoded_frame->pts != AV_NOPTS_VALUE)
