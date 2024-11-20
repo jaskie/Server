@@ -130,24 +130,25 @@ namespace caspar {
 			}
 		}
 
-		void initialize_audio_channel_layout(const std::wstring& channel_layout_name, AVChannelLayout& channel_layout)
+		void initialize_audio_channel_layout(const caspar::core::channel_layout &caspar_layout, AVChannelLayout &channel_layout)
 		{
-			if (channel_layout_name == L"mono")
+			const std::wstring &channel_layout_name = caspar_layout.name;
+			if (channel_layout_name == L"MONO")
 				av_channel_layout_from_string(&channel_layout, "");
-			else if (channel_layout_name == L"stereo")
+			else if (channel_layout_name == L"STEREO")
 				av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_STEREO);
-			else if (channel_layout_name == L"dual-stereo")
+			else if (channel_layout_name == L"DUAL-STEREO")
 				av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_2_2);
-			else if (channel_layout_name == L"dts")
+			else if (channel_layout_name == L"DTS")
 				av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_5POINT1);
-			else if (channel_layout_name == L"dolbye")
+			else if (channel_layout_name == L"DOLBYE")
 				av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_5POINT1 | AV_CH_LAYOUT_STEREO_DOWNMIX);
-			else if (channel_layout_name == L"dolbydigital")
+			else if (channel_layout_name == L"DOLBYDIGITAL")
 				av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_5POINT1);
-			else if (channel_layout_name == L"smpte")
+			else if (channel_layout_name == L"SMPTE")
 				av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_5POINT1);
-			else if (channel_layout_name == L"passthru")
-				av_channel_layout_custom_init(&channel_layout, 16);
+			else 
+				av_channel_layout_custom_init(&channel_layout, caspar_layout.num_channels);
 			// TODO: set order of channels for dolby/dts/smpte
 		}
 
@@ -306,7 +307,7 @@ namespace caspar {
 				audio_codec = output_params_.audio_codec_.empty()
 					? output_params_.is_mxf_ ? avcodec_find_encoder_by_name("pcm_s16le") : avcodec_find_encoder_by_name("aac")
 					: avcodec_find_encoder_by_name(output_params_.audio_codec_.c_str());
-								
+
 				if (params.filter_.empty())
 				{
 					create_output(video_codec, audio_codec, channel_format_desc.width, channel_format_desc.height, out_pixel_format_, av_make_q(channel_format_desc.time_scale, channel_format_desc.duration), av_make_q(channel_format_desc.duration, channel_format_desc.time_scale), channel_sample_aspect_ratio_);
@@ -328,7 +329,7 @@ namespace caspar {
 					));
 					create_output(video_codec, audio_codec, video_filter_->out_width(), video_filter_->out_height(), video_filter_->out_pixel_format(), video_filter_->out_frame_rate(), video_filter_->out_time_base(), video_filter_->out_sample_aspect_ratio());
 				}
-				create_swr();								
+				create_swr();
 				graph_->set_color("frame-time", diagnostics::color(0.1f, 1.0f, 0.1f));
 				graph_->set_color("dropped-frame", diagnostics::color(1.0f, 0.1f, 0.1f));
 				graph_->set_text(print());
@@ -613,7 +614,7 @@ namespace caspar {
 					if (output_params_.channel_layout_name_ != "")
 						THROW_ON_ERROR2(av_channel_layout_from_string(&audio_codec_ctx_->ch_layout, output_params_.channel_layout_name_.c_str()), print());
 					else if (output_params_.channel_map_.size() == 0)
-						initialize_audio_channel_layout(audio_channel_layout_.name, audio_codec_ctx_->ch_layout);
+						initialize_audio_channel_layout(audio_channel_layout_, audio_codec_ctx_->ch_layout);
 					else 
 						av_channel_layout_default(&audio_codec_ctx_->ch_layout, output_params_.channel_map_.size());
 				}
@@ -760,7 +761,7 @@ namespace caspar {
 			void create_swr()
 			{
 				AVChannelLayout in_channel_layout;
-				initialize_audio_channel_layout(audio_channel_layout_.name, in_channel_layout);
+				initialize_audio_channel_layout(audio_channel_layout_, in_channel_layout);
 				SwrContext* swr;
 				int ret = swr_alloc_set_opts2(&swr,
 					&audio_codec_ctx_->ch_layout, audio_codec_ctx_->sample_fmt, audio_codec_ctx_->sample_rate,
@@ -810,12 +811,14 @@ namespace caspar {
 
 			void encode_audio_buffer(bool is_last_frame)
 			{
+				AVChannelLayout& channel_layout = audio_codec_ctx_->ch_layout;
+				int bytes_per_sample = av_get_bytes_per_sample(audio_codec_ctx_->sample_fmt);
 				size_t input_audio_size = audio_codec_ctx_->frame_size == 0 || is_last_frame ?
 					audio_bufers_[0].size() :
-					audio_codec_ctx_->frame_size * av_get_bytes_per_sample(audio_codec_ctx_->sample_fmt) * audio_codec_ctx_->ch_layout.nb_channels;
-				if (!input_audio_size)
+					audio_codec_ctx_->frame_size * bytes_per_sample * channel_layout.nb_channels;
+				if (input_audio_size == 0)
 					return;
-				int frame_size = input_audio_size / (av_get_bytes_per_sample(audio_codec_ctx_->sample_fmt) * audio_codec_ctx_->ch_layout.nb_channels);
+				int frame_size = input_audio_size / (bytes_per_sample * channel_layout.nb_channels);
 				while (audio_bufers_[0].size() >= input_audio_size)
 				{
 					AVPacket pkt = { 0 };
@@ -823,18 +826,21 @@ namespace caspar {
 					AVFrame in_frame = { 0 };
 					in_frame.nb_samples = frame_size;
 					in_frame.pts = out_audio_sample_number_;
+					in_frame.sample_rate = audio_codec_ctx_->sample_rate;
+					in_frame.format = audio_codec_ctx_->sample_fmt;
+					av_channel_layout_copy(&in_frame.ch_layout, &channel_layout);
 					out_audio_sample_number_ += frame_size;
 					uint8_t* out_buffers[AV_NUM_DATA_POINTERS];
 					for (char i = 0; i < AV_NUM_DATA_POINTERS; i++)
 						out_buffers[i] = audio_bufers_[i].data();
-					THROW_ON_ERROR2(avcodec_fill_audio_frame(&in_frame, audio_codec_ctx_->ch_layout.nb_channels, audio_codec_ctx_->sample_fmt, (const uint8_t *)out_buffers[0], input_audio_size, 0), print());
+					THROW_ON_ERROR2(avcodec_fill_audio_frame(&in_frame, channel_layout.nb_channels, audio_codec_ctx_->sample_fmt, (const uint8_t *)out_buffers[0], input_audio_size, 1), print());
 					if (audio_is_planar_)
-						for (char i = 0; i < audio_codec_ctx_->ch_layout.nb_channels; i++)
+						for (char i = 0; i < channel_layout.nb_channels; i++)
 							in_frame.data[i] = audio_bufers_[i].data();
 					THROW_ON_ERROR2(avcodec_send_frame(audio_codec_ctx_.get(), &in_frame), print());
 					if (audio_is_planar_)
-						for (char i = 0; i < audio_codec_ctx_->ch_layout.nb_channels; i++)
-							audio_bufers_[i].erase(audio_bufers_[i].begin(), audio_bufers_[i].begin() + (audio_codec_ctx_->frame_size * av_get_bytes_per_sample(audio_codec_ctx_->sample_fmt)));
+						for (char i = 0; i < channel_layout.nb_channels; i++)
+							audio_bufers_[i].erase(audio_bufers_[i].begin(), audio_bufers_[i].begin() + (audio_codec_ctx_->frame_size * bytes_per_sample));
 					else
 						audio_bufers_[0].erase(audio_bufers_[0].begin(), audio_bufers_[0].begin() + input_audio_size);
 					while (avcodec_receive_packet(audio_codec_ctx_.get(), &pkt) == 0)
