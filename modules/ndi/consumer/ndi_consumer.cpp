@@ -135,7 +135,7 @@ namespace caspar {
 				, ndi_send_(create_ndi_send(ndi_lib_, ndi_name, groups, is_blocking))
 				, sws_(is_alpha ? nullptr : sws_getContext(format_desc.width, format_desc.height, AV_PIX_FMT_BGRA, format_desc.width, format_desc.height, AV_PIX_FMT_UYVY422, SWS_POINT, NULL, NULL, NULL), [](SwsContext * ctx) { sws_freeContext(ctx); })
 				, swr_(create_swr(format_desc_, channel_layout_), [](SwrContext * ctx) { swr_free(&ctx); })
-				, send_frame_buffer_(is_alpha ? 0 : av_image_get_buffer_size(AV_PIX_FMT_BGRA, format_desc.width, format_desc.height, 16))
+				, send_frame_buffer_(is_alpha ? 0 : av_image_get_buffer_size(AV_PIX_FMT_BGRA, format_desc.width, format_desc.height, 1))
 				, executor_(print())
 			{
 				current_encoding_delay_ = 0;
@@ -210,7 +210,7 @@ namespace caspar {
 					uint8_t * dest_data[AV_NUM_DATA_POINTERS];
 					int dst_linesize[AV_NUM_DATA_POINTERS];
 					av_image_fill_arrays(src_data, src_linesize, frame->image_data().begin(), AV_PIX_FMT_BGRA, format_desc_.width, format_desc_.height, 1);
-					av_image_fill_arrays(dest_data, dst_linesize, &send_frame_buffer_.front(), AV_PIX_FMT_UYVY422, format_desc_.width, format_desc_.height, 16);
+					av_image_fill_arrays(dest_data, dst_linesize, &send_frame_buffer_.front(), AV_PIX_FMT_UYVY422, format_desc_.width, format_desc_.height, 1);
 					sws_scale(sws_.get(), src_data, src_linesize, 0, format_desc_.height, dest_data, dst_linesize);
 					graph_->set_value("frame-convert-time", frame_convert_timer_.elapsed() * format_desc_.fps);
 					ndi_frame->p_data = &send_frame_buffer_.front();

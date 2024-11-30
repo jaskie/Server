@@ -49,7 +49,7 @@ extern "C"
 
 namespace caspar {
 		
-static const size_t MAX_THREADS = 16; // See mpegvideo.h
+static const size_t MAX_THREADS = 8; // Limited due to memory consumption on modern codecs
 
 int thread_execute(AVCodecContext* s, int (*func)(AVCodecContext* c2, void* arg2), void* arg, int* ret, int count, int size)
 {
@@ -68,7 +68,6 @@ int thread_execute2(AVCodecContext* s, int (*func)(AVCodecContext* c2, void* arg
 	tbb::atomic<int> counter;
 	counter = 0;
 
-	//CASPAR_VERIFY(tbb::tbb_thread::hardware_concurrency() < MAX_THREADS);
 	// Note: this will probably only work when tbb::task_scheduler_init::num_threads() < 16.
 	tbb::parallel_for(tbb::blocked_range<int>(0, count, 2), [&](const tbb::blocked_range<int>& r)
 		{

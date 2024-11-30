@@ -128,6 +128,7 @@ struct input::implementation : boost::noncopyable
 		if (tbb_avcodec_open(ctx, decoder, NULL) < 0)
 		{
 			CASPAR_LOG(debug) << print() << L" Multithreaded avcodec_open2 failed";
+			ctx->thread_count = 2;
 			THROW_ON_ERROR2(avcodec_open2(ctx, decoder, NULL), print());
 		}
 		video_stream_index_ = index;
