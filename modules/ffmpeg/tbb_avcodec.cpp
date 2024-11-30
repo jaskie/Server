@@ -49,51 +49,50 @@ extern "C"
 
 namespace caspar {
 		
-static const size_t MAX_THREADS = 16; // See mpegvideo.h
+static const size_t MAX_THREADS = 8; // Limited due to memory consumption on modern codecs
 
-int thread_execute(AVCodecContext* s, int (*func)(AVCodecContext *c2, void *arg2), void* arg, int* ret, int count, int size)
+int thread_execute(AVCodecContext* s, int (*func)(AVCodecContext* c2, void* arg2), void* arg, int* ret, int count, int size)
 {
 	tbb::parallel_for(0, count, 1, [&](int i)
-	{
-        int r = func(s, (char*)arg + i*size);
-        if(ret) 
-			ret[i] = r;
-    });
+		{
+			int r = func(s, (char*)arg + i * size);
+			if (ret)
+				ret[i] = r;
+		});
 
 	return 0;
 }
 
 int thread_execute2(AVCodecContext* s, int (*func)(AVCodecContext* c2, void* arg2, int, int), void* arg, int* ret, int count)
-{	
-	tbb::atomic<int> counter;   
-    counter = 0;   
+{
+	tbb::atomic<int> counter;
+	counter = 0;
 
-	//CASPAR_VERIFY(tbb::tbb_thread::hardware_concurrency() < MAX_THREADS);
 	// Note: this will probably only work when tbb::task_scheduler_init::num_threads() < 16.
-    tbb::parallel_for(tbb::blocked_range<int>(0, count, 2), [&](const tbb::blocked_range<int> &r)    
-    {   
-        int threadnr = counter++;   
-        for(int jobnr = r.begin(); jobnr != r.end(); ++jobnr)
-        {   
-            int r = func(s, arg, jobnr, threadnr);   
-            if (ret)   
-                ret[jobnr] = r;   
-        }
-        --counter;
-    });   
+	tbb::parallel_for(tbb::blocked_range<int>(0, count, 2), [&](const tbb::blocked_range<int>& r)
+		{
+			int threadnr = counter++;
+			for (int jobnr = r.begin(); jobnr != r.end(); ++jobnr)
+			{
+				int r = func(s, arg, jobnr, threadnr);
+				if (ret)
+					ret[jobnr] = r;
+			}
+			--counter;
+		});
 
-    return 0;  
+	return 0;
 }
 
 void thread_init(AVCodecContext* s, bool execute2enable)
 {
     s->execute			  = thread_execute;
 	if (execute2enable)
-		s->execute2			  = thread_execute2;
+		s->execute2			= thread_execute2;
 	if (s->thread_type & FF_THREAD_SLICE)
-		s->slice_count		  = std::min(tbb::tbb_thread::hardware_concurrency(), MAX_THREADS);
+		s->slices			= std::min(tbb::tbb_thread::hardware_concurrency(), MAX_THREADS);
 	if (s->thread_type & FF_THREAD_FRAME)
-		s->thread_count		  = std::min(tbb::tbb_thread::hardware_concurrency(), MAX_THREADS); // We are using a task-scheduler, so use as many "threads/tasks" as possible. 
+		s->thread_count		= std::min(tbb::tbb_thread::hardware_concurrency(), MAX_THREADS); // We are using a task-scheduler, so use as many "threads/tasks" as possible. 
 
 	CASPAR_LOG(info) << "Initialized ffmpeg tbb context.";
 }
@@ -105,7 +104,6 @@ int tbb_avcodec_open(AVCodecContext* avctx, const AVCodec* codec, AVDictionary**
 	{
 		thread_init(avctx, codec->id != AV_CODEC_ID_PRORES && codec->id != AV_CODEC_ID_DNXHD); // do not enable execute2 for ProRes and DNxHD codec as they cause crash
 	}	
-	avctx->refcounted_frames = 0;
 	return avcodec_open2(avctx, codec, options); 
 }
 

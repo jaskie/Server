@@ -77,18 +77,22 @@ namespace caspar { namespace ndi {
 
 	swr_ptr_t create_swr(const int out_sample_rate, const int out_nb_channels, const int in_nb_channels, const int in_sample_rate)
 	{
-		const auto ALL_63_CHANNELS = 0x7FFFFFFFFFFFFFFFULL;
-		auto in_channel_layout = ALL_63_CHANNELS >> (63 - in_nb_channels);
-		auto out_channel_layout = ALL_63_CHANNELS >> (63 - out_nb_channels);
-		auto swr = swr_alloc_set_opts(NULL,
-			out_channel_layout,
+		AVChannelLayout in_channel_layout;
+		av_channel_layout_custom_init(&in_channel_layout, in_nb_channels);
+		AVChannelLayout out_channel_layout;
+		av_channel_layout_custom_init(&out_channel_layout, out_nb_channels);
+		SwrContext* swr = NULL;
+		int ret = swr_alloc_set_opts2(&swr,
+			&out_channel_layout,
 			AV_SAMPLE_FMT_S32,
 			out_sample_rate,
-			in_channel_layout,
+			&in_channel_layout,
 			AV_SAMPLE_FMT_FLT,
 			in_sample_rate,
 			0, NULL);
-		if (!swr)
+		av_channel_layout_uninit(&in_channel_layout);
+		av_channel_layout_uninit(&out_channel_layout);
+		if (ret != 0 || swr == NULL)
 			BOOST_THROW_EXCEPTION(caspar_exception()
 				<< msg_info("Cannot alloc audio resampler"));
 		if (swr_init(swr) < 0)
@@ -295,8 +299,7 @@ public:
 		av_frame->width = ndi_video->xres;
 		av_frame->height = ndi_video->yres;
 		av_frame->pict_type = AV_PICTURE_TYPE_I;
-		av_frame->interlaced_frame = ndi_video->frame_format_type == NDIlib_frame_format_type_interleaved ? 1 : 0;
-		av_frame->top_field_first = av_frame->interlaced_frame;
+		av_frame->flags = ndi_video->frame_format_type == NDIlib_frame_format_type_interleaved ? (AV_FRAME_FLAG_INTERLACED | AV_FRAME_FLAG_TOP_FIELD_FIRST) : 0;
 		av_frame->pts = frame_pts_++;
 		av_frame_get_buffer(av_frame.get(), 0);
 		fast_memcpy(av_frame->data[0], ndi_video->p_data, av_frame->linesize[0] * av_frame->height);

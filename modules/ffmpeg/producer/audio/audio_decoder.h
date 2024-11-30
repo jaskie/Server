@@ -46,7 +46,7 @@ namespace ffmpeg {
 class audio_decoder : boost::noncopyable
 {
 public:
-	explicit audio_decoder(input input, caspar::core::video_format_desc format,  const std::wstring& custom_channel_order);
+	explicit audio_decoder(input &input, const caspar::core::video_format_desc &format,  const std::wstring& custom_channel_order);
 	std::shared_ptr<core::audio_buffer> poll();
 	const core::channel_layout& channel_layout() const;
 	std::wstring print() const;

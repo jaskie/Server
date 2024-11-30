@@ -264,6 +264,9 @@ public:
 			}
 			else
 				CASPAR_LOG(warning) << print() << L" GetBufferedVideoFrameCount failed.";
+			
+			if (!is_running_)
+				return E_FAIL;
 
 			std::shared_ptr<core::read_frame> frame;
 			frame_buffer_.pop(frame);
