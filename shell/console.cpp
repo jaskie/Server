@@ -50,19 +50,8 @@ console::console(bool hide_on_start)
     display_area.Bottom = (coord.Y - 1) / 2;
     ::SetConsoleWindowInfo(hOut, TRUE, &display_area);
 
-    // Set console title.
-    std::wstringstream str;
-    str << CASPAR_NAME << L" " << caspar::env::version();
-#ifdef COMPILE_RELEASE
-    str << " Release";
-#elif  COMPILE_PROFILE
-    str << " Profile";
-#elif  COMPILE_DEVELOP
-    str << " Develop";
-#elif  COMPILE_DEBUG
-    str << " Debug";
-#endif
-    SetConsoleTitle(str.str().c_str());
+    // set the window title before configuration file is read
+    set_window_title_prefix(L"");
 
     // redirect streams
     cin_buffer = std::wcin.rdbuf();
@@ -101,4 +90,20 @@ void console::terminate()
 void console::hide()
 {
     ::ShowWindow(h_window_, SW_MINIMIZE);
+}
+
+void console::set_window_title_prefix(const std::wstring& window_title)
+{
+    std::wstringstream str;
+    if (!window_title.empty())
+        str << window_title << L" | ";
+    str << CASPAR_NAME << L" " << caspar::env::version();
+#ifdef COMPILE_PROFILE
+    str << " Profile";
+#elif  COMPILE_DEVELOP
+    str << " Develop";
+#elif  COMPILE_DEBUG
+    str << " Debug";
+#endif
+    ::SetConsoleTitle(str.str().c_str());
 }

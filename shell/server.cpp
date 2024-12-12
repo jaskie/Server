@@ -115,7 +115,7 @@ struct server::implementation : boost::noncopyable
 	std::shared_ptr<boost::asio::io_service>	io_service_;
 	safe_ptr<core::monitor::subject>			monitor_subject_;
 	safe_ptr<ogl_device>						ogl_;
-	std::vector<safe_ptr<IO::AsyncEventServer>> async_servers_;	
+	std::vector<safe_ptr<IO::AsyncEventServer>> async_servers_;
 	std::shared_ptr<IO::AsyncEventServer>		primary_amcp_server_;
 	osc::client									osc_client_;
 	std::vector<std::shared_ptr<void>>			predefined_osc_subscriptions_;
@@ -136,23 +136,23 @@ struct server::implementation : boost::noncopyable
 		
 		ffmpeg::init(media_info_repo_);
 		CASPAR_LOG(info) << L"Initialized ffmpeg module.";
-							  
-		bluefish::init();	  
+
+		bluefish::init();
 		CASPAR_LOG(info) << L"Initialized bluefish module.";
-							  
-		decklink::init();	  
+
+		decklink::init();
 		CASPAR_LOG(info) << L"Initialized decklink module.";
 
 		oal::init();
 		CASPAR_LOG(info) << L"Initialized oal module.";
-							  
-		ogl::init();		  
+
+		ogl::init();
 		CASPAR_LOG(info) << L"Initialized ogl module.";
 
-		flash::init();		  
+		flash::init();
 		CASPAR_LOG(info) << L"Initialized flash module.";
 
-		image::init();		  
+		image::init();
 		CASPAR_LOG(info) << L"Initialized image module.";
 
 		newtek::init();
@@ -212,9 +212,9 @@ struct server::implementation : boost::noncopyable
 			parse_mix_configs(
 					default_mix_config_repository(), *mix_configs);
 	}
-				
+
 	void setup_channels(const boost::property_tree::wptree& pt)
-	{   
+	{
 		using boost::property_tree::wptree;
 		BOOST_FOREACH(auto& xml_channel, pt.get_child(L"configuration.channels"))
 		{
@@ -292,7 +292,7 @@ struct server::implementation : boost::noncopyable
 							create_consumers<core::frame_consumer>(
 									xml_consumer.second)));
 				else if (name != L"<xmlcomment>")
-					CASPAR_LOG(warning) << "Invalid consumer: " << widen(name);	
+					CASPAR_LOG(warning) << "Invalid consumer: " << widen(name);
 			}
 			catch(...)
 			{
@@ -301,7 +301,7 @@ struct server::implementation : boost::noncopyable
 		}
 	}
 
-	void create_input(const boost::property_tree::wptree& pt, const safe_ptr<video_channel> channel)
+	void create_input(const boost::property_tree::wptree& pt, const safe_ptr<video_channel> &channel)
 	{
 		try
 		{

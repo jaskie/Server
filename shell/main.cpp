@@ -182,6 +182,7 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 	}
 
 	// Create and setup console window
+
 	console console(hide_on_startup);
 
 	std::wcout << L"Type \"q\" to close application." << std::endl;
@@ -232,6 +233,10 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 	{
 		// Configure environment properties from configuration.
 		caspar::env::configure(L"casparcg.config");
+
+		std::wstring window_title = caspar::env::properties().get(L"configuration.window-title", L"");
+		// update console window title
+		console.set_window_title_prefix(window_title);
 
 		caspar::log::set_log_level(caspar::env::properties().get(L"configuration.log-level", L"debug"));
 
@@ -304,9 +309,9 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 						if (wcmd.substr(0, 1) == L"1")
 							wcmd = L"PLAY 1-0 UHDKielce";
 						else if (wcmd.substr(0, 1) == L"2")
-							wcmd = L"CALL 1-0 SEEK 100";
+							wcmd = L"ADD 1 FILE RECORDING.MP4";
 						else if (wcmd.substr(0, 1) == L"3")
-							wcmd = L"REMOVE 1 FILE RECORDING.MXF";
+							wcmd = L"REMOVE 1 FILE RECORDING.MP4";
 						else if (wcmd.substr(0, 1) == L"4")
 							wcmd = L"PLAY 2-0 route://1-0";
 						else if (wcmd.substr(0, 1) == L"5")
