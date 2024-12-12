@@ -19,4 +19,5 @@ public:
     ~console();
     void terminate();
     void hide();
+    void set_window_title_prefix(const std::wstring& window_title);
 };
