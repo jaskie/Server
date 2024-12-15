@@ -67,15 +67,13 @@ ogl_device::ogl_device(int gpu_index)
 			if (WGLEW_NV_gpu_affinity)
 			{
 				CASPAR_LOG(trace) << L"WGLEW_NV_gpu_affinity supported, selecting GPU " << gpu_index << L" to render on.";
-				HGPUNV hGPU[2] = {};
+				HGPUNV hGPU[2] = { 0 };
 				if (wglEnumGpusNV(gpu_index, hGPU))
 				{
-					GPU_DEVICE gpuDevice;
-					if (wglEnumGpuDevicesNV(hGPU[0], 0, &gpuDevice))
-						CASPAR_LOG(info) << L"Selected OpenGL device: " << gpuDevice.DeviceString << L" on " << gpuDevice.DeviceName;
-					else
-						BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("Cannot enumerate OpenGL devices"));
+					hGPU[1] = NULL;
 					HDC affDC = wglCreateAffinityDCNV(hGPU);
+					if (!affDC)
+						BOOST_THROW_EXCEPTION(gl::ogl_exception() << msg_info("Call to CreateAffinityDCNV failed"));
 					PIXELFORMATDESCRIPTOR pfd;
 					int pf = ChoosePixelFormat(affDC, &pfd);
 					if (!pf)
