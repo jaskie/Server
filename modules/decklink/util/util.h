@@ -248,8 +248,15 @@ public:
 	
 	// IUnknown
 
-	STDMETHOD (QueryInterface(REFIID, LPVOID*))
+	STDMETHOD(QueryInterface(REFIID iid, LPVOID* ppv))
 	{
+		if (memcmp(&iid, &IID_IDeckLinkVideoFrame, sizeof(REFIID)) == 0)
+		{
+			*ppv = static_cast<IDeckLinkVideoFrame*>(this);
+			AddRef();
+			return S_OK;
+		}
+		*ppv = nullptr;
 		return E_NOINTERFACE;
 	}
 	
