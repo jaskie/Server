@@ -140,22 +140,22 @@ struct filter::implementation
 			% in_time_base_.num % in_time_base_.den
 			% in_sample_aspect_ratio_.num % in_sample_aspect_ratio_.den).str();
 
-		AVFilterContext* filt_vsrc = nullptr;			
+		AVFilterContext* filt_vsrc = nullptr;
 		FF(avfilter_graph_create_filter(
 			&filt_vsrc,
-			avfilter_get_by_name("buffer"), 
+			avfilter_get_by_name("buffer"),
 			"filter_buffer",
-			vsrc_options.c_str(), 
-			nullptr, 
+			vsrc_options.c_str(),
+			nullptr,
 			video_graph_.get()));
 				
 		AVFilterContext* filt_vsink = nullptr;
 		FF(avfilter_graph_create_filter(
 			&filt_vsink,
-			avfilter_get_by_name("buffersink"), 
+			avfilter_get_by_name("buffersink"),
 			"filter_buffersink",
-			nullptr, 
-			nullptr, 
+			nullptr,
+			nullptr,
 			video_graph_.get()));
 		
 #pragma warning (push)
@@ -252,7 +252,7 @@ struct filter::implementation
 	}
 
 	void push(const std::shared_ptr<AVFrame>& frame)
-	{	
+	{
 		if (frame->format == AV_PIX_FMT_NONE)
 			return;
 		last_frame_ = frame;
@@ -260,7 +260,7 @@ struct filter::implementation
 			fast_path_.push(frame);
 		else
 			FF(av_buffersrc_add_frame_flags(
-				video_graph_in_, 
+				video_graph_in_,
 				frame.get(), AV_BUFFERSRC_FLAG_KEEP_REF));
 	}
 
@@ -279,24 +279,21 @@ struct filter::implementation
 		{
 			if (fast_path_.empty())
 				return nullptr;
-
 			auto result = fast_path_.front();
 			fast_path_.pop();
 			return result;
 		}
 
 		auto filt_frame = ffmpeg::create_frame();
-		
 		const auto ret = av_buffersink_get_frame(
 			video_graph_out_, 
 			filt_frame.get());
-				
 		if(ret == AVERROR_EOF || ret == AVERROR(EAGAIN))
 			return nullptr;
-					
+
 		FF_RET(ret, "poll");
 
-		return filt_frame;	
+		return filt_frame;
 	}
 
 	void clear()
@@ -367,9 +364,9 @@ filter::filter(
 			filtergraph)){}
 filter::filter(filter&& other) : impl_(std::move(other.impl_)){}
 filter& filter::operator=(filter&& other){impl_ = std::move(other.impl_); return *this;}
-void filter::push(const std::shared_ptr<AVFrame>& frame){impl_->push(frame);}
-std::shared_ptr<AVFrame> filter::poll(){return impl_->poll();}
-std::string filter::filter_str() const{return impl_->filtergraph_;}
+void filter::push(const std::shared_ptr<AVFrame>& frame){ impl_->push(frame); }
+std::shared_ptr<AVFrame> filter::poll(){ return impl_->poll(); }
+std::string filter::filter_str() const { return impl_->filtergraph_; }
 std::vector<safe_ptr<AVFrame>> filter::poll_all()
 {	
 	std::vector<safe_ptr<AVFrame>> frames;

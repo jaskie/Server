@@ -76,25 +76,26 @@ namespace caspar {
 			return ndi_lib->NDIlib_send_create(&NDI_send_create_desc);
 		}
 
-		SwrContext* create_swr(const core::video_format_desc format_desc, const core::channel_layout out_layout, const int input_channel_count)
+		SwrContext* create_swr(const core::video_format_desc format_desc, const core::channel_layout channel_layout)
 		{
-			const auto ALL_63_CHANNELS = 0x7FFFFFFFFFFFFFFFULL;
-			auto in_channel_layout = ALL_63_CHANNELS >> (63 - input_channel_count);
-			auto out_channel_layout = ALL_63_CHANNELS >> (63 - out_layout.num_channels);
-			auto swr = swr_alloc_set_opts(nullptr,
-				out_channel_layout,
+			AVChannelLayout av_channel_layout;
+			av_channel_layout_custom_init(&av_channel_layout, channel_layout.num_channels);
+			SwrContext* swr = NULL;
+			int ret = swr_alloc_set_opts2(&swr,
+				&av_channel_layout,
 				AV_SAMPLE_FMT_FLT,
 				format_desc.audio_sample_rate,
-				in_channel_layout,
+				&av_channel_layout,
 				AV_SAMPLE_FMT_S32,
 				format_desc.audio_sample_rate,
-				0, nullptr);
-			if (!swr)
+				0, NULL);
+			if (ret != 0 || swr == NULL)
 				BOOST_THROW_EXCEPTION(caspar_exception()
 					<< msg_info("Cannot alloc audio resampler"));
 			if (swr_init(swr) < 0)
 				BOOST_THROW_EXCEPTION(caspar_exception()
 					<< msg_info("Cannot initialize audio resampler"));
+			av_channel_layout_uninit(&av_channel_layout);
 			return swr;
 		}
 
@@ -109,7 +110,6 @@ namespace caspar {
 			const NDIlib_v2*												ndi_lib_;
 			const NDIlib_send_instance_t									ndi_send_;
 			std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>     send_frame_buffer_;
-			int																input_audio_channel_count_;
 			safe_ptr<diagnostics::graph>									graph_;
 			tbb::atomic<int64_t>											current_encoding_delay_;
 			boost::timer													audio_send_timer_;
@@ -133,10 +133,9 @@ namespace caspar {
 				, is_blocking_(is_blocking)
 				, ndi_lib_(load_ndi())
 				, ndi_send_(create_ndi_send(ndi_lib_, ndi_name, groups, is_blocking))
-				, input_audio_channel_count_(channel_layout.num_channels)
 				, sws_(is_alpha ? nullptr : sws_getContext(format_desc.width, format_desc.height, AV_PIX_FMT_BGRA, format_desc.width, format_desc.height, AV_PIX_FMT_UYVY422, SWS_POINT, NULL, NULL, NULL), [](SwsContext * ctx) { sws_freeContext(ctx); })
-				, swr_(create_swr(format_desc_, channel_layout_, input_audio_channel_count_), [](SwrContext * ctx) { swr_free(&ctx); })
-				, send_frame_buffer_(is_alpha ? 0 : av_image_get_buffer_size(AV_PIX_FMT_BGRA, format_desc.width, format_desc.height, 16))
+				, swr_(create_swr(format_desc_, channel_layout_), [](SwrContext * ctx) { swr_free(&ctx); })
+				, send_frame_buffer_(is_alpha ? 0 : av_image_get_buffer_size(AV_PIX_FMT_BGRA, format_desc.width, format_desc.height, 1))
 				, executor_(print())
 			{
 				current_encoding_delay_ = 0;
@@ -211,7 +210,7 @@ namespace caspar {
 					uint8_t * dest_data[AV_NUM_DATA_POINTERS];
 					int dst_linesize[AV_NUM_DATA_POINTERS];
 					av_image_fill_arrays(src_data, src_linesize, frame->image_data().begin(), AV_PIX_FMT_BGRA, format_desc_.width, format_desc_.height, 1);
-					av_image_fill_arrays(dest_data, dst_linesize, &send_frame_buffer_.front(), AV_PIX_FMT_UYVY422, format_desc_.width, format_desc_.height, 16);
+					av_image_fill_arrays(dest_data, dst_linesize, &send_frame_buffer_.front(), AV_PIX_FMT_UYVY422, format_desc_.width, format_desc_.height, 1);
 					sws_scale(sws_.get(), src_data, src_linesize, 0, format_desc_.height, dest_data, dst_linesize);
 					graph_->set_value("frame-convert-time", frame_convert_timer_.elapsed() * format_desc_.fps);
 					ndi_frame->p_data = &send_frame_buffer_.front();

@@ -87,7 +87,7 @@ std::wstring get_relative_or_original(
 
 	return result;
 }
-				
+
 struct ffmpeg_producer : public core::frame_producer
 {
 	//const int MAX_GOP_SIZE = 256;
@@ -391,9 +391,11 @@ public:
 		{
 			if (video)
 			{
-				int64_t frame_time = av_rescale(video->pts, video_decoder_->time_base().numerator() * AV_TIME_BASE, video_decoder_->time_base().denominator());
-				if (length_ == AV_NOPTS_VALUE || frame_time < start_time_ + length_)
-					muxer_->push(video, hints, time_to_frame(frame_time));
+				int64_t time = av_rescale(video->pts, video_decoder_->time_base().numerator() * AV_TIME_BASE, video_decoder_->time_base().denominator());
+				auto opaque_time = new frame_time(time_to_frame(time));
+				video->opaque_ref = av_buffer_create(NULL, 0, av_buffer_free, opaque_time, AV_BUFFER_FLAG_READONLY);
+				if (length_ == AV_NOPTS_VALUE || time < start_time_ + length_)
+					muxer_->push(video, hints);
 			}
 		}
 	}
