@@ -250,9 +250,10 @@ public:
 
 	STDMETHOD(QueryInterface(REFIID iid, LPVOID* ppv))
 	{
-		if (memcmp(&iid, &IID_IDeckLinkVideoFrame, sizeof(REFIID)) == 0)
+		if (memcmp(&iid, &IID_IDeckLinkVideoFrame, sizeof(REFIID)) == 0 ||
+			memcmp(&iid, &IID_IUnknown, sizeof(REFIID)) == 0)
 		{
-			*ppv = static_cast<IDeckLinkVideoFrame*>(this);
+			*ppv = this;
 			AddRef();
 			return S_OK;
 		}
