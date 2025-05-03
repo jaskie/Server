@@ -22,6 +22,7 @@ void CALLBACK WinEventHandler(
 
 console::console(bool hide_on_start)
     : allocated_(::AllocConsole())
+    , closed_(FALSE)
     , h_window_(::GetConsoleWindow())
     , g_hook_(::SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZESTART, NULL, WinEventHandler, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS))
 {
@@ -63,15 +64,19 @@ console::console(bool hide_on_start)
     std::wcin.rdbuf(console_input.rdbuf());
     std::wcout.rdbuf(console_output.rdbuf());
     std::wcerr.rdbuf(console_error.rdbuf());
-
 }
 
 console::~console()
 {
-    ::UnhookWinEvent(g_hook_);
-    if (!allocated_)
+    close();
+}
+
+void console::close()
+{
+    if (!allocated_ || closed_)
         return;
-    ::FreeConsole();
+    ::UnhookWinEvent(g_hook_);
+    closed_ = ::FreeConsole();
     console_input.close();
     console_output.close();
     console_error.close();
@@ -84,7 +89,8 @@ void console::terminate()
 {
     if (!allocated_)
         return;
-    std::wcin.setstate(std::ios_base::badbit, true);
+    std::wcin.setstate(std::ios_base::badbit);
+    close();
 }
 
 void console::hide()

@@ -261,8 +261,7 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 
 			// Create server object which initializes channels, protocols and controllers.
 			caspar::server caspar_server;
-			// Use separate thread for the blocking console input, will be terminated 
-			// anyway when the main thread terminates.
+			// Use separate thread for the blocking console input. It will be terminated when console is closed or on explicit exit
 			boost::thread stdin_thread([&caspar_server, &wait_for_keypress, &tray, &console]
 			{
 				caspar::win32_exception::ensure_handler_installed_for_thread("stdin-thread");
@@ -362,15 +361,18 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 					wcmd += L"\r\n";
 					amcp.Parse(wcmd.c_str(), wcmd.length(), console_client);
 				}
-				tray.close();
+				if (wait_for_keypress)
+					tray.close();
 			});
-			stdin_thread.detach();
 			MSG stMsg;
-			while (GetMessage(&stMsg, NULL, 0, 0) > 0)
+			while (GetMessage(&stMsg, NULL, 0, 0) > 0) // the WM_QUIT may be sent from tray.close()
 			{
 				TranslateMessage(&stMsg);
 				DispatchMessage(&stMsg);
 			}
+			if (!wait_for_keypress)
+				console.terminate();
+			stdin_thread.join();
 		} // end of server scope
 		if (_CrtDumpMemoryLeaks())
 			OutputDebugStringA("\nMemory leak!\n");
@@ -395,6 +397,5 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 		CloseHandle(single_instance_mutex);
 	if (wait_for_keypress)
 		system("pause");
-	console.terminate();
 	return 0;
 }
