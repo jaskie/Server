@@ -57,60 +57,60 @@ extern "C"
 
 namespace caspar { namespace ffmpeg {
 
-static void sanitize(uint8_t *line)
+static void sanitize(uint8_t* line)
 {
-    while(*line)
+	while (*line)
 	{
-        if(*line < 0x08 || (*line > 0x0D && *line < 0x20))
-            *line='?';
-        line++;
-    }
+		if (*line < 0x08 || (*line > 0x0D && *line < 0x20))
+			*line = '?';
+		line++;
+	}
 }
 
 void log_callback(void* ptr, int level, const char* fmt, va_list vl)
 {
-    static int print_prefix=1;
-    static int count;
-    static char prev[1024];
-    char line[8192];
-    static int is_atty;
-    AVClass* avc= ptr ? *(AVClass**)ptr : NULL;
-    if(level > av_log_get_level())
-        return;
-    line[0]=0;
-	
+	static int print_prefix = 1;
+	static int count;
+	static char prev[1024];
+	char line[8192];
+	static int is_atty;
+	AVClass* avc = ptr ? *(AVClass**)ptr : NULL;
+	if (level > av_log_get_level())
+		return;
+	line[0] = 0;
+
 #undef fprintf
-    if(print_prefix && avc) 
+	if (print_prefix && avc)
 	{
-        if (avc->parent_log_context_offset) 
+		if (avc->parent_log_context_offset)
 		{
-            AVClass** parent= *(AVClass***)(((uint8_t*)ptr) + avc->parent_log_context_offset);
-            if(parent && *parent)
-                std::sprintf(line, "[%s @ %p] ", (*parent)->item_name(parent), parent);            
-        }
-        std::sprintf(line + strlen(line), "[%s @ %p] ", avc->item_name(ptr), ptr);
-    }
+			AVClass** parent = *(AVClass***)(((uint8_t*)ptr) + avc->parent_log_context_offset);
+			if (parent && *parent)
+				std::sprintf(line, "[%s @ %p] ", (*parent)->item_name(parent), parent);
+		}
+		std::sprintf(line + strlen(line), "[%s @ %p] ", avc->item_name(ptr), ptr);
+	}
 
-    std::vsprintf(line + strlen(line), fmt, vl);
+	std::vsprintf(line + strlen(line), fmt, vl);
 
-    print_prefix = strlen(line) && line[strlen(line)-1] == '\n';
-	
-    strcpy(prev, line);
-    sanitize((uint8_t*)line);
+	print_prefix = strlen(line) && line[strlen(line) - 1] == '\n';
+
+	strcpy(prev, line);
+	sanitize((uint8_t*)line);
 
 	int len = strlen(line);
-	if(len > 0)
-		line[len-1] = 0;
-	
-	if(level == AV_LOG_DEBUG)
+	if (len > 0)
+		line[len - 1] = 0;
+
+	if (level == AV_LOG_VERBOSE)
 		CASPAR_LOG(debug) << L"[ffmpeg] " << line;
-	else if(level == AV_LOG_INFO)
+	else if (level == AV_LOG_INFO)
 		CASPAR_LOG(info) << L"[ffmpeg] " << line;
-	else if(level == AV_LOG_WARNING)
+	else if (level == AV_LOG_WARNING)
 		CASPAR_LOG(warning) << L"[ffmpeg] " << line;
-	else if(level == AV_LOG_ERROR)
+	else if (level == AV_LOG_ERROR)
 		CASPAR_LOG(error) << L"[ffmpeg] " << line;
-	else if(level == AV_LOG_FATAL)
+	else if (level == AV_LOG_FATAL)
 		CASPAR_LOG(fatal) << L"[ffmpeg] " << line;
 	else
 		CASPAR_LOG(trace) << L"[ffmpeg] " << line;
@@ -157,6 +157,7 @@ void log_for_thread(void* ptr, int level, const char* fmt, va_list vl)
 
 void init(const safe_ptr<core::media_info_repository>& media_info_repo)
 {
+	av_log_set_level(AV_LOG_INFO);
 	av_log_set_callback(log_for_thread);
 	avformat_network_init();
 	
