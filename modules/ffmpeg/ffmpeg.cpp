@@ -69,19 +69,29 @@ static void sanitize(uint8_t* line)
 
 void log_callback(void* ptr, int level, const char* fmt, va_list vl)
 {
-	static int print_prefix = 1;
-	static int count;
-	static char prev[1024];
 	char line[8192];
-	static int is_atty;
-	AVClass* avc = ptr ? *(AVClass**)ptr : NULL;
 	if (level > av_log_get_level())
 		return;
+	AVClass* avc = ptr ? *(AVClass**)ptr : NULL;
 	line[0] = 0;
 
 #undef fprintf
-	if (print_prefix && avc)
+	if (avc)
 	{
+		if (strcmp(avc->class_name, "AVCodecContext") == 0)
+		{
+			AVCodecContext* codec_ctx = (AVCodecContext*)ptr;
+			if (codec_ctx->opaque)
+				std::sprintf(line + strlen(line), "[%s] ", codec_ctx->opaque);
+		}
+
+		if (strcmp(avc->class_name, "AVFormatContext") == 0)
+		{
+			AVFormatContext* format_ctx = (AVFormatContext*)ptr;
+			if (format_ctx->url)
+				std::sprintf(line + strlen(line), "[%s] ", format_ctx->url);
+		}
+
 		if (avc->parent_log_context_offset)
 		{
 			AVClass** parent = *(AVClass***)(((uint8_t*)ptr) + avc->parent_log_context_offset);
@@ -93,9 +103,6 @@ void log_callback(void* ptr, int level, const char* fmt, va_list vl)
 
 	std::vsprintf(line + strlen(line), fmt, vl);
 
-	print_prefix = strlen(line) && line[strlen(line) - 1] == '\n';
-
-	strcpy(prev, line);
 	sanitize((uint8_t*)line);
 
 	int len = strlen(line);

@@ -53,7 +53,7 @@ namespace caspar { namespace ffmpeg {
 	
 struct video_decoder::implementation : boost::noncopyable
 {
-	input 									&input_;
+	input									&input_;
 	const safe_ptr<AVCodecContext>			codec_context_;
 	const AVCodec*							codec_;
 	AVStream*								stream_;
@@ -88,7 +88,7 @@ public:
 		if (stream->duration == AV_NOPTS_VALUE)
 			return 0;
 		else
-			return  av_rescale(stream->duration, stream->time_base.num * AV_TIME_BASE, stream->time_base.den);
+			return av_rescale(stream->duration, stream->time_base.num * AV_TIME_BASE, stream->time_base.den);
 	}
 
 	std::shared_ptr<AVFrame> poll()

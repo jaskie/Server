@@ -456,6 +456,7 @@ namespace caspar {
 
 				video_codec_ctx_ = AVCodecContextPtr(avcodec_alloc_context3(encoder), [](AVCodecContext * ctx) { avcodec_free_context(&ctx); });
 
+				video_codec_ctx_->opaque = format_context_->url;
 				video_codec_ctx_->codec_id = encoder->id;
 				video_codec_ctx_->codec_type = AVMEDIA_TYPE_VIDEO;
 				video_codec_ctx_->width = width;
@@ -570,6 +571,7 @@ namespace caspar {
 
 				audio_codec_ctx_ = AVCodecContextPtr(avcodec_alloc_context3(encoder), [](AVCodecContext * ctx) { avcodec_free_context(&ctx); });
 
+				video_codec_ctx_->opaque = format_context_->url;
 				audio_codec_ctx_->codec_id = encoder->id;
 				audio_codec_ctx_->codec_type = AVMEDIA_TYPE_AUDIO;
 				audio_codec_ctx_->sample_rate = channel_format_desc_.audio_sample_rate;

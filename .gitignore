@@ -33,8 +33,6 @@
 /modules/ffmpeg/tmp
 /modules/ffmpeg/ffmpeg.vcxproj.user
 
-# /modules/ffmpeg/producer/filter/scalable_yadif/
-
 # /modules/flash/
 /modules/flash/bin
 /modules/flash/tmp
@@ -83,6 +81,7 @@
 
 # /dependencies/
 /dependencies/boost
+/dependencies/ffmpeg/x86/bin/*.exe
 
 # /dependencies64/ for 2.1.0 branch
 /dependencies64/asmlib
@@ -101,5 +100,4 @@
 /modules/newtek/tmp
 /.vs
 /*.opendb
-/dependencies/ffmpeg57/x86/bin/*.exe
 /*.db

@@ -65,7 +65,7 @@ static const size_t MAX_BUFFER_COUNT    = 500;
 static const size_t MIN_BUFFER_COUNT    = 50;
 
 namespace caspar { namespace ffmpeg {
-		
+
 struct input::implementation : boost::noncopyable
 {		
 	const safe_ptr<diagnostics::graph>							graph_;
@@ -80,8 +80,6 @@ struct input::implementation : boost::noncopyable
 	tbb::concurrent_bounded_queue<std::shared_ptr<AVPacket>>	video_buffer_;
 	executor													executor_;
 
-
-	
 	explicit implementation(const safe_ptr<diagnostics::graph> graph, 
 		const std::wstring& filename
 		)
@@ -112,6 +110,7 @@ struct input::implementation : boost::noncopyable
 		THROW_ON_ERROR2(avcodec_open2(ctx, decoder, NULL), print());
 		audio_stream_index_ = index;
 		*stream = format_context_->streams[index];
+		ctx->opaque = format_context_->url;
 		return safe_ptr<AVCodecContext>(ctx, [](AVCodecContext* c) { avcodec_free_context(&c); });
 	}
 	
@@ -133,6 +132,7 @@ struct input::implementation : boost::noncopyable
 		}
 		video_stream_index_ = index;
 		*stream = format_context_->streams[index];
+		ctx->opaque = format_context_->url;
 		return safe_ptr<AVCodecContext>(ctx, [](AVCodecContext* c) { avcodec_free_context(&c); });
 	}
 
