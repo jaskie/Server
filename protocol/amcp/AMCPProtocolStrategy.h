@@ -38,7 +38,7 @@ class AMCPProtocolStrategy : public IO::IProtocolStrategy, boost::noncopyable
 {
 	enum MessageParserState {
 		New = 0,
-		GetSwitch,
+		GetRequestId,
 		GetCommand,
 		GetParameters,
 		GetChannel,

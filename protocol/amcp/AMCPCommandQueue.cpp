@@ -30,7 +30,7 @@ AMCPCommandQueue::AMCPCommandQueue()
 {
 }
 
-AMCPCommandQueue::~AMCPCommandQueue() 
+AMCPCommandQueue::~AMCPCommandQueue()
 {
 }
 
@@ -60,7 +60,7 @@ void AMCPCommandQueue::AddCommand(AMCPCommandPtr pCurrentCommand)
 		{
 			try
 			{
-				if(pCurrentCommand->Execute()) 
+				if(pCurrentCommand->Execute())
 					CASPAR_LOG(debug) << "Executed command: " << pCurrentCommand->print();
 				else 
 					CASPAR_LOG(warning) << "Failed to execute command: " << pCurrentCommand->print();

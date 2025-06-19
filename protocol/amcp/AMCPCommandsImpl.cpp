@@ -311,7 +311,10 @@ void AMCPCommand::SendReply()
 
 	if(replyString_.empty())
 		return;
-	pClientInfo_->Send(replyString_);
+	if (requestId_.empty())
+		pClientInfo_->Send(replyString_);
+	else
+		pClientInfo_->Send(L"#" + requestId_ + L" " + replyString_);
 }
 
 void AMCPCommand::Clear() 
@@ -357,7 +360,7 @@ bool ChannelGridCommand::DoExecute()
 	{
 		if(channel != self)
 		{
-			auto producer = create_channel_producer(self->mixer(), channel);		
+			auto producer = create_channel_producer(self->mixer(), channel);
 			self->stage()->load(index, producer, false);
 			self->stage()->play(index);
 			index++;
@@ -1735,56 +1738,48 @@ bool CaptureCommand::DoExecute()
 bool RecorderCommand::DoExecute()
 {
 	auto recorders = GetRecorders();
-	int recorder_index = _parameters.get(L"PLAY", std::numeric_limits<int>().max()) - 1;
 	bool success = false;
-	if (recorder_index < recorders.size())
+	int recorder_index;
+
+	// Helper function to check if we have a valid recorder for a command
+	auto tryCommand = [&](const std::wstring& cmd) -> bool {
+		recorder_index = _parameters.get(cmd, std::numeric_limits<int>().max()) - 1;
+		return recorder_index >= 0 && recorder_index < recorders.size();
+		};
+
+	// Check each command in sequence
+	if (tryCommand(L"PLAY")) {
 		success = recorders[recorder_index]->Play();
-	else
-	{
-		recorder_index = _parameters.get(L"STOP", std::numeric_limits<int>().max()) - 1;
-		if (recorder_index < recorders.size())
-			success = recorders[recorder_index]->Stop();
-		else {
-			recorder_index = _parameters.get(L"ABORT", std::numeric_limits<int>().max()) - 1;
-			if (recorder_index < recorders.size())
-				success = recorders[recorder_index]->Abort();
-			else {
-				recorder_index = _parameters.get(L"FF", std::numeric_limits<int>().max()) - 1;
-				if (recorder_index < recorders.size())
-					success = recorders[recorder_index]->FastForward();
-				else {
-					recorder_index = _parameters.get(L"REWIND", std::numeric_limits<int>().max()) - 1;
-					if (recorder_index < recorders.size())
-						success = recorders[recorder_index]->Rewind();
-					else {
-						recorder_index = _parameters.get(L"FINISH", std::numeric_limits<int>().max()) - 1;
-						if (recorder_index < recorders.size())
-							success = recorders[recorder_index]->FinishCapture();
-						else {
-							recorder_index = _parameters.get(L"GOTO", std::numeric_limits<int>().max()) - 1;
-							if (recorder_index < recorders.size())
-							{
-								std::wstring tc = _parameters.get(L"TC", L"");
-								success = recorders[recorder_index]->GoToTimecode(tc);
-							}
-							else {
-								recorder_index = _parameters.get(L"CALL", std::numeric_limits<int>().max()) - 1;
-								if (recorder_index < recorders.size())
-								{
-									unsigned int limit = _parameters.get(L"LIMIT", std::numeric_limits<unsigned int>().min());
-									recorders[recorder_index]->SetFrameLimit(limit);
-									success = true;
-								}
-							}
-						}
-					}
-				}
-			}
-		}
 	}
-	SetReplyString(success ? 
-		TEXT("201 RECORDER OK\r\n"):
+	else if (tryCommand(L"STOP")) {
+		success = recorders[recorder_index]->Stop();
+	}
+	else if (tryCommand(L"ABORT")) {
+		success = recorders[recorder_index]->Abort();
+	}
+	else if (tryCommand(L"FF")) {
+		success = recorders[recorder_index]->FastForward();
+	}
+	else if (tryCommand(L"REWIND")) {
+		success = recorders[recorder_index]->Rewind();
+	}
+	else if (tryCommand(L"FINISH")) {
+		success = recorders[recorder_index]->FinishCapture();
+	}
+	else if (tryCommand(L"GOTO")) {
+		std::wstring tc = _parameters.get(L"TC", L"");
+		success = recorders[recorder_index]->GoToTimecode(tc);
+	}
+	else if (tryCommand(L"CALL")) {
+		unsigned int limit = _parameters.get(L"LIMIT", std::numeric_limits<unsigned int>().max());
+		recorders[recorder_index]->SetFrameLimit(limit);
+		success = true;
+	}
+
+	SetReplyString(success ?
+		TEXT("201 RECORDER OK\r\n") :
 		TEXT("402 RECORDER ERROR\r\n"));
+
 	return success;
 }
 

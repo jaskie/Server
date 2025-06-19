@@ -71,12 +71,6 @@ AMCPProtocolStrategy::AMCPProtocolStrategy(
 	//Create a commandpump for each video_channel
 	while((pChannel = GetChannelSafe(++index, channels_)) != 0) {
 		AMCPCommandQueuePtr pChannelCommandQueue(new AMCPCommandQueue());
-		std::wstring title = TEXT("video_channel ");
-
-		//HACK: Perform real conversion from int to string
-		TCHAR num = TEXT('1')+static_cast<TCHAR>(index);
-		title += num;
-		
 		commandQueues_.push_back(pChannelCommandQueue);
 	}
 }
@@ -135,7 +129,7 @@ void AMCPProtocolStrategy::ProcessMessage(const std::wstring& message, ClientInf
 	pCommand = InterpretCommandString(message, &state);
 
 	if(pCommand != 0) {
-		pCommand->SetClientInfo(pClientInfo);	
+		pCommand->SetClientInfo(pClientInfo);
 		if(QueueCommand(pCommand))
 			bError = false;
 		else
@@ -167,7 +161,7 @@ AMCPCommandPtr AMCPProtocolStrategy::InterpretCommandString(const std::wstring& 
 {
 	std::vector<std::wstring> tokens;
 	unsigned int currentToken = 0;
-	std::wstring commandSwitch;
+	std::wstring requestId;
 
 	AMCPCommandPtr pCommand;
 	MessageParserState state = New;
@@ -180,14 +174,14 @@ AMCPCommandPtr AMCPProtocolStrategy::InterpretCommandString(const std::wstring& 
 		switch(state)
 		{
 		case New:
-			if(tokens[currentToken][0] == TEXT('/'))
-				state = GetSwitch;
+			if(tokens[currentToken][0] == L'#')
+				state = GetRequestId;
 			else
 				state = GetCommand;
 			break;
 
-		case GetSwitch:
-			commandSwitch = tokens[currentToken];
+		case GetRequestId:
+			requestId = tokens[currentToken].substr(1);
 			state = GetCommand;
 			++currentToken;
 			break;
@@ -202,10 +196,7 @@ AMCPCommandPtr AMCPProtocolStrategy::InterpretCommandString(const std::wstring& 
 				pCommand->SetChannels(channels_);
 				pCommand->SetRecorders(recorders_);
 				pCommand->SetMediaInfoRepo(media_info_repo_);
-				//Set scheduling
-				if(commandSwitch.size() > 0) {
-					transform(commandSwitch.begin(), commandSwitch.end(), commandSwitch.begin(), toupper);
-				}
+				pCommand->SetRequestId(requestId) ;
 
 				if(pCommand->NeedChannel())
 					state = GetChannel;

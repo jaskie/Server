@@ -47,38 +47,40 @@ namespace caspar { namespace protocol { namespace amcp {
 
 		void SendReply();
 
-		void AddParameter(const std::wstring& param){_parameters.push_back(param);}
+		void AddParameter(const std::wstring& param) { _parameters.push_back(param); }
 
 		void SetParameters(const core::parameters& p) {
 			_parameters = p;
 		}
 
-		void SetClientInfo(IO::ClientInfoPtr& s){pClientInfo_ = s;}
-		IO::ClientInfoPtr GetClientInfo(){return pClientInfo_;}
+		void SetClientInfo(IO::ClientInfoPtr& s) { pClientInfo_ = s; }
+		IO::ClientInfoPtr GetClientInfo() { return pClientInfo_; }
 
-		void SetChannel(const std::shared_ptr<core::video_channel>& pChannel){pChannel_ = pChannel;}
-		std::shared_ptr<core::video_channel> GetChannel(){return pChannel_;}
+		void SetChannel(const std::shared_ptr<core::video_channel>& pChannel) { pChannel_ = pChannel; }
+		std::shared_ptr<core::video_channel> GetChannel() { return pChannel_; }
 
-		void SetChannels(const std::vector<safe_ptr<core::video_channel>>& channels){channels_ = channels;}
+		void SetChannels(const std::vector<safe_ptr<core::video_channel>>& channels) { channels_ = channels; }
 		const std::vector<safe_ptr<core::video_channel>>& GetChannels() { return channels_; }
 
 		void SetRecorders(const std::vector<safe_ptr<core::recorder>>& recorders) { recorders_ = recorders; }
 		const std::vector<safe_ptr<core::recorder>>& GetRecorders() { return recorders_; }
 
-		void SetMediaInfoRepo(const safe_ptr<core::media_info_repository>& media_info_repo) {media_info_repo_ = media_info_repo;}
+		void SetMediaInfoRepo(const safe_ptr<core::media_info_repository>& media_info_repo) { media_info_repo_ = media_info_repo; }
 		std::shared_ptr<core::media_info_repository> GetMediaInfoRepo() { return media_info_repo_; }
 
-		void SetChannelIndex(unsigned int channelIndex){channelIndex_ = channelIndex;}
-		unsigned int GetChannelIndex(){return channelIndex_;}
+		void SetChannelIndex(unsigned int channelIndex) { channelIndex_ = channelIndex; }
+		unsigned int GetChannelIndex() { return channelIndex_; }
 
-		void SetLayerIntex(int layerIndex){layerIndex_ = layerIndex;}
-		int GetLayerIndex(int defaultValue = 0) const{return layerIndex_ != -1 ? layerIndex_ : defaultValue;}
+		void SetLayerIntex(int layerIndex) { layerIndex_ = layerIndex; }
+		int GetLayerIndex(int defaultValue = 0) const { return layerIndex_ != -1 ? layerIndex_ : defaultValue; }
 
 		virtual void Clear();
 
 		virtual std::wstring print() const = 0;
 
-		void SetReplyString(const std::wstring& str){replyString_ = str;}
+		void SetReplyString(const std::wstring& str) { replyString_ = str; }
+
+		void SetRequestId(const std::wstring& id) { requestId_ = id; }
 
 	protected:
 		core::parameters _parameters;
@@ -92,27 +94,33 @@ namespace caspar { namespace protocol { namespace amcp {
 		std::vector<safe_ptr<core::recorder>> recorders_;
 		std::shared_ptr<core::media_info_repository> media_info_repo_;
 		std::wstring replyString_;
+		std::wstring requestId_;
 	};
 
-	typedef std::tr1::shared_ptr<AMCPCommand> AMCPCommandPtr;
+	typedef std::shared_ptr<AMCPCommand> AMCPCommandPtr;
 
 	template<bool TNeedChannel, int TMinParameters>
 	class AMCPCommandBase : public AMCPCommand
 	{
 	public:
+		AMCPCommandBase()
+		{
+		}
 		virtual bool Execute()
 		{
 			_parameters.to_upper();
 			return (TNeedChannel && !GetChannel()) || _parameters.size() < TMinParameters ? false : DoExecute();
 		}
 
-		virtual bool NeedChannel(){return TNeedChannel;}		
-		virtual int GetMinimumParameters(){return TMinParameters;}
+		virtual bool NeedChannel() { return TNeedChannel; }
+		virtual int GetMinimumParameters() { return TMinParameters; }
 	protected:
-		~AMCPCommandBase(){}
+		~AMCPCommandBase()
+		{
+		}
 
 	private:
 		virtual bool DoExecute() = 0;
-	};	
+	};
 
 }}}

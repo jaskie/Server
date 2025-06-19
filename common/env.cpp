@@ -65,7 +65,7 @@ void configure(const std::wstring& filename)
 		auto paths = pt.get_child(L"configuration.paths");
 		media = widen(paths.get(L"media-path", initialPath + L"\\media\\"));
 		log = widen(paths.get(L"log-path", initialPath + L"\\log\\"));
-		ftemplate = complete(wpath(widen(paths.get(L"template-path", initialPath + L"\\template\\")))).string();		
+		ftemplate = complete(wpath(widen(paths.get(L"template-path", initialPath + L"\\template\\")))).string();
 		data = widen(paths.get(L"data-path", initialPath + L"\\data\\"));
 
 		//Make sure that all paths have a trailing backslash
@@ -82,7 +82,7 @@ void configure(const std::wstring& filename)
 		{
 			for(auto it = boost::filesystem2::wdirectory_iterator(initialPath); it != boost::filesystem2::wdirectory_iterator(); ++it)
 			{
-				if(it->filename().find(L".fth") != std::wstring::npos)			
+				if(it->filename().find(L".fth") != std::wstring::npos)
 				{
 					auto from_path = *it;
 					auto to_path = boost::filesystem2::wpath(ftemplate + L"/" + it->filename());
@@ -164,9 +164,8 @@ const std::wstring& version()
 	static std::wstring ver = widen(
 			EXPAND_AND_QUOTE(CASPAR_GEN)	"." 
 			EXPAND_AND_QUOTE(CASPAR_MAYOR)  "." 
-			EXPAND_AND_QUOTE(CASPAR_MINOR)  "." 
-			CASPAR_REV	" " 
-			CASPAR_TAG);
+			EXPAND_AND_QUOTE(CASPAR_MINOR)  " " 
+			CASPAR_REV);
 	return ver;
 }
 
