@@ -69,7 +69,7 @@ namespace caspar { namespace ffmpeg {
 struct filter::implementation
 {
 	std::string						filtergraph_;
-	std::shared_ptr<AVFilterGraph>	video_graph_;	
+	std::shared_ptr<AVFilterGraph>	video_graph_;
     AVFilterContext*				video_graph_in_;
     AVFilterContext*				video_graph_out_;
 	std::vector<AVPixelFormat>		out_pix_fmts_;
@@ -128,12 +128,12 @@ struct filter::implementation
 		}
 
 		video_graph_.reset(
-			avfilter_graph_alloc(), 
+			avfilter_graph_alloc(),
 			[](AVFilterGraph* p)
 			{
 				avfilter_graph_free(&p);
 			});
-				
+		video_graph_->nb_threads = 1; // significantly improves performace of creating the filter graph, important when seeking, not needed for normal playback
 		const auto vsrc_options = (boost::format("video_size=%1%x%2%:pix_fmt=%3%:time_base=%4%/%5%:pixel_aspect=%6%/%7%")
 			% in_width_ % in_height_
 			% in_pix_format_
