@@ -38,7 +38,7 @@ namespace caspar { namespace core {
 
 static tbb::atomic<int> g_w_total_count;
 static tbb::atomic<int> g_r_total_count;
-																																								
+
 struct host_buffer::implementation : boost::noncopyable
 {	
 	GLuint			pbo_;
@@ -66,7 +66,7 @@ public:
 			BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Failed to allocate buffer."));
 
 		CASPAR_LOG(trace) << "[host_buffer] [" << ++(usage_ == write_only ? g_w_total_count : g_r_total_count) << L"] allocated size:" << size_ << " usage: " << (usage == write_only ? "write_only" : "read_only");
-	}	
+	}
 
 	~implementation()
 	{
@@ -86,7 +86,7 @@ public:
 		if(data_)
 			return;
 
-		if(usage_ == write_only)			
+		if(usage_ == write_only)
 			GL(glBufferData(target_, size_, NULL, usage_));	// Notify OpenGL that we don't care about previous data.
 		
 		GL(glBindBuffer(target_, pbo_));
@@ -107,8 +107,8 @@ public:
 			return;
 		
 		GL(glBindBuffer(target_, pbo_));
-		GL(glUnmapBuffer(target_));	
-		data_ = nullptr;		
+		GL(glUnmapBuffer(target_));
+		data_ = nullptr;
 		GL(glBindBuffer(target_, 0));
 	}
 

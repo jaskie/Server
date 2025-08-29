@@ -40,7 +40,7 @@ int64_t get_current_time_millis()
 	return duration_cast<milliseconds>(
 			high_resolution_clock::now().time_since_epoch()).count();
 }
-																																							
+
 struct read_frame::implementation : boost::noncopyable
 {
 	safe_ptr<ogl_device>		ogl_;
@@ -50,7 +50,7 @@ struct read_frame::implementation : boost::noncopyable
 	audio_buffer				audio_data_;
 	const channel_layout		audio_channel_layout_;
 	int64_t						created_timestamp_;
-	const int					frame_timecode_;
+	const uint32_t				frame_timecode_;
 
 public:
 	implementation(
@@ -59,7 +59,7 @@ public:
 			safe_ptr<host_buffer>&& image_data,
 			audio_buffer&& audio_data,
 			const channel_layout& audio_channel_layout,
-			const unsigned int frame_timecode
+			const uint32_t frame_timecode
 	) 
 		: ogl_(ogl)
 		, size_(size)
@@ -69,7 +69,7 @@ public:
 		, created_timestamp_(get_current_time_millis())
 		, frame_timecode_(frame_timecode)
 	{
-	}	
+	}
 	
 	const boost::iterator_range<const uint8_t*> image_data()
 	{
@@ -100,7 +100,7 @@ read_frame::read_frame(
 		safe_ptr<host_buffer>&& image_data,
 		audio_buffer&& audio_data,
 		const channel_layout& audio_channel_layout,
-		int frame_timecode)
+		const uint32_t frame_timecode)
 	: impl_(new implementation(ogl, size, std::move(image_data), std::move(audio_data), audio_channel_layout, frame_timecode))
 {
 }
@@ -131,7 +131,7 @@ int64_t read_frame::get_age_millis() const
 	return impl_ ? get_current_time_millis() - impl_->created_timestamp_ : 0;
 }
 
-int read_frame::get_timecode() const
+const uint32_t read_frame::get_timecode() const
 {
 	return impl_->frame_timecode_;
 }

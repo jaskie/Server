@@ -38,7 +38,7 @@
 namespace caspar { 
 
 class executor;
-	
+
 namespace core {
 
 class read_frame;
@@ -52,18 +52,18 @@ struct channel_layout;
 class mixer : public target<std::pair<std::map<int, safe_ptr<core::basic_frame>>, std::shared_ptr<void>>>
 			, public core::frame_factory
 {
-public:	
+public:
 	typedef target<std::pair<safe_ptr<read_frame>, std::shared_ptr<void>>> target_t;
 
 	explicit mixer(const safe_ptr<diagnostics::graph>& graph, const safe_ptr<target_t>& target, const video_format_desc& format_desc, const safe_ptr<ogl_device>& ogl, const channel_layout& audio_channel_layout, const int channel_index);
-		
+
 	// target
 
-	virtual void send(const std::pair<std::map<int, safe_ptr<basic_frame>>, std::shared_ptr<void>>& frames) override; 
-		
+	virtual void send(const std::pair<std::map<int, safe_ptr<basic_frame>>, std::shared_ptr<void>>& frames) override;
+
 	// mixer
 
-	safe_ptr<core::write_frame> create_frame(const void* tag, const core::pixel_format_desc& desc, const channel_layout& audio_channel_layout);		
+	safe_ptr<core::write_frame> create_frame(const void* tag, const core::pixel_format_desc& desc, const channel_layout& audio_channel_layout);
 	
 	core::video_format_desc get_video_format_desc() const; // nothrow
 	void set_video_format_desc(const video_format_desc& format_desc);
@@ -71,7 +71,7 @@ public:
 	blend_mode::type get_blend_mode(int index);
 	void set_blend_mode(int index, blend_mode::type value);
 	chroma get_chroma(int index);
-    void set_chroma(int index, const chroma& value);
+	void set_chroma(int index, const chroma& value);
 	void clear_blend_mode(int index);
 	void clear_blend_modes();
 	void set_straight_alpha_output(bool value);
@@ -84,7 +84,7 @@ public:
 	boost::unique_future<boost::property_tree::wptree> delay_info() const;
 
 	monitor::subject& monitor_output();
-	
+
 private:
 	struct implementation;
 	safe_ptr<implementation> impl_;

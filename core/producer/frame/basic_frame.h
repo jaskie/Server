@@ -38,7 +38,7 @@ struct frame_transform;
 class basic_frame
 {
 public:
-	basic_frame();	
+	basic_frame();
 	basic_frame(const basic_frame& other);
 	basic_frame(basic_frame&& other);
 	virtual ~basic_frame(){}
@@ -56,12 +56,12 @@ public:
 	const frame_transform& get_frame_transform() const;
 	frame_transform& get_frame_transform();
 	virtual int64_t get_and_record_age_millis();
-	virtual int get_timecode();
+	virtual const uint32_t get_timecode() const;
 
 	static safe_ptr<basic_frame> interlace(const safe_ptr<basic_frame>& frame1, const safe_ptr<basic_frame>& frame2, field_mode::type mode);
 	static safe_ptr<basic_frame> combine(const safe_ptr<basic_frame>& frame1, const safe_ptr<basic_frame>& frame2);
 	static safe_ptr<basic_frame> fill_and_key(const safe_ptr<basic_frame>& fill, const safe_ptr<basic_frame>& key);
-		
+
 	static const safe_ptr<basic_frame>& eof()
 	{
 		static safe_ptr<basic_frame> frame = make_safe<basic_frame>();

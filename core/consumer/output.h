@@ -41,11 +41,11 @@ public:
 	explicit output(const safe_ptr<diagnostics::graph>& graph, const video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index);
 
 	// target
-	
+
 	virtual void send( const std::pair<safe_ptr<read_frame>, std::shared_ptr<void>>& frame) override;
 
 	// output
-	
+
 	void add(const safe_ptr<frame_consumer>& consumer);
 	void add(int index, const safe_ptr<frame_consumer>& consumer);
 	void remove(const safe_ptr<frame_consumer>& consumer);

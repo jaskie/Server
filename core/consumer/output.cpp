@@ -45,9 +45,9 @@
 #include <boost/property_tree/ptree.hpp>
 
 namespace caspar { namespace core {
-	
+
 struct output::implementation
-{		
+{
 	const int										channel_index_;
 	const safe_ptr<diagnostics::graph>				graph_;
 	monitor::subject								monitor_subject_;
@@ -64,7 +64,7 @@ struct output::implementation
 	std::map<int, int64_t>							send_to_consumers_delays_;
 
 	executor										executor_;
-		
+
 public:
 	implementation(const safe_ptr<diagnostics::graph>& graph, const video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index)
 		: channel_index_(channel_index)
@@ -78,7 +78,7 @@ public:
 	}
 
 	void add(int index, safe_ptr<frame_consumer> consumer)
-	{		
+	{
 		remove(index);
 
 		consumer = create_consumer_cadence_guard(consumer);
@@ -191,7 +191,7 @@ public:
 					auto frame		= frames_.at(buffer_depths[it->first]-minmax.first);
 
 					send_to_consumers_delays_[it->first] = frame->get_age_millis();
-						
+
 					try
 					{
 						send_results.insert(std::make_pair(it->first, consumer->send(frame)));
@@ -317,7 +317,7 @@ public:
 	}
 
 	monitor::subject& monitor_output()
-	{ 
+	{
 		return monitor_subject_;
 	}
 };

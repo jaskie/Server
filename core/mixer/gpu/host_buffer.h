@@ -34,14 +34,14 @@ enum usage_t
 		write_only,
 		read_only
 	};
-		
+
 class host_buffer : boost::noncopyable
 {
 public:
 	
 	const void* data() const;
 	void* data();
-	uint32_t size() const;	
+	uint32_t size() const;
 	
 	void bind();
 	void unbind();
