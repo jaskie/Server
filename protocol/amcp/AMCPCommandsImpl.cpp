@@ -51,6 +51,7 @@
 #include <core/mixer/mixer.h>
 #include <core/mixer/gpu/ogl_device.h>
 #include <core/consumer/output.h>
+#include <core/consumer/signaller.h>
 
 #include <modules/bluefish/bluefish.h>
 #include <modules/decklink/decklink.h>
@@ -88,24 +89,24 @@
 
 /* Return codes
 
-100 [action]			Information om att något har hänt  
-101 [action]			Information om att något har hänt, en rad data skickas  
+100 [action]            Information that something has happened
+101 [action]            Information that something has happened, a line of data is sent
 
-202 [kommando] OK		Kommandot har utförts  
-201 [kommando] OK		Kommandot har utförts, och en rad data skickas tillbaka  
-200 [kommando] OK		Kommandot har utförts, och flera rader data skickas tillbaka. Avslutas med tomrad  
+202 [command] OK        The command has been executed
+201 [command] OK        The command has been executed, and a line of data is returned
+200 [command] OK        The command has been executed, and several lines of data are returned. Ends with an empty line
 
-400 ERROR				Kommandot kunde inte förstås  
-401 [kommando] ERROR	Ogiltig kanal  
-402 [kommando] ERROR	Parameter saknas  
-403 [kommando] ERROR	Ogiltig parameter  
-404 [kommando] ERROR	Mediafilen hittades inte  
+400 ERROR               The command could not be understood
+401 [command] ERROR     Invalid channel
+402 [command] ERROR     Parameter missing
+403 [command] ERROR     Invalid parameter
+404 [command] ERROR     Media file not found
 
-500 FAILED				Internt configurationfel  
-501 [kommando] FAILED	Internt configurationfel  
-502 [kommando] FAILED	Oläslig mediafil  
+500 FAILED              Internal configuration error
+501 [command] FAILED    Internal configuration error
+502 [command] FAILED    Unreadable media file
 
-600 [kommando] FAILED	funktion ej implementerad
+600 [command] FAILED    Function not implemented
 */
 
 namespace caspar { namespace protocol {
@@ -208,23 +209,23 @@ std::wstring MediaInfo(const boost::filesystem::wpath& path, const std::shared_p
 		if(extension == TEXT(".TGA") || extension == TEXT(".COL") || extension == L".PNG" || extension == L".JPEG" || extension == L".JPG" ||
 			extension == L".GIF" || extension == L".BMP")
 		{
-			clipttype = TEXT(" STILL ");			
+			clipttype = TEXT(" STILL ");
 		}
 		else if(extension == TEXT(".WAV") || extension == TEXT(".MP3"))
 		{
 			clipttype = TEXT(" AUDIO ");
 		}
 		else if(extension == TEXT(".SWF") || extension == TEXT(".CT") ||
-				extension == TEXT(".DV") || extension == TEXT(".MOV") || 
-				extension == TEXT(".MPG") || extension == TEXT(".AVI") || 
-				extension == TEXT(".MP4") || extension == TEXT(".FLV") || 
+				extension == TEXT(".DV") || extension == TEXT(".MOV") ||
+				extension == TEXT(".MPG") || extension == TEXT(".AVI") ||
+				extension == TEXT(".MP4") || extension == TEXT(".FLV") ||
 				caspar::ffmpeg::is_valid_file(path.file_string()))
 		{
 			clipttype = TEXT(" MOVIE ");
 		}
 
 		if(clipttype != TEXT(" N/A "))
-		{		
+		{
 			auto is_not_digit = [](char c){ return std::isdigit(c) == 0; };
 
 			auto relativePath = boost::filesystem::wpath(path.file_string().substr(env::media_folder().size()-1, path.file_string().size()));
@@ -236,12 +237,12 @@ std::wstring MediaInfo(const boost::filesystem::wpath& path, const std::shared_p
 			auto sizeStr = boost::lexical_cast<std::wstring>(boost::filesystem::file_size(path));
 			sizeStr.erase(std::remove_if(sizeStr.begin(), sizeStr.end(), is_not_digit), sizeStr.end());
 			auto sizeWStr = std::wstring(sizeStr.begin(), sizeStr.end());
-				
+
 			auto str = relativePath.replace_extension(TEXT("")).external_file_string();
 			if(str[0] == '\\' || str[0] == '/')
 				str = std::wstring(str.begin() + 1, str.end());
 			auto media_info = media_info_repo->get(path.file_string());
-			
+
 			return std::wstring() 
 					+ L"\""		+ str +
 					+ L"\" "	+ clipttype +
@@ -249,14 +250,14 @@ std::wstring MediaInfo(const boost::filesystem::wpath& path, const std::shared_p
 					+ L" "		+ writeTimeWStr +
 					+ L" "		+ boost::lexical_cast<std::wstring>(media_info.duration) +
 					+ L" "		+ boost::lexical_cast<std::wstring>(media_info.time_base.numerator()) + L"/" + boost::lexical_cast<std::wstring>(media_info.time_base.denominator())
-					+ L"\r\n"; 	
-		}	
+					+ L"\r\n";
+		}
 	}
 	return L"";
 }
 
 std::wstring ListMedia(const std::shared_ptr<core::media_info_repository>& media_info_repo)
-{		
+{
 	std::wstringstream replyString;
 	for (boost::filesystem::wrecursive_directory_iterator itr(env::media_folder()), end; itr != end; ++itr)	
 		replyString << MediaInfo(itr->path(), media_info_repo);
@@ -293,7 +294,7 @@ std::wstring ListTemplates()
 			replyString << TEXT("\"") << str
 						<< TEXT("\" ") << sizeWStr
 						<< TEXT(" ") << writeTimeWStr
-						<< TEXT("\r\n");		
+						<< TEXT("\r\n");
 		}
 	}
 	return replyString.str();
@@ -383,7 +384,7 @@ bool ChannelGridCommand::DoExecute()
 				transform.clip_translation[0]	= x*delta;
 				transform.clip_translation[1]	= y*delta;
 				transform.clip_scale[0]			= delta;
-				transform.clip_scale[1]			= delta;			
+				transform.clip_scale[1]			= delta;
 				return transform;
 			};
 			self->stage()->apply_transform(index, transform);
@@ -399,7 +400,7 @@ bool CallCommand::DoExecute()
 	try
 	{
 		auto what = _parameters.at(0);
-				
+
 		boost::unique_future<std::wstring> result;
 		auto& params_orig = _parameters.get_original();
 		if(what == L"B" || what == L"F")
@@ -451,7 +452,7 @@ bool MixerCommand::DoExecute()
 	using boost::lexical_cast;
 	//Perform loading of the clip
 	try
-	{	
+	{
 		bool defer = _parameters.back() == L"DEFER";
 		if(defer)
 			_parameters.pop_back();
@@ -467,7 +468,7 @@ bool MixerCommand::DoExecute()
 			transforms.push_back(stage::transform_tuple_t(GetLayerIndex(), [=](frame_transform transform) -> frame_transform
 			{
 				transform.is_key = value;
-				return transform;					
+				return transform;
 			}, 0, L"linear"));
 		}
 		else if(_parameters[0] == L"OPACITY")
@@ -483,7 +484,7 @@ bool MixerCommand::DoExecute()
 			transforms.push_back(stage::transform_tuple_t(GetLayerIndex(), [=](frame_transform transform) -> frame_transform
 			{
 				transform.opacity = value;
-				return transform;					
+				return transform;
 			}, duration, tween));
 		}
 		else if(_parameters[0] == L"FILL" || _parameters[0] == L"FILL_RECT")
@@ -567,7 +568,7 @@ bool MixerCommand::DoExecute()
 				{
 					int index = x+y*n+1;
 					transforms.push_back(stage::transform_tuple_t(index, [=](frame_transform transform) -> frame_transform
-					{		
+					{
 						transform.fill_translation[0]	= x*delta;
 						transform.fill_translation[1]	= y*delta;
 						transform.fill_scale[0]			= delta;
@@ -575,7 +576,7 @@ bool MixerCommand::DoExecute()
 						transform.clip_translation[0]	= x*delta;
 						transform.clip_translation[1]	= y*delta;
 						transform.clip_scale[0]			= delta;
-						transform.clip_scale[1]			= delta;			
+						transform.clip_scale[1]			= delta;
 						return transform;
 					}, duration, tween));
 				}
@@ -587,18 +588,18 @@ bool MixerCommand::DoExecute()
 			{
 				auto blend_mode = GetChannel()->mixer()->get_blend_mode(GetLayerIndex());
 				SetReplyString(L"201 MIXER OK\r\n" 
-					+ lexical_cast<std::wstring>(get_blend_mode(blend_mode)) 
+					+ lexical_cast<std::wstring>(get_blend_mode(blend_mode))
 					+ L"\r\n");
 				return true;
 			}
 
-			auto blend_str = _parameters.at(1);								
+			auto blend_str = _parameters.at(1);
 			int layer = GetLayerIndex();
 			blend_mode::type blend = get_blend_mode(blend_str);
-			GetChannel()->mixer()->set_blend_mode(GetLayerIndex(), blend);	
+			GetChannel()->mixer()->set_blend_mode(GetLayerIndex(), blend);
 		}
-        else if(_parameters[0] == L"CHROMA")
-        {
+		else if(_parameters[0] == L"CHROMA")
+		{
 			if (_parameters.size() == 1)
 			{
 				auto chroma = GetChannel()->mixer()->get_chroma(GetLayerIndex());
@@ -615,8 +616,8 @@ bool MixerCommand::DoExecute()
 			}
 
 			int layer = GetLayerIndex();
-            chroma chroma;
-            chroma.key = get_chroma_mode(_parameters[1]);
+			chroma chroma;
+			chroma.key = get_chroma_mode(_parameters[1]);
 
 			if (chroma.key != chroma::none)
 			{
@@ -627,8 +628,8 @@ bool MixerCommand::DoExecute()
 				chroma.show_mask    = _parameters.size() > 6 ? bool(boost::lexical_cast<int>(_parameters[6])) : false;
 			}
 
-            GetChannel()->mixer()->set_chroma(GetLayerIndex(), chroma);
-        }
+			GetChannel()->mixer()->set_chroma(GetLayerIndex(), chroma);
+		}
 		else if(_parameters[0] == L"MASTERVOLUME")
 		{
 			if (_parameters.size() == 1)
@@ -682,7 +683,7 @@ bool MixerCommand::DoExecute()
 			{
 				transform.contrast = value;
 				return transform;
-			}, duration, tween));	
+			}, duration, tween));
 		}
 		else if(_parameters[0] == L"LEVELS")
 		{
@@ -793,7 +794,7 @@ bool MixerCommand::DoExecute()
 }
 
 bool SwapCommand::DoExecute()
-{	
+{
 	//Perform loading of the clip
 	try
 	{
@@ -816,7 +817,7 @@ bool SwapCommand::DoExecute()
 			auto ch2 = GetChannels().at(boost::lexical_cast<int>(_parameters[0])-1);
 			ch1->stage()->swap_layers(ch2->stage());
 		}
-		
+
 		SetReplyString(TEXT("202 SWAP OK\r\n"));
 
 		return true;
@@ -862,7 +863,7 @@ bool AddCommand::DoExecute()
 }
 
 bool RemoveCommand::DoExecute()
-{	
+{
 	//Perform loading of the clip
 	try
 	{
@@ -939,8 +940,8 @@ safe_ptr<core::frame_producer> RouteCommand::TryCreateProducer(AMCPCommand& comm
 		// Find the source channel
 		auto channels = command.GetChannels();
 		auto src_channel = std::find_if(
-			channels.begin(), 
-			channels.end(), 
+			channels.begin(),
+			channels.end(),
 			[src_channel_index](const safe_ptr<core::video_channel>& item) { return item->index() == src_channel_index; }
 		);
 		if (src_channel == channels.end())
@@ -1133,7 +1134,7 @@ bool LoadbgCommand::DoExecute()
 		return true;
 	}
 	catch(file_not_found&)
-	{		
+	{
 		CASPAR_LOG(error) << L"File not found. No match found for parameters. Check syntax:" << _parameters.get_original_string();
 		SetReplyString(TEXT("404 LOADBG ERROR\r\n"));
 		return false;
@@ -1310,14 +1311,14 @@ bool CGCommand::DoExecuteAdd() {
 
 	layer = _ttoi(_parameters[1].c_str());
 
-	if(_parameters[3].length() > 1) 
+	if(_parameters[3].length() > 1)
 	{	//read label
 		label = _parameters.at_original(3);
 		++dataIndex;
 
 		if(_parameters.size() > 4 && _parameters[4].length() > 0)	//read play-on-load-flag
 			bDoStart = (_parameters[4][0]==TEXT('1')) ? true : false;
-		else 
+		else
 		{
 			SetReplyString(TEXT("402 CG ERROR\r\n"));
 			return false;
@@ -1326,7 +1327,7 @@ bool CGCommand::DoExecuteAdd() {
 	else if(_parameters[3].length() > 0) {	//read play-on-load-flag
 		bDoStart = (_parameters[3][0]==TEXT('1')) ? true : false;
 	}
-	else 
+	else
 	{
 		SetReplyString(TEXT("403 CG ERROR\r\n"));
 		return false;
@@ -1335,13 +1336,13 @@ bool CGCommand::DoExecuteAdd() {
 	const TCHAR* pDataString = 0;
 	std::wstringstream data;
 	std::wstring dataFromFile;
-	if(_parameters.size() > dataIndex) 
+	if(_parameters.size() > dataIndex)
 	{	//read data
 		const std::wstring& dataString = _parameters.at_original(dataIndex);
 
 		if(dataString[0] == TEXT('<')) //the data is an XML-string
 			pDataString = dataString.c_str();
-		else 
+		else
 		{
 			//The data is not an XML-string, it must be a filename
 			std::wstring filename = env::data_folder();
@@ -1398,7 +1399,7 @@ bool CGCommand::DoExecutePlay()
 	return true;
 }
 
-bool CGCommand::DoExecuteStop() 
+bool CGCommand::DoExecuteStop()
 {
 	if(_parameters.size() > 1)
 	{
@@ -1422,7 +1423,7 @@ bool CGCommand::DoExecuteStop()
 
 bool CGCommand::DoExecuteNext()
 {
-	if(_parameters.size() > 1) 
+	if(_parameters.size() > 1)
 	{
 		if(!ValidateLayer(_parameters[1])) 
 		{
@@ -1443,11 +1444,11 @@ bool CGCommand::DoExecuteNext()
 	return true;
 }
 
-bool CGCommand::DoExecuteRemove() 
+bool CGCommand::DoExecuteRemove()
 {
-	if(_parameters.size() > 1) 
+	if(_parameters.size() > 1)
 	{
-		if(!ValidateLayer(_parameters[1])) 
+		if(!ValidateLayer(_parameters[1]))
 		{
 			SetReplyString(TEXT("403 CG ERROR\r\n"));
 			return false;
@@ -1466,14 +1467,14 @@ bool CGCommand::DoExecuteRemove()
 	return true;
 }
 
-bool CGCommand::DoExecuteClear() 
+bool CGCommand::DoExecuteClear()
 {
 	GetChannel()->stage()->clear(GetLayerIndex(flash::cg_producer::DEFAULT_LAYER));
 	SetReplyString(TEXT("202 CG OK\r\n"));
 	return true;
 }
 
-bool CGCommand::DoExecuteUpdate() 
+bool CGCommand::DoExecuteUpdate()
 {
 	try
 	{
@@ -1482,7 +1483,7 @@ bool CGCommand::DoExecuteUpdate()
 			SetReplyString(TEXT("403 CG ERROR\r\n"));
 			return false;
 		}
-						
+
 		std::wstring dataString = _parameters.at_original(2);
 		if(dataString.at(0) != TEXT('<'))
 		{
@@ -1492,7 +1493,7 @@ bool CGCommand::DoExecuteUpdate()
 			filename.append(TEXT(".ftd"));
 
 			dataString = read_file(boost::filesystem::wpath(filename));
-		}		
+		}
 
 		int layer = _ttoi(_parameters.at(1).c_str());
 		flash::get_default_cg_producer(safe_ptr<core::video_channel>(GetChannel()), true, GetLayerIndex(flash::cg_producer::DEFAULT_LAYER))->update(layer, dataString);
@@ -1507,7 +1508,7 @@ bool CGCommand::DoExecuteUpdate()
 	return true;
 }
 
-bool CGCommand::DoExecuteInvoke() 
+bool CGCommand::DoExecuteInvoke()
 {
 	std::wstringstream replyString;
 	replyString << TEXT("201 CG OK\r\n");
@@ -1521,9 +1522,9 @@ bool CGCommand::DoExecuteInvoke()
 		}
 		int layer = _ttoi(_parameters[1].c_str());
 		auto result = flash::get_default_cg_producer(safe_ptr<core::video_channel>(GetChannel()), true, GetLayerIndex(flash::cg_producer::DEFAULT_LAYER))->invoke(layer, _parameters.at_original(2));
-		replyString << result << TEXT("\r\n"); 
+		replyString << result << TEXT("\r\n");
 	}
-	else 
+	else
 	{
 		SetReplyString(TEXT("402 CG ERROR\r\n"));
 		return true;
@@ -1533,7 +1534,7 @@ bool CGCommand::DoExecuteInvoke()
 	return true;
 }
 
-bool CGCommand::DoExecuteInfo() 
+bool CGCommand::DoExecuteInfo()
 {
 	std::wstringstream replyString;
 	replyString << TEXT("201 CG OK\r\n");
@@ -1551,11 +1552,11 @@ bool CGCommand::DoExecuteInfo()
 		
 		replyString << desc << TEXT("\r\n"); 
 	}
-	else 
+	else
 	{
 		auto info = flash::get_default_cg_producer(safe_ptr<core::video_channel>(GetChannel()), false, GetLayerIndex(flash::cg_producer::DEFAULT_LAYER))->template_host_info();
 		replyString << info << TEXT("\r\n"); 
-	}	
+	}
 
 	SetReplyString(replyString.str());
 	return true;
@@ -1577,9 +1578,26 @@ bool DataCommand::DoExecute()
 	return false;
 }
 
-bool DataCommand::DoExecuteStore() 
+bool SignalCommand::DoExecute()
 {
-	if(_parameters.size() < 3) 
+	auto channel = GetChannel();
+	auto command = _parameters[0];
+	bool result = false;
+	uint32_t event_id = _parameters.get(L"ID", 0U);
+	uint16_t program_id = _parameters.get(L"PROGRAM", 0U);
+	if (command == L"OUT")
+		result = channel->signaller()->signal_out(event_id, program_id, _parameters.get(L"OUT", 0U), _parameters.get(L"LENGTH", 0U), _parameters.has(L"RETURN"));
+	else if (command == L"IN")
+		result = channel->signaller()->signal_in(event_id, program_id, _parameters.get(L"IN", 0U));
+	else if (command == L"CANCEL")
+		result = channel->signaller()->signal_cancel(event_id);
+	SetReplyString(result ? L"202 SIGNAL OK\r\n" : L"403 SIGNAL ERROR\r\n");
+	return result;
+}
+
+bool DataCommand::DoExecuteStore()
+{
+	if(_parameters.size() < 3)
 	{
 		SetReplyString(TEXT("402 DATA STORE ERROR\r\n"));
 		return false;
@@ -1612,9 +1630,9 @@ bool DataCommand::DoExecuteStore()
 	return true;
 }
 
-bool DataCommand::DoExecuteRetrieve() 
+bool DataCommand::DoExecuteRetrieve()
 {
-	if(_parameters.size() < 2) 
+	if(_parameters.size() < 2)
 	{
 		SetReplyString(TEXT("402 DATA RETRIEVE ERROR\r\n"));
 		return false;
@@ -1654,9 +1672,9 @@ bool DataCommand::DoExecuteRetrieve()
 	return true;
 }
 
-bool DataCommand::DoExecuteRemove() 
-{ 
-	if (_parameters.size() < 2) 
+bool DataCommand::DoExecuteRemove()
+{
+	if (_parameters.size() < 2)
 	{
 		SetReplyString(TEXT("402 DATA REMOVE ERROR\r\n"));
 		return false;
@@ -1689,19 +1707,19 @@ bool DataCommand::DoExecuteList()
 	replyString << TEXT("200 DATA LIST OK\r\n");
 
 	for (boost::filesystem::wrecursive_directory_iterator itr(env::data_folder()), end; itr != end; ++itr)
-	{			
+	{
 		if(boost::filesystem::is_regular_file(itr->path()))
 		{
 			if(!boost::iequals(itr->path().extension(), L".ftd"))
 				continue;
-			
+
 			auto relativePath = boost::filesystem::wpath(itr->path().file_string().substr(env::data_folder().size()-1, itr->path().file_string().size()));
 			
 			auto str = relativePath.replace_extension(TEXT("")).external_file_string();
 			if(str[0] == '\\' || str[0] == '/')
 				str = std::wstring(str.begin() + 1, str.end());
 
-			replyString << str << TEXT("\r\n"); 	
+			replyString << str << TEXT("\r\n");
 		}
 	}
 	
@@ -1723,8 +1741,8 @@ bool CaptureCommand::DoExecute()
 		std::wstring tcOut = _parameters.get(L"OUT", L"00:00:00:00");
 		std::wstring filename = _parameters.get(L"FILE", L"");
 		bool narrow_aspect_ratio = _parameters.get(L"NARROW", L"FALSE") == L"TRUE";
-		unsigned int frames_limit = _parameters.get(L"LIMIT", std::numeric_limits<unsigned int>().max());
-		if (frames_limit == std::numeric_limits<unsigned int>().max())
+		unsigned int frames_limit = _parameters.get(L"LIMIT", std::numeric_limits<unsigned int>::max());
+		if (frames_limit == std::numeric_limits<unsigned int>::max())
 			recorder->Capture(channel, tcIn, tcOut, filename, narrow_aspect_ratio, _parameters);
 		else
 			recorder->Capture(channel, frames_limit, filename, narrow_aspect_ratio, _parameters);
@@ -1771,7 +1789,7 @@ bool RecorderCommand::DoExecute()
 		success = recorders[recorder_index]->GoToTimecode(tc);
 	}
 	else if (tryCommand(L"CALL")) {
-		unsigned int limit = _parameters.get(L"LIMIT", std::numeric_limits<unsigned int>().max());
+		unsigned int limit = _parameters.get(L"LIMIT", std::numeric_limits<unsigned int>::max());
 		recorders[recorder_index]->SetFrameLimit(limit);
 		success = true;
 	}

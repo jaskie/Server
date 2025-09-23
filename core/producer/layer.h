@@ -38,8 +38,6 @@ class basic_frame;
 
 class layer : boost::noncopyable
 {
-	layer(const layer&);
-	layer& operator=(const layer&);
 public:
 	layer(int index = -1); // nothrow
 	layer(layer&& other); // nothrow

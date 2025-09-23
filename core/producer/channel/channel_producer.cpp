@@ -53,7 +53,7 @@ class channel_consumer : public frame_consumer
 	bool														first_frame_reported_;
 
 public:
-	channel_consumer() 
+	channel_consumer()
 		: first_frame_available_(first_frame_promise_.get_future())
 		, first_frame_reported_(false)
 	{
@@ -82,8 +82,8 @@ public:
 
 	virtual void initialize(const core::video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index) override
 	{
-		format_desc_    = format_desc;
-		channel_index_  = channel_index;
+		format_desc_	= format_desc;
+		channel_index_	= channel_index;
 	}
 
 	virtual int64_t presentation_frame_age_millis() const override
@@ -155,7 +155,7 @@ public:
 		return frame;
 	}
 };
-	
+
 class channel_producer : public frame_producer
 {
 	monitor::subject					monitor_subject_;
@@ -166,7 +166,7 @@ class channel_producer : public frame_producer
 	std::queue<safe_ptr<basic_frame>>	frame_buffer_;
 	safe_ptr<basic_frame>				last_frame_;
 	uint64_t							frame_number_;
-	
+
 
 public:
 	explicit channel_producer(const safe_ptr<frame_factory>& frame_factory, const safe_ptr<video_channel>& channel) 

@@ -70,9 +70,9 @@ safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params)
 // This class is used to guarantee that audio cadence is correct. This is important for NTSC audio.
 class cadence_guard : public frame_consumer
 {
-	safe_ptr<frame_consumer>		consumer_;
+	safe_ptr<frame_consumer>			consumer_;
 	std::vector<uint32_t>				audio_cadence_;
-	video_format_desc				format_desc_;
+	video_format_desc					format_desc_;
 	boost::circular_buffer<uint32_t>	sync_buffer_;
 public:
 	cadence_guard(const safe_ptr<frame_consumer>& consumer)

@@ -22,6 +22,7 @@
 #include "../stdafx.h"
 
 #include "read_frame.h"
+#include "../consumer/splice_signal.h"
 
 #include "gpu/fence.h"
 #include "gpu/host_buffer.h"	
@@ -43,14 +44,15 @@ int64_t get_current_time_millis()
 
 struct read_frame::implementation : boost::noncopyable
 {
-	safe_ptr<ogl_device>		ogl_;
-	uint32_t					size_;
-	safe_ptr<host_buffer>		image_data_;
-	tbb::mutex					mutex_;
-	audio_buffer				audio_data_;
-	const channel_layout		audio_channel_layout_;
-	int64_t						created_timestamp_;
-	const uint32_t				frame_timecode_;
+	safe_ptr<ogl_device>			ogl_;
+	uint32_t						size_;
+	safe_ptr<host_buffer>			image_data_;
+	tbb::mutex						mutex_;
+	audio_buffer					audio_data_;
+	const channel_layout			audio_channel_layout_;
+	int64_t							created_timestamp_;
+	const uint32_t					frame_timecode_;
+	std::vector<std::shared_ptr<splice_signal>>	signals_;
 
 public:
 	implementation(
@@ -90,8 +92,6 @@ public:
 	{
 		return boost::iterator_range<const int32_t*>(audio_data_.data(), audio_data_.data() + audio_data_.size());
 	}
-
-
 };
 
 read_frame::read_frame(
@@ -139,6 +139,16 @@ const uint32_t read_frame::get_timecode() const
 const channel_layout & read_frame::get_channel_layout() const
 {
 	return impl_->audio_channel_layout_;
+}
+
+void read_frame::set_singals(const std::vector<std::shared_ptr<splice_signal>>& signals)
+{
+	impl_->signals_ = signals;
+}
+
+const std::vector<std::shared_ptr<splice_signal>>& read_frame::get_signals() const
+{
+	return impl_->signals_;
 }
 
 

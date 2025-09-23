@@ -104,7 +104,7 @@ public:
 		CASPAR_VERIFY(format_desc_.height * format_desc_.width * 4 == static_cast<unsigned>(frame->image_data().size()));
 
 		return executor_.begin_invoke([=]() -> bool
-		{			
+		{
 			graph_->set_value("tick-time", tick_timer_.elapsed() * format_desc_.fps * 0.5);
 			tick_timer_.restart();
 			frame_timer_.restart();
@@ -152,7 +152,7 @@ public:
 			return true;
 		});
 	}
-		
+
 	virtual std::wstring print() const override
 	{
 		return connected_ ?
@@ -171,7 +171,7 @@ public:
 	{
 		return 0;
 	}
-	
+
 	virtual int index() const override
 	{
 		return 900;

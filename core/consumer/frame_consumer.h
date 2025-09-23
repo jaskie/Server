@@ -35,7 +35,6 @@
 #define NDI_CONSUMER_BASE_INDEX	(0x2<16)
 #define IMAGE_CONSUMER_INDEX 100
 #define DECKLINK_CONSUMER_BASE_INDEX 300
-#define BLOKING_DECKLINK_CONSUMER_BASE_INDEX 350
 #define BLUEFISH_CONSUMER_BASE_INDEX 400
 #define OAL_CONSUMER_INDEX 500
 #define OGL_CONSUMER_BASE_INDEX 600
@@ -47,11 +46,10 @@ class parameters;
 struct video_format_desc;
 struct channel_layout;
 
-
 struct frame_consumer : boost::noncopyable
 {
 	virtual ~frame_consumer() {}
-	
+
 	virtual boost::unique_future<bool> send(const safe_ptr<read_frame>& frame) = 0;
 	virtual void initialize(const video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index) = 0;
 	virtual int64_t presentation_frame_age_millis() const = 0;

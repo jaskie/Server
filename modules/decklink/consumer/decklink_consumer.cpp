@@ -478,25 +478,25 @@ public:
 	}
 
 	// frame_consumer
-	
+
 	virtual void initialize(const core::video_format_desc& format_desc, const core::channel_layout& audio_channel_layout, int channel_index) override
 	{
 		format_desc_ = format_desc;
 		channel_index_ = channel_index;
 		context_.reset([&] {return new decklink_consumer(config_, format_desc, channel_index, audio_channel_layout.num_channels); });
 	}
-	
+
 	virtual boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame) override
 	{
 		CASPAR_VERIFY(format_desc_.audio_cadence.front() * frame->num_channels() == static_cast<size_t>(frame->audio_data().size()));
 		boost::range::rotate(format_desc_.audio_cadence, std::begin(format_desc_.audio_cadence) + 1);
 		return context_->send(frame);
 	}
-	
+
 	virtual std::wstring print() const override
 	{
 		return context_ ? context_->print() : L"[decklink_consumer]";
-	}		
+	}
 
 	virtual boost::property_tree::wptree info() const override
 	{
