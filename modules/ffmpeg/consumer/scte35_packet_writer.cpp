@@ -50,6 +50,7 @@ struct scte35_packet_writer::implementation {
 		stream_->codecpar->codec_id = AV_CODEC_ID_SCTE_35;
 		stream_->codecpar->codec_type = AVMEDIA_TYPE_DATA;
 		stream_->time_base = av_make_q(1, 90000);
+		stream_->id = stream_id;
 		if (format_context_->oformat && strcmp(format_context_->oformat->name, "mpegts") != 0)
 		{
 			av_dict_set(&stream_->metadata, "registration", "CUEI", 0);
@@ -127,7 +128,7 @@ struct scte35_packet_writer::implementation {
 		section_length_ptr[0] = 0x30 | (section_length >> 8);
 		section_length_ptr[1] = section_length & 0xFF;
 
-		write_crc(buffer, p);
+		write_crc(buffer, &p);
 		write_packet(buffer, p - buffer, current_time_us);
 	}
 
@@ -218,32 +219,31 @@ struct scte35_packet_writer::implementation {
 		section_length_ptr[0] = 0x30 | (section_length >> 8);
 		section_length_ptr[1] = section_length & 0xFF;
 
-		write_crc(buffer, p);
+		write_crc(buffer, &p);
 		write_packet(buffer, p - buffer, current_time_us);
 	}
 
-	void write_crc(uint8_t* start, uint8_t*& end)
+	void write_crc(uint8_t* start, uint8_t** end)
 	{
-		size_t len = end - start;
+		size_t len = *end - start;
 		if (len + 4 > MAX_SCTE35_SECTION_SIZE)
 			return;
 		uint32_t crc = av_crc(av_crc_get_table(AV_CRC_32_IEEE), 0, start, len);
-		WRITE_BE32(end, crc);
+		WRITE_BE32(*end, crc);
 	}
 
-	void write_packet(uint8_t* data, size_t size, uint64_t current_time_us)
+	void write_packet(uint8_t* data, int size, uint64_t current_time_us)
 	{
 		AVPacket pkt;
 		av_init_packet(&pkt);
 		pkt.data = data;
-		pkt.size = static_cast<int>(size);
+		pkt.size = size;
 		pkt.stream_index = stream_->index;
+		pkt.flags = AV_PKT_FLAG_KEY;
 
 		int64_t ts = av_rescale_q(current_time_us, AV_TIME_BASE_Q, stream_->time_base);
 		pkt.pts = pkt.dts = ts;
-		
-		THROW_ON_ERROR2(av_packet_make_refcounted(&pkt), L"scte-35 writer");
-		THROW_ON_ERROR2(av_interleaved_write_frame(format_context_, &pkt), L"scte-35 writer");
+		THROW_ON_ERROR2(av_write_frame(format_context_, &pkt), L"scte-35 writer");
 	}
 
 };

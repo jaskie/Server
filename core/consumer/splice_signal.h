@@ -18,6 +18,7 @@ namespace caspar {
 				, frames_to_event(frames_to_event)
 				, break_duration(break_duration)
 				, auto_return(auto_return)
+				, is_new(true)
 			{ }
 
 			SignalType signal_type;
@@ -29,14 +30,22 @@ namespace caspar {
 			// time to start, in frames
 			int32_t frames_to_event;
 
+			bool is_new;
+
 			// duration in frames, zero if unspecified
 			const uint32_t break_duration;
 
 			const bool auto_return;
 
-			void tick()
+			bool tick()
 			{
 				frames_to_event--;
+				if (is_new)
+				{
+					is_new = false;
+					return true;
+				}
+				return false;
 			}
 		};
 	}

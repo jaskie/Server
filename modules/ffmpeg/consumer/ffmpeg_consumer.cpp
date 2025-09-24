@@ -742,7 +742,6 @@ namespace caspar {
 				{
 					av_packet_rescale_ts(&pkt, video_codec_ctx_->time_base, video_stream_->time_base);
 					pkt.stream_index = video_stream_->index;
-					THROW_ON_ERROR2(av_packet_make_refcounted(&pkt), print());
 					THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), &pkt), print());
 				}
 			}
@@ -886,7 +885,6 @@ namespace caspar {
 			{
 				if (signals.empty())
 					return;
-
 				for (auto it = signals.begin(); it != signals.end(); ++it)
 				{
 					const core::splice_signal& signal = **it;
