@@ -56,6 +56,7 @@ namespace caspar {
 				const auto& signal = *signal_it;
 				if (!signal->is_new && signal->frames_to_event <= when_send_signal_[0])
 				{
+					pending_signals_.erase(std::remove(pending_signals_.begin(), pending_signals_.end(), signal), pending_signals_.end());
 					pending_signals_.emplace_back(std::make_shared<splice_signal>(SignalType::Cancel, event_id, 0, 0, 0, false));
 					CASPAR_LOG(trace) << L"Scheduled splice_signal CANCEL.";
 				}

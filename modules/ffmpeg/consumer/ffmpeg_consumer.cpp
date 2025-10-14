@@ -238,8 +238,8 @@ namespace caspar {
 		{
 			AVDictionary* options_;
 			const output_params						output_params_;
-			const core::video_format_desc& channel_format_desc_;
-			const core::channel_layout& audio_channel_layout_;
+			const core::video_format_desc&			channel_format_desc_;
+			const core::channel_layout&				audio_channel_layout_;
 			const int								height_;
 			const AVRational						channel_sample_aspect_ratio_;
 
@@ -427,7 +427,7 @@ namespace caspar {
 					{
 						CASPAR_LOG(warning) << print() << L" Unrecognized FFMpeg options: " << widen(std::string(unused_options));
 						if (unused_options)
-							delete(unused_options);
+							av_freep(&unused_options);
 						av_dict_free(&options_);
 					}
 				}
@@ -889,13 +889,21 @@ namespace caspar {
 				{
 					const core::splice_signal& signal = **it;
 					uint64_t current_time = av_rescale(out_frame_number_ * AV_TIME_BASE, frame_rate_.den, frame_rate_.num);
-					uint64_t splice_time = av_rescale(out_frame_number_ + signal.frames_to_event * AV_TIME_BASE, frame_rate_.den, frame_rate_.num);
+					uint64_t splice_time = av_rescale((out_frame_number_ + signal.frames_to_event) * AV_TIME_BASE, frame_rate_.den, frame_rate_.num);
+					uint64_t duration = av_rescale(signal.break_duration * AV_TIME_BASE, frame_rate_.den, frame_rate_.num);
 					switch (signal.signal_type)
 					{
 					case core::SignalType::Out:
-						uint64_t duration = av_rescale(signal.break_duration * AV_TIME_BASE, frame_rate_.den, frame_rate_.num);
 						scte35_packet_writer_->write_network_out_splice(signal.event_id, signal.program_id, signal.frames_to_event == 0, splice_time, current_time, duration, signal.auto_return);
-						CASPAR_LOG(trace) << print() << L": signalled OUT in " << signal.frames_to_event << L" frames.";
+						CASPAR_LOG(trace) << print() << L": signalled OUT in " << signal.frames_to_event << L" frames, event_id: " << signal.event_id << L", program_id: " << signal.program_id << L", splice_time: " << splice_time;
+						break;
+					case core::SignalType::In:
+						scte35_packet_writer_->write_network_in_splice(signal.event_id, signal.program_id, signal.frames_to_event == 0, splice_time, current_time);
+						CASPAR_LOG(trace) << print() << L": signalled IN in " << signal.frames_to_event << L" frames, event_id: " << signal.event_id << L", program_id: " << signal.program_id << L", splice_time: " << splice_time;
+						break;
+					case core::SignalType::Cancel:
+						scte35_packet_writer_->write_cancel_splice(signal.event_id, current_time);
+						CASPAR_LOG(trace) << print() << L": signalled CANCEL for event_id: " << signal.event_id;
 						break;
 					}
 				}
@@ -909,9 +917,6 @@ namespace caspar {
 			void mark_dropped()
 			{
 				graph_->set_tag("dropped-frame");
-
-				// TODO: adjust PTS accordingly to make dropped frames contribute
-				//       to the total playing time
 			}
 
 			void flush_encoders()
@@ -1052,7 +1057,6 @@ namespace caspar {
 					if (separate_key_)
 						key_only_consumer_->mark_dropped();
 				}
-				consumer_->insert_scte35_signals(frame->get_signals());
 				return caspar::wrap_as_future(true);
 			}
 

@@ -42,9 +42,9 @@ static std::wstring get_win_product_name()
 		dwType = REG_SZ;
 		dwSize = sizeof(p_name_str);
 
-		if(RegQueryValueEx(hkey, TEXT("ProductName"), NULL, &dwType, (PBYTE)&p_name_str, &dwSize) == ERROR_SUCCESS)		
-			result = p_name_str;		
-		 
+		if(RegQueryValueEx(hkey, TEXT("ProductName"), NULL, &dwType, (PBYTE)&p_name_str, &dwSize) == ERROR_SUCCESS)
+			result = p_name_str;
+
 		RegCloseKey(hkey);
 	}
 	return result;
@@ -62,9 +62,9 @@ static std::wstring get_win_sp_version()
 		dwType = REG_SZ;
 		dwSize = sizeof(csd_ver_str);
 
-		if(RegQueryValueEx(hkey, TEXT("CSDVersion"), NULL, &dwType, (PBYTE)&csd_ver_str, &dwSize) == ERROR_SUCCESS)		
+		if(RegQueryValueEx(hkey, TEXT("CSDVersion"), NULL, &dwType, (PBYTE)&csd_ver_str, &dwSize) == ERROR_SUCCESS)
 			result = csd_ver_str;
-		 
+
 		RegCloseKey(hkey);
 	}
 	return result;

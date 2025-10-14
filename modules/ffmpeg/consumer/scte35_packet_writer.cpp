@@ -16,7 +16,6 @@
 *
 * Author: Jerzy Jaœkiewicz, jurek.jaskiewicz@gmail.com using GPT-5
 */
-
 #include "../StdAfx.h"
 #include "scte35_packet_writer.h"
 #include "../ffmpeg_error.h"
@@ -26,12 +25,26 @@ extern "C" {
 }
 
 #define WRITE_BE32(p,v) do { *(p)++ = uint8_t(((v)>>24)&0xFF); *(p)++ = uint8_t(((v)>>16)&0xFF); *(p)++ = uint8_t(((v)>>8)&0xFF); *(p)++ = uint8_t((v)&0xFF); } while(0)
+#define WRITE_LE32(p,v) do { *(p)++ = uint8_t((v)&0xFF); *(p)++ = uint8_t(((v)>>8)&0xFF); *(p)++ = uint8_t(((v)>>16)&0xFF); *(p)++ = uint8_t(((v)>>24)&0xFF); } while(0)
 #define WRITE_BE16(p,v) do { *(p)++ = uint8_t(((v)>>8)&0xFF); *(p)++ = uint8_t((v)&0xFF); } while(0)
 #define WRITE_U8(p,v)   do { *(p)++ = uint8_t((v)&0xFF);} while(0)
 
-static const size_t MAX_SCTE35_SECTION_SIZE = 256;
+static const size_t MAX_SCTE35_SECTION_SIZE = 64;
 
 namespace caspar { namespace ffmpeg {
+
+inline std::wstring scte35_hex_dump(const uint8_t* data, size_t size)
+{
+	if (!data || size == 0)
+		return L"(empty)";
+	std::wostringstream oss;
+	oss << std::uppercase << std::setfill(L'0');
+	for (size_t i = 0; i < size; i++)
+	{
+		oss << std::setw(2) << std::hex << static_cast<unsigned>(data[i]) << L' ';
+	}
+	return oss.str();
+}
 
 struct scte35_packet_writer::implementation {
 
@@ -47,14 +60,20 @@ struct scte35_packet_writer::implementation {
 				<< msg_info("Could not allocate SCTE-35 stream")
 				<< boost::errinfo_api_function("avformat_new_stream"));
 
-		stream_->codecpar->codec_id = AV_CODEC_ID_SCTE_35;
+		stream_->codecpar->codec_id   = AV_CODEC_ID_SCTE_35;
 		stream_->codecpar->codec_type = AVMEDIA_TYPE_DATA;
+
+		// Request PMT registration descriptor 'CUEI' (descriptor tag 0x05, format_identifier 'C','U','E','I')
+		// FFmpeg mpegts muxer: for SCTE-35 (stream_type 0x86) it will output a registration descriptor
+		// when codec_tag holds the fourcc. (Using 0x86 here is NOT needed.)
+		stream_->codecpar->codec_tag  = MKTAG('C','U','E','I');
+
 		stream_->time_base = av_make_q(1, 90000);
-		stream_->id = stream_id;
+		stream_->id        = stream_id;
+
+		// Metadata "registration=CUEI" retained for non-MPEGTS outputs only.
 		if (format_context_->oformat && strcmp(format_context_->oformat->name, "mpegts") != 0)
-		{
 			av_dict_set(&stream_->metadata, "registration", "CUEI", 0);
-		}
 	}
 
 	void write_network_out_splice(uint32_t splice_event_id,
@@ -104,32 +123,26 @@ struct scte35_packet_writer::implementation {
 		WRITE_BE16(p, 0x0000); // placeholder
 
 		WRITE_U8(p, 0x00); // protocol_version
-		WRITE_U8(p, 0x00); // encrypted + encryption_algorithm + pts_adjustment[32]
+		WRITE_U8(p, 0x00); // encrypted_packet + encryption_algorithm + pts_adjustment[32 high]
 		WRITE_BE32(p, 0x00000000); // pts_adjustment low 32 bits
-		WRITE_U8(p, 0x00); // cw_index
+		WRITE_U8(p, 0xFF); // cw_index
 
-		// splice_command_length (5) + type (0x05) + tier (0x0FFF)
 		const uint16_t splice_command_length = 5;
 		const uint16_t tier = 0x0FFF;
 		uint32_t tier_and_len = ((tier & 0x0FFFU) << 20) | ((splice_command_length & 0x0FFFU) << 8) | 0x05U;
 		WRITE_BE32(p, tier_and_len);
 
 		WRITE_BE32(p, splice_event_id);
-		WRITE_U8(p, 0x80); // splice_event_cancel_indicator=1
+		WRITE_U8(p, 0xFF); // cancel indicator
 
-		WRITE_BE16(p, 0x0000); // descriptor_loop_length
+		WRITE_BE16(p, 0x000); // descriptor_loop_length
 
-		// section_length: bytes after section_length field up to and including CRC
-		size_t bytes_without_tableid_and_sectionlen = (p - buffer) - 3 + 4;
-		if (bytes_without_tableid_and_sectionlen > 0x0FFF)
-			return;
-
-		uint16_t section_length = static_cast<uint16_t>(bytes_without_tableid_and_sectionlen);
+		uint16_t section_length = static_cast<uint16_t>((p - buffer) + 1);
 		section_length_ptr[0] = 0x30 | (section_length >> 8);
 		section_length_ptr[1] = section_length & 0xFF;
 
 		write_crc(buffer, &p);
-		write_packet(buffer, p - buffer, current_time_us);
+		write_packet(buffer, int(p - buffer), current_time_us);
 	}
 
 	void build_and_write_splice_insert(
@@ -147,19 +160,19 @@ struct scte35_packet_writer::implementation {
 
 		WRITE_U8(p, 0xFC); // table_id
 		uint8_t* section_length_ptr = p;
-		WRITE_BE16(p, 0x0000); // placeholder
+		WRITE_BE16(p, 0x0000); // placeholder for section length
 
 		WRITE_U8(p, 0x00); // protocol_version
-		WRITE_U8(p, 0x00); // encrypted + encryption_algorithm + pts_adjustment[32]
-		WRITE_BE32(p, 0x00000000); // pts_adjustment low bits
-		WRITE_U8(p, 0x00); // cw_index
+		WRITE_U8(p, 0x00); // encrypted_packet + encryption_algorithm + pts_adjustment[32 high]
+		WRITE_BE32(p, 0x00000000); // pts_adjustment low 32 bits
+		WRITE_U8(p, 0xFF); // cw_index
 
 		// Build splice_insert command body into temp to compute its length.
-		uint8_t cmd[160];
+		uint8_t cmd[48];
 		uint8_t* c = cmd;
 
 		WRITE_BE32(c, splice_event_id);
-		WRITE_U8(c, 0x00); // splice_event_cancel_indicator=0
+		WRITE_U8(c, 0x7F); // splice_event_cancel_indicator=0
 
 		uint8_t flags = 0;
 		if (out_of_network) flags |= 0x80;
@@ -169,19 +182,18 @@ struct scte35_packet_writer::implementation {
 		flags |= 0x0F; // reserved
 		WRITE_U8(c, flags);
 
-		if (!immediate) {
+		if (!immediate)
+		{
 			uint64_t pts_90k = av_rescale_q(splice_time_us, AV_TIME_BASE_Q, stream_->time_base);
-			uint8_t first = 0xFE | ((pts_90k >> 32) & 0x01); // time_specified_flag=1 + reserved
+			uint8_t first = 0xFE | ((pts_90k >> 32) & 0x01);
 			WRITE_U8(c, first);
 			WRITE_BE32(c, static_cast<uint32_t>(pts_90k & 0xFFFFFFFFULL));
-		} else {
-			// time_specified_flag=0 + 7 reserved '1'
-			WRITE_U8(c, 0x7F);
 		}
 
-		if (break_duration_us) {
+		if (break_duration_us)
+		{
 			uint64_t dur_90k = av_rescale_q(break_duration_us, AV_TIME_BASE_Q, stream_->time_base);
-			if (dur_90k > 0x1FFFFFFFFULL) // 33 bits
+			if (dur_90k > 0x1FFFFFFFFULL) // trim if longer than 33 bits
 				dur_90k = 0x1FFFFFFFFULL;
 			uint8_t b0 = (auto_return ? 0x80 : 0x00) | 0x7E | ((dur_90k >> 32) & 0x01);
 			// Explanation:
@@ -193,8 +205,8 @@ struct scte35_packet_writer::implementation {
 		}
 
 		WRITE_BE16(c, unique_program_id);
-		WRITE_U8(c, 0x01); // avail_num
-		WRITE_U8(c, 0x01); // avails_expected
+		WRITE_U8(c, 0x00); // avail_num
+		WRITE_U8(c, 0x00); // avails_expected
 
 		size_t splice_command_length = c - cmd;
 
@@ -207,11 +219,13 @@ struct scte35_packet_writer::implementation {
 		std::memcpy(p, cmd, splice_command_length);
 		p += splice_command_length;
 
-		WRITE_BE16(p, 0x0000); // descriptor_loop_length (none)
+		WRITE_BE16(p, 0x000A); // descriptor_loop_length
+		WRITE_U8(p, 0x00); // splice_descriptor_tag -> avail_descriptor
+		WRITE_U8(p, 0x08); // descriptor_length
+		WRITE_BE32(p, 0x43554549); // "CUEI"
+		WRITE_BE32(p, 0x00000000); // private bytes -> provider_avail_id
 
-		size_t bytes_so_far = (p - buffer);
-		size_t section_length_without_crc = bytes_so_far - 3;
-		size_t total_with_crc = section_length_without_crc + 4;
+		size_t total_with_crc = size_t(p - buffer) + 1;
 		if (total_with_crc > 0x0FFF)
 			return;
 
@@ -220,16 +234,17 @@ struct scte35_packet_writer::implementation {
 		section_length_ptr[1] = section_length & 0xFF;
 
 		write_crc(buffer, &p);
-		write_packet(buffer, p - buffer, current_time_us);
+		write_packet(buffer, int(p - buffer), current_time_us);
 	}
 
 	void write_crc(uint8_t* start, uint8_t** end)
 	{
-		size_t len = *end - start;
+		size_t len = size_t(*end - start);
 		if (len + 4 > MAX_SCTE35_SECTION_SIZE)
 			return;
-		uint32_t crc = av_crc(av_crc_get_table(AV_CRC_32_IEEE), 0, start, len);
-		WRITE_BE32(*end, crc);
+		uint32_t crc = av_crc(av_crc_get_table(AV_CRC_32_IEEE), 0xFFFFFFFF, start, len);
+		CASPAR_LOG(trace) << L"CRC: " << scte35_hex_dump((uint8_t*)&crc, 4) << L", bytes: " << len;
+		WRITE_LE32(*end, crc);
 	}
 
 	void write_packet(uint8_t* data, int size, uint64_t current_time_us)
@@ -240,12 +255,11 @@ struct scte35_packet_writer::implementation {
 		pkt.size = size;
 		pkt.stream_index = stream_->index;
 		pkt.flags = AV_PKT_FLAG_KEY;
-
 		int64_t ts = av_rescale_q(current_time_us, AV_TIME_BASE_Q, stream_->time_base);
+		CASPAR_LOG(trace) << scte35_hex_dump(data, size);
 		pkt.pts = pkt.dts = ts;
-		THROW_ON_ERROR2(av_write_frame(format_context_, &pkt), L"scte-35 writer");
+		LOG_ON_ERROR2(av_interleaved_write_frame(format_context_, &pkt), L"scte-35 writer");
 	}
-
 };
 
 scte35_packet_writer::scte35_packet_writer(AVFormatContext* format_ctx, int stream_id)
@@ -282,6 +296,5 @@ AVRational scte35_packet_writer::time_base() const
 {
 	return impl_->stream_->time_base;
 }
-
 
 }} // namespace
