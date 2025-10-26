@@ -33,7 +33,8 @@ static const size_t MAX_SCTE35_SECTION_SIZE = 64;
 
 namespace caspar { namespace ffmpeg {
 
-inline std::wstring scte35_hex_dump(const uint8_t* data, size_t size)
+/*
+inline std::wstring hex_dump(const uint8_t* data, size_t size)
 {
 	if (!data || size == 0)
 		return L"(empty)";
@@ -45,6 +46,7 @@ inline std::wstring scte35_hex_dump(const uint8_t* data, size_t size)
 	}
 	return oss.str();
 }
+*/
 
 struct scte35_packet_writer::implementation {
 
@@ -64,16 +66,9 @@ struct scte35_packet_writer::implementation {
 		stream_->codecpar->codec_type = AVMEDIA_TYPE_DATA;
 
 		// Request PMT registration descriptor 'CUEI' (descriptor tag 0x05, format_identifier 'C','U','E','I')
-		// FFmpeg mpegts muxer: for SCTE-35 (stream_type 0x86) it will output a registration descriptor
-		// when codec_tag holds the fourcc. (Using 0x86 here is NOT needed.)
 		stream_->codecpar->codec_tag  = MKTAG('C','U','E','I');
-
 		stream_->time_base = av_make_q(1, 90000);
 		stream_->id        = stream_id;
-
-		// Metadata "registration=CUEI" retained for non-MPEGTS outputs only.
-		if (format_context_->oformat && strcmp(format_context_->oformat->name, "mpegts") != 0)
-			av_dict_set(&stream_->metadata, "registration", "CUEI", 0);
 	}
 
 	void write_network_out_splice(uint32_t splice_event_id,
@@ -219,11 +214,15 @@ struct scte35_packet_writer::implementation {
 		std::memcpy(p, cmd, splice_command_length);
 		p += splice_command_length;
 
+		WRITE_BE16(p, 0x0000); // descriptor_loop_length - empty
+		/*
+		// alternative below - single descriptor example
 		WRITE_BE16(p, 0x000A); // descriptor_loop_length
 		WRITE_U8(p, 0x00); // splice_descriptor_tag -> avail_descriptor
 		WRITE_U8(p, 0x08); // descriptor_length
 		WRITE_BE32(p, 0x43554549); // "CUEI"
 		WRITE_BE32(p, 0x00000000); // private bytes -> provider_avail_id
+		*/
 
 		size_t total_with_crc = size_t(p - buffer) + 1;
 		if (total_with_crc > 0x0FFF)
@@ -243,7 +242,6 @@ struct scte35_packet_writer::implementation {
 		if (len + 4 > MAX_SCTE35_SECTION_SIZE)
 			return;
 		uint32_t crc = av_crc(av_crc_get_table(AV_CRC_32_IEEE), 0xFFFFFFFF, start, len);
-		CASPAR_LOG(trace) << L"CRC: " << scte35_hex_dump((uint8_t*)&crc, 4) << L", bytes: " << len;
 		WRITE_LE32(*end, crc);
 	}
 
@@ -256,9 +254,8 @@ struct scte35_packet_writer::implementation {
 		pkt.stream_index = stream_->index;
 		pkt.flags = AV_PKT_FLAG_KEY;
 		int64_t ts = av_rescale_q(current_time_us, AV_TIME_BASE_Q, stream_->time_base);
-		CASPAR_LOG(trace) << scte35_hex_dump(data, size);
 		pkt.pts = pkt.dts = ts;
-		LOG_ON_ERROR2(av_interleaved_write_frame(format_context_, &pkt), L"scte-35 writer");
+		LOG_ON_ERROR2(av_write_frame(format_context_, &pkt), L"scte-35 writer");
 	}
 };
 

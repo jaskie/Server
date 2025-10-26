@@ -52,7 +52,7 @@ struct read_frame::implementation : boost::noncopyable
 	const channel_layout			audio_channel_layout_;
 	int64_t							created_timestamp_;
 	const uint32_t					frame_timecode_;
-	std::vector<std::shared_ptr<splice_signal>>	signals_;
+	std::vector<splice_signal>		signals_;
 
 public:
 	implementation(
@@ -141,12 +141,12 @@ const channel_layout & read_frame::get_channel_layout() const
 	return impl_->audio_channel_layout_;
 }
 
-void read_frame::set_singals(const std::vector<std::shared_ptr<splice_signal>>& signals)
+void read_frame::set_singals(const std::vector<splice_signal>& signals)
 {
 	impl_->signals_ = signals;
 }
 
-const std::vector<std::shared_ptr<splice_signal>>& read_frame::get_signals() const
+const std::vector<splice_signal>& read_frame::get_signals() const
 {
 	return impl_->signals_;
 }

@@ -21,11 +21,36 @@ namespace caspar {
 				, is_new(true)
 			{ }
 
+			splice_signal(const splice_signal& other)
+				: signal_type(other.signal_type)
+				, event_id(other.event_id)
+				, program_id(other.program_id)
+				, frames_to_event(other.frames_to_event)
+				, break_duration(other.break_duration)
+				, auto_return(other.auto_return)
+				, is_new(other.is_new)
+			{ }
+
+			splice_signal& operator=(const splice_signal& other)
+			{
+				if (this != &other)
+				{
+					signal_type = other.signal_type;
+					event_id = other.event_id;
+					program_id = other.program_id;
+					frames_to_event = other.frames_to_event;
+					break_duration = other.break_duration;
+					auto_return = other.auto_return;
+					is_new = other.is_new;
+				}
+				return *this;
+			}
+
 			SignalType signal_type;
 
-			const uint32_t event_id;
+			uint32_t event_id;
 
-			const uint16_t program_id;
+			uint16_t program_id;
 
 			// time to start, in frames
 			int32_t frames_to_event;
@@ -33,9 +58,9 @@ namespace caspar {
 			bool is_new;
 
 			// duration in frames, zero if unspecified
-			const uint32_t break_duration;
+			uint32_t break_duration;
 
-			const bool auto_return;
+			bool auto_return;
 
 			bool tick()
 			{
@@ -46,6 +71,18 @@ namespace caspar {
 					return true;
 				}
 				return false;
+			}
+
+			bool operator==(const splice_signal& other) const
+			{
+				return signal_type == other.signal_type
+					&& event_id == other.event_id
+					&& program_id == other.program_id;
+			}
+
+			bool operator!=(const splice_signal& other) const
+			{
+				return !(*this == other);
 			}
 		};
 	}

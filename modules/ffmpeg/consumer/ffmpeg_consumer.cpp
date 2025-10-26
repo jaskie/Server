@@ -273,6 +273,7 @@ namespace caspar {
 			const bool								is_imx50_pal_;
 			tbb::atomic<int64_t>					current_encoding_delay_;
 			boost::timer							frame_timer_;
+			uint64_t								last_video_pts_;
 			executor								encode_executor_;
 
 		public:
@@ -429,6 +430,13 @@ namespace caspar {
 						if (unused_options)
 							av_freep(&unused_options);
 						av_dict_free(&options_);
+					}
+
+					const AVOption* opt = av_opt_next(format_context_->priv_data, NULL);
+					while (opt)
+					{
+						CASPAR_LOG(warning) << print() << L": " << widen(opt->name);
+						opt = av_opt_next(format_context_->priv_data, opt);
 					}
 				}
 				catch (...)
@@ -638,8 +646,10 @@ namespace caspar {
 
 			void add_scte35_stream(const AVOutputFormat* format)
 			{
-				if (output_params_.scte35_stream_id_ > 0)
-					scte35_packet_writer_.reset(new scte35_packet_writer(format_context_.get(), output_params_.scte35_stream_id_));
+				if (!output_params_.scte35_stream_id_)
+					return;
+				scte35_packet_writer_.reset(new scte35_packet_writer(format_context_.get(), output_params_.scte35_stream_id_));
+				LOG_ON_ERROR2(av_dict_set_int(&options_, "mpegts_copyts", 1, AV_DICT_DONT_OVERWRITE), print());
 			}
 
 			std::shared_ptr<AVFrame> fast_convert_video(const safe_ptr<core::read_frame>& frame)
@@ -741,6 +751,7 @@ namespace caspar {
 				while (avcodec_receive_packet(video_codec_ctx_.get(), &pkt) == 0)
 				{
 					av_packet_rescale_ts(&pkt, video_codec_ctx_->time_base, video_stream_->time_base);
+					last_video_pts_ = pkt.pts;
 					pkt.stream_index = video_stream_->index;
 					THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), &pkt), print());
 				}
@@ -881,13 +892,13 @@ namespace caspar {
 					});
 			}
 
-			void insert_scte35_signals(const std::vector<std::shared_ptr<core::splice_signal>>& signals)
+			void insert_scte35_signals(const std::vector<core::splice_signal>& signals)
 			{
 				if (signals.empty())
 					return;
 				for (auto it = signals.begin(); it != signals.end(); ++it)
 				{
-					const core::splice_signal& signal = **it;
+					const core::splice_signal& signal = *it;
 					uint64_t current_time = av_rescale(out_frame_number_ * AV_TIME_BASE, frame_rate_.den, frame_rate_.num);
 					uint64_t splice_time = av_rescale((out_frame_number_ + signal.frames_to_event) * AV_TIME_BASE, frame_rate_.den, frame_rate_.num);
 					uint64_t duration = av_rescale(signal.break_duration * AV_TIME_BASE, frame_rate_.den, frame_rate_.num);
@@ -895,7 +906,7 @@ namespace caspar {
 					{
 					case core::SignalType::Out:
 						scte35_packet_writer_->write_network_out_splice(signal.event_id, signal.program_id, signal.frames_to_event == 0, splice_time, current_time, duration, signal.auto_return);
-						CASPAR_LOG(trace) << print() << L": signalled OUT in " << signal.frames_to_event << L" frames, event_id: " << signal.event_id << L", program_id: " << signal.program_id << L", splice_time: " << splice_time;
+						CASPAR_LOG(trace) << print() << L": signalled OUT in " << signal.frames_to_event << L" frames, event_id: " << signal.event_id << L", program_id: " << signal.program_id << L", splice_time: " << splice_time << L", video pts: " << last_video_pts_ << L", video frame: " << out_frame_number_;
 						break;
 					case core::SignalType::In:
 						scte35_packet_writer_->write_network_in_splice(signal.event_id, signal.program_id, signal.frames_to_event == 0, splice_time, current_time);
