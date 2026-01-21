@@ -424,7 +424,7 @@ public:
 
 		return consumer_->send(frame);
 	}
-		
+
 	virtual std::wstring print() const override
 	{
 		return consumer_ ? consumer_->print() : L"[bluefish_consumer]";

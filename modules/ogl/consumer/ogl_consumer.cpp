@@ -84,7 +84,7 @@ struct configuration
 		aspect_16_9,
 		aspect_invalid,
 	};
-		
+
 	std::wstring	name;
 	unsigned int 	screen_index;
 	stretch			stretch;
@@ -140,7 +140,7 @@ struct ogl_consumer : boost::noncopyable
 	boost::thread			thread_;
 	tbb::atomic<bool>		is_running_;
 	tbb::atomic<int64_t>	current_presentation_age_;
-	
+
 public:
 	ogl_consumer(const configuration& config, const core::video_format_desc& format_desc, int channel_index) 
 		: config_(config)
@@ -174,7 +174,7 @@ public:
 		graph_->set_text(print());
 		diagnostics::register_graph(graph_);
 									
-		DISPLAY_DEVICE d_device = {sizeof(d_device), 0};			
+		DISPLAY_DEVICE d_device = {sizeof(d_device), 0};
 		std::vector<DISPLAY_DEVICE> displayDevices;
 		for(int n = 0; EnumDisplayDevices(NULL, n, &d_device, NULL); ++n)
 			displayDevices.push_back(d_device);
@@ -195,7 +195,7 @@ public:
 		current_presentation_age_ = 0;
 		thread_ = boost::thread([this]{run();});
 	}
-	
+
 	~ogl_consumer()
 	{
 		is_running_ = false;
@@ -218,9 +218,9 @@ public:
 		GL(glClearColor(0.0, 0.0, 0.0, 0.0));
 		GL(glViewport(0, 0, format_desc_.width, format_desc_.height));
 		GL(glLoadIdentity());
-				
+
 		calculate_aspect();
-			
+
 		GL(glGenTextures(1, &texture_));
 		GL(glBindTexture(GL_TEXTURE_2D, texture_));
 		GL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
@@ -275,11 +275,11 @@ public:
 			init();
 
 			while(is_running_)
-			{			
+			{
 				try
 				{
 
-					sf::Event e;		
+					sf::Event e;
 					while(window_.GetEvent(e))
 					{
 						if(e.Type == sf::Event::Resized)
@@ -303,7 +303,6 @@ public:
 					is_running_ = false;
 				}
 			}
-
 			uninit();
 		}
 		catch(...)
@@ -329,13 +328,11 @@ public:
 		// Make sure that the next tick measures the duration from this point in time.
 		wait_timer_.tick(0.0);
 	}
-	
 
 	void render_and_draw_frame(const safe_ptr<core::read_frame>& frame)
 	{
 		if(static_cast<uint32_t>(frame->image_data().size()) != format_desc_.size)
-			return;
-					
+			return
 		perf_timer_.restart();
 		render(frame);
 		graph_->set_value("frame-time", perf_timer_.elapsed() * format_desc_.fps * 0.5);
@@ -367,8 +364,8 @@ public:
 		}
 
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-				
-		GL(glClear(GL_COLOR_BUFFER_BIT));			
+
+		GL(glClear(GL_COLOR_BUFFER_BIT));
 		glBegin(GL_QUADS);
 				glTexCoord2f(0.0f,	  1.0f);	glVertex2f(-width_, -height_);
 				glTexCoord2f(1.0f,	  1.0f);	glVertex2f( width_, -height_);
@@ -384,8 +381,7 @@ public:
 	boost::unique_future<bool> send(const safe_ptr<core::read_frame>& frame)
 	{
 		if (!frame_buffer_.try_push(frame))
-			graph_->set_tag("dropped-frame"); 
-
+			graph_->set_tag("dropped-frame");
 		return wrap_as_future(is_running_.load());
 	}
 
@@ -393,9 +389,9 @@ public:
 	{
 		return L"[" + boost::lexical_cast<std::wstring>(channel_index_) + L"|" + format_desc_.name + L"]";
 	}
-		
+
 	std::wstring print() const
-	{	
+	{
 		return config_.name + L" " + channel_and_format();
 	}
 	
@@ -420,7 +416,7 @@ public:
 		width_ = target_ratio.first;
 		height_ = target_ratio.second;
 	}
-		
+
 	std::pair<float, float> None()
 	{
 		float width = static_cast<float>(square_width_)/static_cast<float>(screen_width_);
@@ -495,7 +491,7 @@ public:
 	{
 		return consumer_->send(frame);
 	}
-	
+
 	virtual std::wstring print() const override
 	{
 		return consumer_ ? consumer_->print() : L"[ogl_consumer]";
@@ -525,15 +521,15 @@ public:
 	{
 		return OGL_CONSUMER_BASE_INDEX + config_.screen_index;
 	}
-};	
+};
 
 safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params)
 {
 	if(params.size() < 1 || params[0] != L"SCREEN")
 		return core::frame_consumer::empty();
-	
+
 	configuration config;
-		
+
 	if(params.size() > 1)
 		config.screen_index =
 				lexical_cast_or_default<int>(params[1], config.screen_index);
@@ -556,7 +552,7 @@ safe_ptr<core::frame_consumer> create_consumer(const boost::property_tree::wptre
 	config.key_only			= ptree.get(L"key-only", config.key_only);
 	config.auto_deinterlace	= ptree.get(L"auto-deinterlace", config.auto_deinterlace);
 	config.vsync			= ptree.get(L"vsync", config.vsync);
-	config.borderless       = ptree.get(L"borderless", config.borderless);
+	config.borderless		= ptree.get(L"borderless", config.borderless);
 
 	auto stretch_str = ptree.get(L"stretch", L"default");
 	if(stretch_str == L"uniform")

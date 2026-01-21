@@ -39,11 +39,11 @@ namespace caspar { namespace core {
 class device_buffer;
 struct frame_visitor;
 struct pixel_format_desc;
-class ogl_device;	
+class ogl_device;
 
 class write_frame : public core::basic_frame, boost::noncopyable
 {
-public:	
+public:
 	explicit write_frame(const void* tag, const channel_layout& channel_layout);
 	explicit write_frame(const safe_ptr<ogl_device>& ogl, const void* tag, const core::pixel_format_desc& desc, const channel_layout& channel_layout);
 
@@ -52,18 +52,18 @@ public:
 
 	write_frame& operator=(const write_frame& other);
 	write_frame& operator=(write_frame&& other);
-			
+
 	// basic_frame
 
 	virtual void accept(frame_visitor& visitor) override;
 	virtual int64_t get_and_record_age_millis() override;
-	virtual int get_timecode() override;
-	void set_timecode(int timecode);
+	virtual const uint32_t get_timecode() const override;
+	void set_timecode(const uint32_t timecode);
 
 	// write _frame
 
 	void swap(write_frame& other);
-			
+
 	boost::iterator_range<uint8_t*> image_data(uint32_t plane_index = 0);	
 	audio_buffer& audio_data();
 	

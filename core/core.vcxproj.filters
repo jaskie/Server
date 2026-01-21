@@ -181,6 +181,12 @@
     <ClInclude Include="system_watcher.h">
       <Filter>source</Filter>
     </ClInclude>
+    <ClInclude Include="consumer\signaller.h">
+      <Filter>source\consumer</Filter>
+    </ClInclude>
+    <ClInclude Include="consumer\splice_signal.h">
+      <Filter>source\consumer</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="producer\transition\transition_producer.cpp">
@@ -279,6 +285,9 @@
     </ClCompile>
     <ClCompile Include="system_watcher.cpp">
       <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="consumer\signaller.cpp">
+      <Filter>source\consumer</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

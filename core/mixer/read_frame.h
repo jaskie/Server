@@ -37,6 +37,7 @@ namespace caspar { namespace core {
 	
 class host_buffer;
 class ogl_device;
+struct splice_signal;
 
 class read_frame : boost::noncopyable
 {
@@ -48,7 +49,7 @@ public:
 			safe_ptr<host_buffer>&& image_data,
 			audio_buffer&& audio_data,
 			const channel_layout& audio_channel_layout,
-			int frame_timecode);
+			const uint32_t frame_timecode);
 
 	virtual const boost::iterator_range<const uint8_t*> image_data();
 	virtual const boost::iterator_range<const int32_t*> audio_data();
@@ -57,9 +58,11 @@ public:
 	virtual int num_channels() const;
 	virtual int64_t get_age_millis() const;
 	virtual const multichannel_view<const int32_t, boost::iterator_range<const int32_t*>::const_iterator> multichannel_view() const;
-	virtual int get_timecode() const;
+	const uint32_t get_timecode() const;
 	const channel_layout& get_channel_layout() const;
-		
+	void set_singals(const std::vector<splice_signal> &signals);
+	const std::vector<splice_signal>& get_signals() const;
+
 private:
 	struct implementation;
 	std::shared_ptr<implementation> impl_;

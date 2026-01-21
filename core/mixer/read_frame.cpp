@@ -22,6 +22,7 @@
 #include "../stdafx.h"
 
 #include "read_frame.h"
+#include "../consumer/splice_signal.h"
 
 #include "gpu/fence.h"
 #include "gpu/host_buffer.h"	
@@ -40,17 +41,18 @@ int64_t get_current_time_millis()
 	return duration_cast<milliseconds>(
 			high_resolution_clock::now().time_since_epoch()).count();
 }
-																																							
+
 struct read_frame::implementation : boost::noncopyable
 {
-	safe_ptr<ogl_device>		ogl_;
-	uint32_t					size_;
-	safe_ptr<host_buffer>		image_data_;
-	tbb::mutex					mutex_;
-	audio_buffer				audio_data_;
-	const channel_layout		audio_channel_layout_;
-	int64_t						created_timestamp_;
-	const int					frame_timecode_;
+	safe_ptr<ogl_device>			ogl_;
+	uint32_t						size_;
+	safe_ptr<host_buffer>			image_data_;
+	tbb::mutex						mutex_;
+	audio_buffer					audio_data_;
+	const channel_layout			audio_channel_layout_;
+	int64_t							created_timestamp_;
+	const uint32_t					frame_timecode_;
+	std::vector<splice_signal>		signals_;
 
 public:
 	implementation(
@@ -59,7 +61,7 @@ public:
 			safe_ptr<host_buffer>&& image_data,
 			audio_buffer&& audio_data,
 			const channel_layout& audio_channel_layout,
-			const unsigned int frame_timecode
+			const uint32_t frame_timecode
 	) 
 		: ogl_(ogl)
 		, size_(size)
@@ -69,7 +71,7 @@ public:
 		, created_timestamp_(get_current_time_millis())
 		, frame_timecode_(frame_timecode)
 	{
-	}	
+	}
 	
 	const boost::iterator_range<const uint8_t*> image_data()
 	{
@@ -90,8 +92,6 @@ public:
 	{
 		return boost::iterator_range<const int32_t*>(audio_data_.data(), audio_data_.data() + audio_data_.size());
 	}
-
-
 };
 
 read_frame::read_frame(
@@ -100,7 +100,7 @@ read_frame::read_frame(
 		safe_ptr<host_buffer>&& image_data,
 		audio_buffer&& audio_data,
 		const channel_layout& audio_channel_layout,
-		int frame_timecode)
+		const uint32_t frame_timecode)
 	: impl_(new implementation(ogl, size, std::move(image_data), std::move(audio_data), audio_channel_layout, frame_timecode))
 {
 }
@@ -131,7 +131,7 @@ int64_t read_frame::get_age_millis() const
 	return impl_ ? get_current_time_millis() - impl_->created_timestamp_ : 0;
 }
 
-int read_frame::get_timecode() const
+const uint32_t read_frame::get_timecode() const
 {
 	return impl_->frame_timecode_;
 }
@@ -139,6 +139,16 @@ int read_frame::get_timecode() const
 const channel_layout & read_frame::get_channel_layout() const
 {
 	return impl_->audio_channel_layout_;
+}
+
+void read_frame::set_singals(const std::vector<splice_signal>& signals)
+{
+	impl_->signals_ = signals;
+}
+
+const std::vector<splice_signal>& read_frame::get_signals() const
+{
+	return impl_->signals_;
 }
 
 

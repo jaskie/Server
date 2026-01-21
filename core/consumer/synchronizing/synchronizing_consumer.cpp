@@ -67,7 +67,7 @@ public:
 	{
 		return *consumer_;
 	}
-	
+
 	virtual void initialize(
 			const video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index) override
 	{
@@ -81,7 +81,7 @@ public:
 
 	virtual boost::unique_future<bool> send(
 			const safe_ptr<read_frame>& frame) override
-	{		
+	{
 		return get_delegate().send(frame);
 	}
 

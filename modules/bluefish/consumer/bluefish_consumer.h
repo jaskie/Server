@@ -33,7 +33,7 @@ namespace core {
 	struct frame_consumer;
 	class parameters;
 }
-	 
+
 namespace bluefish {
 
 safe_ptr<core::frame_consumer> create_consumer(const core::parameters& params);

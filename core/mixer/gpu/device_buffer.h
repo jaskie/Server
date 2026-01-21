@@ -33,7 +33,7 @@ class device_buffer : boost::noncopyable
 {
 public:
 	
-	uint32_t stride() const;	
+	uint32_t stride() const;
 	uint32_t width() const;
 	uint32_t height() const;
 		

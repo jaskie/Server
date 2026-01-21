@@ -160,7 +160,7 @@ public:
 
 		return wrap_as_future(is_running_.load());
 	}
-	
+
 	virtual std::wstring print() const override
 	{
 		return L"oal[" + boost::lexical_cast<std::wstring>(channel_index_) + L"|" + format_desc_.name + L"]";

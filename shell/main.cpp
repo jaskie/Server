@@ -321,8 +321,10 @@ int __stdcall WinMain(HINSTANCE h_instance, HINSTANCE, LPSTR, int)
 							wcmd = L"CAPTURE 1 recorder 1 LIMIT 250 FILE limit1.mov";
 						else if (wcmd.substr(0, 1) == L"8")
 							wcmd = L"CAPTURE 1 recorder 1 LIMIT 250 FILE limit2.mov";
+						else if (wcmd.substr(0, 1) == L"9")
+							wcmd = L"SIGNAL 1 OUT 105 ID 1999 PROGRAM 12345 LENGTH 250 RETURN";
 						else if (wcmd.substr(0, 1) == L"0")
-							wcmd = L"RECORDER FINISH 1";
+							wcmd = L"SIGNAL 1 CANCEL ID 1999";
 						else if (upper_cmd.substr(0, 1) == L"X")
 						{
 							int num = 0;

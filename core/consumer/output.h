@@ -32,34 +32,38 @@
 #include <boost/property_tree/ptree_fwd.hpp>
 #include <boost/thread/future.hpp>
 
-namespace caspar { namespace core {
-	
-class output : public target<std::pair<safe_ptr<read_frame>, std::shared_ptr<void>>>
-			 , boost::noncopyable
-{
-public:
-	explicit output(const safe_ptr<diagnostics::graph>& graph, const video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index);
+namespace caspar {
+	namespace core {
+		class signaller;
 
-	// target
-	
-	virtual void send( const std::pair<safe_ptr<read_frame>, std::shared_ptr<void>>& frame) override;
+		class output : public target<std::pair<safe_ptr<read_frame>, std::shared_ptr<void>>>
+			, boost::noncopyable
+		{
+		public:
+			explicit output(const safe_ptr<diagnostics::graph>& graph, const video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index);
 
-	// output
-	
-	void add(const safe_ptr<frame_consumer>& consumer);
-	void add(int index, const safe_ptr<frame_consumer>& consumer);
-	void remove(const safe_ptr<frame_consumer>& consumer);
-	void remove(int index);
-	
-	boost::unique_future<boost::property_tree::wptree> info() const;
-	boost::unique_future<boost::property_tree::wptree> delay_info() const;
+			// target
 
-	bool empty() const;
+			virtual void send(const std::pair<safe_ptr<read_frame>, std::shared_ptr<void>>& frame) override;
 
-	monitor::subject& monitor_output();
-private:
-	struct implementation;
-	safe_ptr<implementation> impl_;
-};
+			// output
 
-}}
+			void add(const safe_ptr<frame_consumer>& consumer);
+			void add(int index, const safe_ptr<frame_consumer>& consumer);
+			void remove(const safe_ptr<frame_consumer>& consumer);
+			void remove(int index);
+			safe_ptr<signaller> signaller() const;
+
+			boost::unique_future<boost::property_tree::wptree> info() const;
+			boost::unique_future<boost::property_tree::wptree> delay_info() const;
+
+			bool empty() const;
+
+			monitor::subject& monitor_output();
+		private:
+			struct implementation;
+			safe_ptr<implementation> impl_;
+		};
+
+	}
+}

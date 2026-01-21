@@ -181,6 +181,12 @@ class DataCommand : public AMCPCommandBase<false, 1>
 	bool DoExecuteList();
 };
 
+class SignalCommand : public AMCPCommandBase<true, 1>
+{
+	std::wstring print() const { return L"SignalCommand"; }
+	bool DoExecute();
+};
+
 class CaptureCommand : public AMCPCommandBase<true, 1>
 {
 	std::wstring print() const { return L"CaptureCommand"; }

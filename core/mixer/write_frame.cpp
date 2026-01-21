@@ -37,9 +37,9 @@
 #include <tbb/atomic.h>
 
 namespace caspar { namespace core {
-																																							
+
 struct write_frame::implementation
-{				
+{
 	std::shared_ptr<ogl_device>					ogl_;
 	std::vector<std::shared_ptr<host_buffer>>	buffers_;
 	std::vector<safe_ptr<device_buffer>>		textures_;
@@ -50,7 +50,7 @@ struct write_frame::implementation
 	core::field_mode::type						mode_;
 	boost::timer								since_created_timer_;
 	tbb::atomic<int64_t>						recorded_frame_age_;
-	tbb::atomic<int>							timecode_;
+	tbb::atomic<uint32_t>						timecode_;
 
 	implementation(const void* tag, const channel_layout& channel_layout)
 		: channel_layout_(channel_layout)
@@ -77,7 +77,7 @@ struct write_frame::implementation
 
 		recorded_frame_age_ = -1;
 	}
-			
+
 	void accept(write_frame& self, core::frame_visitor& visitor)
 	{
 		visitor.begin(self);
@@ -112,7 +112,7 @@ struct write_frame::implementation
 	{
 		if(plane_index >= buffers_.size())
 			return;
-				
+
 		auto buffer = std::move(buffers_[plane_index]); // Release buffer once done.
 
 		if(!buffer)
@@ -121,7 +121,7 @@ struct write_frame::implementation
 		auto texture = textures_.at(plane_index);
 		
 		ogl_->begin_invoke([=]
-		{			
+		{
 			buffer->unmap();
 			buffer->bind();
 			texture->begin_read();
@@ -174,8 +174,8 @@ void write_frame::set_type(const field_mode::type& mode){impl_->mode_ = mode;}
 core::field_mode::type write_frame::get_type() const{return impl_->mode_;}
 void write_frame::accept(core::frame_visitor& visitor){impl_->accept(*this, visitor);}
 int64_t write_frame::get_and_record_age_millis() { return impl_->get_and_record_age_millis(); }
-int write_frame::get_timecode() { return impl_->timecode_; }
-void write_frame::set_timecode(int timecode) { impl_->timecode_ = timecode; }
+const uint32_t write_frame::get_timecode() const { return impl_->timecode_; }
+void write_frame::set_timecode(const uint32_t timecode) { impl_->timecode_ = timecode; }
 
 
 }}

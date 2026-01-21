@@ -34,12 +34,9 @@ struct video_format_desc;
 class synchronizing_consumer : public frame_consumer
 {
 public:
-	synchronizing_consumer(
-			const std::vector<safe_ptr<frame_consumer>>& consumers);
-	virtual boost::unique_future<bool> send(
-			const safe_ptr<read_frame>& frame) override;
-	virtual void initialize(
-			const video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index) override;
+	synchronizing_consumer(const std::vector<safe_ptr<frame_consumer>>& consumers);
+	virtual boost::unique_future<bool> send(const safe_ptr<read_frame>& frame) override;
+	virtual void initialize(const video_format_desc& format_desc, const channel_layout& audio_channel_layout, int channel_index) override;
 	virtual int64_t presentation_frame_age_millis() const override;
 	virtual std::wstring print() const override;
 	virtual boost::property_tree::wptree info() const override;

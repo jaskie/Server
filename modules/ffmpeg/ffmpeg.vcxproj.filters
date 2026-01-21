@@ -64,6 +64,9 @@
     <ClCompile Include="tbb_avcodec.cpp">
       <Filter>source</Filter>
     </ClCompile>
+    <ClCompile Include="consumer\scte35_packet_writer.cpp">
+      <Filter>source\consumer</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="producer\ffmpeg_producer.h">
@@ -102,6 +105,9 @@
     </ClInclude>
     <ClInclude Include="tbb_avcodec.h">
       <Filter>source</Filter>
+    </ClInclude>
+    <ClInclude Include="consumer\scte35_packet_writer.h">
+      <Filter>source\consumer</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

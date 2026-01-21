@@ -59,225 +59,228 @@
 
 #include <unordered_map>
 
-namespace caspar { namespace core {
-		
-struct mixer::implementation : boost::noncopyable
-{		
-	safe_ptr<diagnostics::graph>	graph_;
-	boost::timer					mix_timer_;
-	tbb::atomic<int64_t>			current_mix_time_;
+namespace caspar {
+	namespace core {
 
-	safe_ptr<mixer::target_t>		target_;
-	mutable tbb::spin_mutex			format_desc_mutex_;
-	video_format_desc				format_desc_;
-	safe_ptr<ogl_device>			ogl_;
-	channel_layout					audio_channel_layout_;
-	bool							straighten_alpha_;
-	
-	audio_mixer	audio_mixer_;
-	image_mixer image_mixer_;
-	
-	std::unordered_map<int, blend_mode> blend_modes_;
-			
-	executor executor_;
-	safe_ptr<monitor::subject>		 monitor_subject_;
+		struct mixer::implementation : boost::noncopyable
+		{
+			safe_ptr<diagnostics::graph>	graph_;
+			boost::timer					mix_timer_;
+			tbb::atomic<int64_t>			current_mix_time_;
 
-public:
-	implementation(const safe_ptr<diagnostics::graph>& graph, const safe_ptr<mixer::target_t>& target, const video_format_desc& format_desc, const safe_ptr<ogl_device>& ogl, const channel_layout& audio_channel_layout, const int channel_index)
-		: graph_(graph)
-		, target_(target)
-		, format_desc_(format_desc)
-		, ogl_(ogl)
-		, audio_channel_layout_(audio_channel_layout)
-		, straighten_alpha_(false)
-		, audio_mixer_(graph_)
-		, image_mixer_(ogl)
-		, executor_(L"mixer[" + std::to_wstring(static_cast<uint64_t>(channel_index)) + L"]")
-		, monitor_subject_(make_safe<monitor::subject>("/mixer"))
-	{			
-		graph_->set_color("mix-time", diagnostics::color(1.0f, 0.0f, 0.9f, 0.8));
-		current_mix_time_ = 0;
+			safe_ptr<mixer::target_t>		target_;
+			mutable tbb::spin_mutex			format_desc_mutex_;
+			video_format_desc				format_desc_;
+			safe_ptr<ogl_device>			ogl_;
+			channel_layout					audio_channel_layout_;
+			bool							straighten_alpha_;
 
-		audio_mixer_.monitor_output().attach_parent(monitor_subject_);
-	}
-	
-	void send(const std::pair<std::map<int, safe_ptr<core::basic_frame>>, std::shared_ptr<void>>& packet)
-	{			
-		executor_.begin_invoke([=]
-		{		
-			try
+			audio_mixer	audio_mixer_;
+			image_mixer image_mixer_;
+
+			std::unordered_map<int, blend_mode> blend_modes_;
+
+			executor executor_;
+			safe_ptr<monitor::subject>		 monitor_subject_;
+
+		public:
+			implementation(const safe_ptr<diagnostics::graph>& graph, const safe_ptr<mixer::target_t>& target, const video_format_desc& format_desc, const safe_ptr<ogl_device>& ogl, const channel_layout& audio_channel_layout, const int channel_index)
+				: graph_(graph)
+				, target_(target)
+				, format_desc_(format_desc)
+				, ogl_(ogl)
+				, audio_channel_layout_(audio_channel_layout)
+				, straighten_alpha_(false)
+				, audio_mixer_(graph_)
+				, image_mixer_(ogl)
+				, executor_(L"mixer[" + std::to_wstring(static_cast<uint64_t>(channel_index)) + L"]")
+				, monitor_subject_(make_safe<monitor::subject>("/mixer"))
 			{
-				mix_timer_.restart();
+				graph_->set_color("mix-time", diagnostics::color(1.0f, 0.0f, 0.9f, 0.8));
+				current_mix_time_ = 0;
 
-				auto frames = packet.first;
-				int timecode = std::numeric_limits<int>().max();
-				
-				BOOST_FOREACH(auto& frame, frames)
-				{
-					auto blend_it = blend_modes_.find(frame.first);
-					image_mixer_.begin_layer(blend_it != blend_modes_.end() ? blend_it->second : blend_mode::normal);
-													
-					frame.second->accept(audio_mixer_);					
-					frame.second->accept(image_mixer_);
-					
-					image_mixer_.end_layer();
-					timecode = std::min(timecode, frame.second->get_timecode());
-				}
-
-				auto image = image_mixer_(format_desc_, straighten_alpha_);
-				auto audio = audio_mixer_(format_desc_, audio_channel_layout_);
-				image.wait();
-
-				auto mix_time = mix_timer_.elapsed();
-				graph_->set_value("mix-time", mix_time*format_desc_.fps*0.5);
-				current_mix_time_ = static_cast<int64_t>(mix_time * 1000.0);
-
-				target_->send(std::make_pair(make_safe<read_frame>(ogl_, format_desc_.size, std::move(image.get()), std::move(audio), audio_channel_layout_, timecode), packet.second));
+				audio_mixer_.monitor_output().attach_parent(monitor_subject_);
 			}
-			catch(...)
+
+			void send(const std::pair<std::map<int, safe_ptr<core::basic_frame>>, std::shared_ptr<void>>& packet)
 			{
-				CASPAR_LOG_CURRENT_EXCEPTION();
-			}	
-		});		
-	}
-					
-	safe_ptr<core::write_frame> create_frame(
-			const void* tag,
-			const core::pixel_format_desc& desc,
-			const channel_layout& audio_channel_layout)
-	{		
-		return make_safe<write_frame>(ogl_, tag, desc, audio_channel_layout);
-	}
+				executor_.begin_invoke([=]
+					{
+						try
+						{
+							mix_timer_.restart();
 
-	blend_mode::type get_blend_mode(int index)
-	{
-		return executor_.invoke([=]
-		{
-			return blend_modes_[index].mode;
-		});
-	}
-				
-	void set_blend_mode(int index, blend_mode::type value)
-	{
-		executor_.begin_invoke([=]
-		{
-			blend_modes_[index].mode = value;
-		}, high_priority);
-	}
+							auto frames = packet.first;
+							uint32_t timecode = std::numeric_limits<uint32_t>().max();
 
-	void clear_blend_mode(int index)
-	{
-		executor_.begin_invoke([=]
-		{
-			blend_modes_.erase(index);
-		}, high_priority);
+							BOOST_FOREACH(auto& frame, frames)
+							{
+								auto blend_it = blend_modes_.find(frame.first);
+								image_mixer_.begin_layer(blend_it != blend_modes_.end() ? blend_it->second : blend_mode::normal);
+
+								frame.second->accept(audio_mixer_);
+								frame.second->accept(image_mixer_);
+
+								image_mixer_.end_layer();
+								timecode = std::min(timecode, frame.second->get_timecode());
+							}
+
+							auto image = image_mixer_(format_desc_, straighten_alpha_);
+							auto audio = audio_mixer_(format_desc_, audio_channel_layout_);
+							image.wait();
+
+							auto mix_time = mix_timer_.elapsed();
+							graph_->set_value("mix-time", mix_time * format_desc_.fps * 0.5);
+							current_mix_time_ = static_cast<int64_t>(mix_time * 1000.0);
+
+							target_->send(std::make_pair(make_safe<read_frame>(ogl_, format_desc_.size, std::move(image.get()), std::move(audio), audio_channel_layout_, timecode), packet.second));
+						}
+						catch (...)
+						{
+							CASPAR_LOG_CURRENT_EXCEPTION();
+						}
+					});
+			}
+
+			safe_ptr<core::write_frame> create_frame(
+				const void* tag,
+				const core::pixel_format_desc& desc,
+				const channel_layout& audio_channel_layout)
+			{
+				return make_safe<write_frame>(ogl_, tag, desc, audio_channel_layout);
+			}
+
+			blend_mode::type get_blend_mode(int index)
+			{
+				return executor_.invoke([=]
+					{
+						return blend_modes_[index].mode;
+					});
+			}
+
+			void set_blend_mode(int index, blend_mode::type value)
+			{
+				executor_.begin_invoke([=]
+					{
+						blend_modes_[index].mode = value;
+					}, high_priority);
+			}
+
+			void clear_blend_mode(int index)
+			{
+				executor_.begin_invoke([=]
+					{
+						blend_modes_.erase(index);
+					}, high_priority);
+			}
+
+			void clear_blend_modes()
+			{
+				executor_.begin_invoke([=]
+					{
+						blend_modes_.clear();
+					}, high_priority);
+			}
+
+			chroma get_chroma(int index)
+			{
+				return executor_.invoke([=]
+					{
+						return blend_modes_[index].chroma;
+					});
+			}
+
+			void set_chroma(int index, const chroma& value)
+			{
+				executor_.begin_invoke([=]
+					{
+						blend_modes_[index].chroma = value;
+					}, high_priority);
+			}
+
+			void set_straight_alpha_output(bool value)
+			{
+				executor_.begin_invoke([=]
+					{
+						straighten_alpha_ = value;
+					}, high_priority);
+			}
+
+			bool get_straight_alpha_output()
+			{
+				return executor_.invoke([=]
+					{
+						return straighten_alpha_;
+					});
+			}
+
+			float get_master_volume()
+			{
+				return executor_.invoke([=]
+					{
+						return audio_mixer_.get_master_volume();
+					});
+			}
+
+			void set_master_volume(float volume)
+			{
+				executor_.begin_invoke([=]
+					{
+						audio_mixer_.set_master_volume(volume);
+					}, high_priority);
+			}
+
+			void set_video_format_desc(const video_format_desc& format_desc)
+			{
+				executor_.begin_invoke([=]
+					{
+						tbb::spin_mutex::scoped_lock lock(format_desc_mutex_);
+						format_desc_ = format_desc;
+					});
+			}
+
+			core::video_format_desc get_video_format_desc() const // nothrow
+			{
+				tbb::spin_mutex::scoped_lock lock(format_desc_mutex_);
+				return format_desc_;
+			}
+
+			boost::unique_future<boost::property_tree::wptree> info() const
+			{
+				boost::property_tree::wptree info;
+				info.add(L"mix-time", current_mix_time_);
+
+				return wrap_as_future(std::move(info));
+			}
+
+			boost::unique_future<boost::property_tree::wptree> delay_info() const
+			{
+				boost::property_tree::wptree info;
+				info.put_value(current_mix_time_);
+
+				return wrap_as_future(std::move(info));
+			}
+		};
+
+		mixer::mixer(const safe_ptr<diagnostics::graph>& graph, const safe_ptr<target_t>& target, const video_format_desc& format_desc, const safe_ptr<ogl_device>& ogl, const channel_layout& audio_channel_layout, int channel_index)
+			: impl_(new implementation(graph, target, format_desc, ogl, audio_channel_layout, channel_index)) {
+		}
+		void mixer::send(const std::pair<std::map<int, safe_ptr<core::basic_frame>>, std::shared_ptr<void>>& frames) { impl_->send(frames); }
+		core::video_format_desc mixer::get_video_format_desc() const { return impl_->get_video_format_desc(); }
+		safe_ptr<core::write_frame> mixer::create_frame(const void* tag, const core::pixel_format_desc& desc, const channel_layout& audio_channel_layout) { return impl_->create_frame(tag, desc, audio_channel_layout); }
+		blend_mode::type mixer::get_blend_mode(int index) { return impl_->get_blend_mode(index); }
+		void mixer::set_blend_mode(int index, blend_mode::type value) { impl_->set_blend_mode(index, value); }
+		chroma mixer::get_chroma(int index) { return impl_->get_chroma(index); }
+		void mixer::set_chroma(int index, const chroma& value) { impl_->set_chroma(index, value); }
+		void mixer::clear_blend_mode(int index) { impl_->clear_blend_mode(index); }
+		void mixer::clear_blend_modes() { impl_->clear_blend_modes(); }
+		void mixer::set_straight_alpha_output(bool value) { impl_->set_straight_alpha_output(value); }
+		bool mixer::get_straight_alpha_output() { return impl_->get_straight_alpha_output(); }
+		float mixer::get_master_volume() { return impl_->get_master_volume(); }
+		void mixer::set_master_volume(float volume) { impl_->set_master_volume(volume); }
+		void mixer::set_video_format_desc(const video_format_desc& format_desc) { impl_->set_video_format_desc(format_desc); }
+		boost::unique_future<boost::property_tree::wptree> mixer::info() const { return impl_->info(); }
+		boost::unique_future<boost::property_tree::wptree> mixer::delay_info() const { return impl_->delay_info(); }
+		monitor::subject& mixer::monitor_output() { return *impl_->monitor_subject_; }
 	}
-
-	void clear_blend_modes()
-	{
-		executor_.begin_invoke([=]
-		{
-			blend_modes_.clear();
-		}, high_priority);
-	}
-
-	chroma get_chroma(int index)
-	{
-		return executor_.invoke([=]
-		{
-			return blend_modes_[index].chroma;
-		});
-	}
-
-    void set_chroma(int index, const chroma & value)
-    {
-        executor_.begin_invoke([=]
-        {
-            blend_modes_[index].chroma = value;
-        }, high_priority);
-    }
-
-	void set_straight_alpha_output(bool value)
-	{
-        executor_.begin_invoke([=]
-        {
-			straighten_alpha_ = value;
-        }, high_priority);
-	}
-
-	bool get_straight_alpha_output()
-	{
-		return executor_.invoke([=]
-		{
-			return straighten_alpha_;
-		});
-	}
-
-	float get_master_volume()
-	{
-		return executor_.invoke([=]
-		{
-			return audio_mixer_.get_master_volume();
-		});
-	}
-
-	void set_master_volume(float volume)
-	{
-		executor_.begin_invoke([=]
-		{
-			audio_mixer_.set_master_volume(volume);
-		}, high_priority);
-	}
-	
-	void set_video_format_desc(const video_format_desc& format_desc)
-	{
-		executor_.begin_invoke([=]
-		{
-			tbb::spin_mutex::scoped_lock lock(format_desc_mutex_);
-			format_desc_ = format_desc;
-		});
-	}
-
-	core::video_format_desc get_video_format_desc() const // nothrow
-	{
-		tbb::spin_mutex::scoped_lock lock(format_desc_mutex_);
-		return format_desc_;
-	}
-
-	boost::unique_future<boost::property_tree::wptree> info() const
-	{
-		boost::property_tree::wptree info;
-		info.add(L"mix-time", current_mix_time_);
-
-		return wrap_as_future(std::move(info));
-	}
-
-	boost::unique_future<boost::property_tree::wptree> delay_info() const
-	{
-		boost::property_tree::wptree info;
-		info.put_value(current_mix_time_);
-
-		return wrap_as_future(std::move(info));
-	}
-};
-	
-mixer::mixer(const safe_ptr<diagnostics::graph>& graph, const safe_ptr<target_t>& target, const video_format_desc& format_desc, const safe_ptr<ogl_device>& ogl, const channel_layout& audio_channel_layout, int channel_index) 
-	: impl_(new implementation(graph, target, format_desc, ogl, audio_channel_layout, channel_index)){}
-void mixer::send(const std::pair<std::map<int, safe_ptr<core::basic_frame>>, std::shared_ptr<void>>& frames){ impl_->send(frames);}
-core::video_format_desc mixer::get_video_format_desc() const { return impl_->get_video_format_desc(); }
-safe_ptr<core::write_frame> mixer::create_frame(const void* tag, const core::pixel_format_desc& desc, const channel_layout& audio_channel_layout){ return impl_->create_frame(tag, desc, audio_channel_layout); }		
-blend_mode::type mixer::get_blend_mode(int index) { return impl_->get_blend_mode(index); }
-void mixer::set_blend_mode(int index, blend_mode::type value){impl_->set_blend_mode(index, value);}
-chroma mixer::get_chroma(int index) { return impl_->get_chroma(index); }
-void mixer::set_chroma(int index, const chroma & value){impl_->set_chroma(index, value);}
-void mixer::clear_blend_mode(int index) { impl_->clear_blend_mode(index); }
-void mixer::clear_blend_modes() { impl_->clear_blend_modes(); }
-void mixer::set_straight_alpha_output(bool value) { impl_->set_straight_alpha_output(value); }
-bool mixer::get_straight_alpha_output() { return impl_->get_straight_alpha_output(); }
-float mixer::get_master_volume() { return impl_->get_master_volume(); }
-void mixer::set_master_volume(float volume) { impl_->set_master_volume(volume); }
-void mixer::set_video_format_desc(const video_format_desc& format_desc){impl_->set_video_format_desc(format_desc);}
-boost::unique_future<boost::property_tree::wptree> mixer::info() const{return impl_->info();}
-boost::unique_future<boost::property_tree::wptree> mixer::delay_info() const{return impl_->delay_info();}
-monitor::subject& mixer::monitor_output(){return *impl_->monitor_subject_;}
-}}
+}

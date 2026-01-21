@@ -35,6 +35,7 @@ namespace caspar { namespace core {
 class stage;
 class mixer;
 class output;
+class signaller;
 class ogl_device;
 struct video_format_desc;
 struct channel_layout;
@@ -53,9 +54,10 @@ public:
 
 	// Properties
 
-	safe_ptr<stage> stage();
-	safe_ptr<mixer>	mixer();
-	safe_ptr<output> output();
+	safe_ptr<stage> stage() const;
+	safe_ptr<mixer>	mixer() const;
+	safe_ptr<output> output() const;
+	safe_ptr<signaller> signaller() const;
 	
 	const video_format_desc& get_video_format_desc() const;
 

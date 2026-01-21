@@ -85,10 +85,10 @@ std::vector<int> parse_list(const std::string& list);
 core::channel_layout get_audio_channel_layout(const AVCodecContext& context, const std::wstring& custom_channel_order);
 
 struct frame_time {
-	frame_time(int frame_number)
+	frame_time(const uint32_t frame_number)
 		: FrameNumber(frame_number)
 	{ }
-	const int FrameNumber;
+	const uint32_t FrameNumber;
 };
 
 void av_buffer_free(void* opaque, uint8_t* data);
