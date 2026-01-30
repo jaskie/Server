@@ -184,7 +184,7 @@ namespace caspar {
 					return executor_.begin_invoke([this, frame]() -> bool { return do_send(frame); });
 				else
 				{
-					if (executor_.is_running() && executor_.empty())
+					if (executor_.is_running() && executor_.size() < executor_.capacity())
 						executor_.begin_invoke([this, frame]() {
 						do_send(frame);
 					});

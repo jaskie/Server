@@ -265,6 +265,8 @@ namespace caspar {
 			const bool								is_imx50_pal_;
 			tbb::atomic<int64_t>					current_encoding_delay_;
 			boost::timer							frame_timer_;
+			boost::timer							video_timer_;
+			boost::timer							audio_timer_;
 			executor								encode_executor_;
 
 		public:
@@ -329,8 +331,11 @@ namespace caspar {
 					create_output(video_codec, audio_codec, video_filter_->out_width(), video_filter_->out_height(), video_filter_->out_pixel_format(), video_filter_->out_frame_rate(), video_filter_->out_time_base(), video_filter_->out_sample_aspect_ratio());
 				}
 				create_swr();
-				graph_->set_color("frame-time", diagnostics::color(0.1f, 1.0f, 0.1f));
 				graph_->set_color("dropped-frame", diagnostics::color(1.0f, 0.1f, 0.1f));
+				graph_->set_color("frame-time", diagnostics::color(0.7f, 0.5f, 0.7f));
+				graph_->set_color("video-encode", diagnostics::color(0.4f, 1.0f, 0.0f));
+				graph_->set_color("audio", diagnostics::color(0.7f, 0.7f, 0.0f));
+				graph_->set_color("video-filter", diagnostics::color(0.2f, 0.8f, 1.0f));
 				graph_->set_text(print());
 				diagnostics::register_graph(graph_);
 
@@ -508,7 +513,7 @@ namespace caspar {
 					if (strcmp(video_codec_ctx_->codec->name, "libx264") == 0)
 					{
 						LOG_ON_ERROR2(av_dict_set(&options_, "preset", "veryfast", AV_DICT_DONT_OVERWRITE), print());
-						LOG_ON_ERROR2(av_dict_set_int(&options_, "threads", std::min(tbb::tbb_thread::hardware_concurrency(), 4u), AV_DICT_DONT_OVERWRITE), print()); // limits memory usage in 32-bit process
+						LOG_ON_ERROR2(av_dict_set_int(&options_, "threads", std::min(tbb::tbb_thread::hardware_concurrency(), 8u), AV_DICT_DONT_OVERWRITE), print()); // limits memory usage in 32-bit process
 					}
 				}
 				else if (video_codec_ctx_->codec_id == AV_CODEC_ID_QTRLE)
@@ -719,6 +724,7 @@ namespace caspar {
 
 			void encode_video(AVFrame* frame)
 			{
+				video_timer_.restart();
 				THROW_ON_ERROR2(avcodec_send_frame(video_codec_ctx_.get(), frame), print());
 				AVPacket pkt = { 0 };
 				while (avcodec_receive_packet(video_codec_ctx_.get(), &pkt) == 0)
@@ -728,14 +734,18 @@ namespace caspar {
 					THROW_ON_ERROR2(av_packet_make_refcounted(&pkt), print());
 					THROW_ON_ERROR2(av_interleaved_write_frame(format_context_.get(), &pkt), print());
 				}
+				graph_->set_value("video-encode", video_timer_.elapsed() * channel_format_desc_.fps);
 			}
 
 			void process_video_frame(const safe_ptr<core::read_frame>& frame)
 			{
+				video_timer_.restart();
 				if (video_filter_) //filtered path (slow one)
 				{
+
 					send_frame_to_filter(frame);
 					std::shared_ptr<AVFrame> converted = video_filter_->poll();
+					graph_->set_value("video-filter", video_timer_.elapsed() * channel_format_desc_.fps);
 					while (converted)
 					{
 						encode_video(converted.get());
@@ -744,7 +754,9 @@ namespace caspar {
 				}
 				else // fast, multithreaded conversion
 				{
+					video_timer_.restart();
 					auto av_frame = fast_convert_video(frame);
+					graph_->set_value("video-filter", video_timer_.elapsed() * channel_format_desc_.fps);
 					encode_video(av_frame.get());
 				}
 			}
@@ -844,8 +856,10 @@ namespace caspar {
 
 			void process_audio_frame(const safe_ptr<core::read_frame>& frame)
 			{
+				audio_timer_.restart();
 				resample_audio(frame);
 				encode_audio_buffer(false);
+				graph_->set_value("audio", audio_timer_.elapsed() * channel_format_desc_.fps);
 			}
 
 			void send(const safe_ptr<core::read_frame>& frame)
@@ -858,7 +872,7 @@ namespace caspar {
 					if (!key_only_)
 						process_audio_frame(frame);
 
-					graph_->set_value("frame-time", frame_timer_.elapsed()*channel_format_desc_.fps*0.5);
+					graph_->set_value("frame-time", frame_timer_.elapsed() * channel_format_desc_.fps);
 					graph_->set_text(print());
 					current_encoding_delay_ = frame->get_age_millis();
 				});
