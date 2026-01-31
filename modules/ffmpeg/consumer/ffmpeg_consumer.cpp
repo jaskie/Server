@@ -440,13 +440,13 @@ namespace caspar {
 					if (channel_format_desc_.field_mode == caspar::core::field_mode::progressive)
 					{
 						sws_.push_back(SwsContextPtr(
-							sws_getContext(channel_format_desc_.width, scale_slice_height_, AV_PIX_FMT_BGRA, channel_format_desc_.width, scale_slice_height_, video_codec_ctx_->pix_fmt, 0, nullptr, nullptr, NULL),
+							sws_getContext(channel_format_desc_.width, scale_slice_height_, AV_PIX_FMT_BGRA, channel_format_desc_.width, scale_slice_height_, video_codec_ctx_->pix_fmt, SWS_POINT, nullptr, nullptr, NULL),
 							[](SwsContext * ctx) { sws_freeContext(ctx); }));
 					}
 					else
 					{
 						sws_.push_back(SwsContextPtr(
-							sws_getContext(channel_format_desc_.width, scale_slice_height_ / 2, AV_PIX_FMT_BGRA, channel_format_desc_.width, scale_slice_height_ / 2, video_codec_ctx_->pix_fmt, 0, nullptr, nullptr, NULL),
+							sws_getContext(channel_format_desc_.width, scale_slice_height_ / 2, AV_PIX_FMT_BGRA, channel_format_desc_.width, scale_slice_height_ / 2, video_codec_ctx_->pix_fmt, SWS_POINT, nullptr, nullptr, NULL),
 							[](SwsContext * ctx) { sws_freeContext(ctx); }));
 					}
 				}
@@ -754,7 +754,6 @@ namespace caspar {
 				}
 				else // fast, multithreaded conversion
 				{
-					video_timer_.restart();
 					auto av_frame = fast_convert_video(frame);
 					graph_->set_value("video-filter", video_timer_.elapsed() * channel_format_desc_.fps);
 					encode_video(av_frame.get());
