@@ -107,9 +107,13 @@ namespace caspar {
 			const std::wstring												ndi_name_;
 			const bool														is_alpha_;
 			const bool														is_blocking_;
+			const float														scale_;
+			const bool 														is_scaling_;
+			const int 														dest_width_;
+			const int 														dest_height_;
 			const NDIlib_v2*												ndi_lib_;
 			const NDIlib_send_instance_t									ndi_send_;
-			std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>     send_frame_buffer_;
+			std::vector<uint8_t, tbb::cache_aligned_allocator<uint8_t>>		send_frame_buffer_;
 			safe_ptr<diagnostics::graph>									graph_;
 			tbb::atomic<int64_t>											current_encoding_delay_;
 			boost::timer													audio_send_timer_;
@@ -124,18 +128,22 @@ namespace caspar {
 
 			// frame_consumer
 
-			ndi_consumer(const int channel_index, const core::video_format_desc& format_desc, const core::channel_layout& channel_layout, const std::string& ndi_name, const std::string& groups, const bool is_alpha, const bool is_blocking)
+			ndi_consumer(const int channel_index, const core::video_format_desc& format_desc, const core::channel_layout& channel_layout, const std::string& ndi_name, const std::string& groups, const bool is_alpha, const bool is_blocking, const float scale)
 				: channel_index_(channel_index)
 				, channel_layout_(channel_layout)
 				, format_desc_(format_desc)
 				, ndi_name_(widen(ndi_name))
 				, is_alpha_(is_alpha)
 				, is_blocking_(is_blocking)
+				, scale_(scale)
+				, is_scaling_(std::abs(scale - 1.0f) > 1e-3)
+				, dest_height_(is_scaling_ ? (int)(format_desc.height * scale) : format_desc.height)
+				, dest_width_(is_scaling_ ? (int)(format_desc.width * scale) : format_desc.width)
 				, ndi_lib_(load_ndi())
 				, ndi_send_(create_ndi_send(ndi_lib_, ndi_name, groups, is_blocking))
-				, sws_(is_alpha ? nullptr : sws_getContext(format_desc.width, format_desc.height, AV_PIX_FMT_BGRA, format_desc.width, format_desc.height, AV_PIX_FMT_UYVY422, SWS_POINT, NULL, NULL, NULL), [](SwsContext * ctx) { sws_freeContext(ctx); })
+				, sws_(is_alpha && !is_scaling_ ? nullptr : sws_getContext(format_desc.width, format_desc.height, AV_PIX_FMT_BGRA, dest_width_, dest_height_, is_alpha ? AV_PIX_FMT_BGRA : AV_PIX_FMT_UYVY422, SWS_FAST_BILINEAR, NULL, NULL, NULL), [](SwsContext * ctx) { sws_freeContext(ctx); })
 				, swr_(create_swr(format_desc_, channel_layout_), [](SwrContext * ctx) { swr_free(&ctx); })
-				, send_frame_buffer_(is_alpha ? 0 : av_image_get_buffer_size(AV_PIX_FMT_BGRA, format_desc.width, format_desc.height, 1))
+				, send_frame_buffer_(is_alpha && !is_scaling_ ? 0 : av_image_get_buffer_size(is_alpha ? AV_PIX_FMT_BGRA : AV_PIX_FMT_UYVY422, dest_width_, dest_height_, 1))
 				, executor_(print())
 			{
 				current_encoding_delay_ = 0;
@@ -199,8 +207,8 @@ namespace caspar {
 
 			void send_video(const safe_ptr<core::read_frame>& frame)
 			{
-				std::unique_ptr<NDIlib_video_frame_t> ndi_frame(create_video_frame(format_desc_, is_alpha_));
-				if (is_alpha_)
+				std::unique_ptr<NDIlib_video_frame_t> ndi_frame(create_video_frame(format_desc_, is_alpha_, dest_width_, dest_height_));
+				if (is_alpha_ && !is_scaling_)
 					ndi_frame->p_data = const_cast<uint8_t*>(frame->image_data().begin());
 				else  //colorspace conversion
 				{
@@ -210,7 +218,7 @@ namespace caspar {
 					uint8_t * dest_data[AV_NUM_DATA_POINTERS];
 					int dst_linesize[AV_NUM_DATA_POINTERS];
 					av_image_fill_arrays(src_data, src_linesize, frame->image_data().begin(), AV_PIX_FMT_BGRA, format_desc_.width, format_desc_.height, 1);
-					av_image_fill_arrays(dest_data, dst_linesize, &send_frame_buffer_.front(), AV_PIX_FMT_UYVY422, format_desc_.width, format_desc_.height, 1);
+					av_image_fill_arrays(dest_data, dst_linesize, &send_frame_buffer_.front(), is_alpha_ ? AV_PIX_FMT_BGRA : AV_PIX_FMT_UYVY422, dest_width_, dest_height_, 1);
 					sws_scale(sws_.get(), src_data, src_linesize, 0, format_desc_.height, dest_data, dst_linesize);
 					graph_->set_value("frame-convert-time", frame_convert_timer_.elapsed() * format_desc_.fps);
 					ndi_frame->p_data = &send_frame_buffer_.front();
@@ -249,20 +257,22 @@ namespace caspar {
 			const std::string						groups_;
 			const bool								is_alpha_;
 			const bool								is_blocking_;
+			const float								scale_;
 
 		public:
 
-			ndi_consumer_proxy(const std::string& ndi_name, const std::string& groups, const bool is_alpha, const bool is_blocking)
+			ndi_consumer_proxy(const std::string& ndi_name, const std::string& groups, const bool is_alpha, const bool is_blocking, const float scale)
 				: index_(NDI_CONSUMER_BASE_INDEX + crc16(ndi_name))
 				, ndi_name_(ndi_name)
 				, groups_(groups)
 				, is_alpha_(is_alpha)
 				, is_blocking_(is_blocking)
+				, scale_(scale)
 			{	}
 
 			virtual void initialize(const core::video_format_desc& format_desc, const core::channel_layout& audio_channel_layout, int channel_index) override
 			{
-				consumer_.reset(new ndi_consumer(channel_index, format_desc, audio_channel_layout, ndi_name_, groups_, is_alpha_, is_blocking_));
+				consumer_.reset(new ndi_consumer(channel_index, format_desc, audio_channel_layout, ndi_name_, groups_, is_alpha_, is_blocking_, scale_));
 			}
 
 			virtual bool has_synchronization_clock() const override
@@ -317,7 +327,8 @@ namespace caspar {
 			std::string groups = narrow(params.get(L"GROUPS", L""));
 			bool is_alpha = params.get(L"ALPHA", true);
 			bool is_blocking = params.get(L"BLOCKING", false);
-			return make_safe<ndi_consumer_proxy>(ndi_name, groups, is_alpha, is_blocking);
+			float scale = params.get(L"SCALE", 1.0f);
+			return make_safe<ndi_consumer_proxy>(ndi_name, groups, is_alpha, is_blocking, scale);
 		}
 
 		safe_ptr<core::frame_consumer> create_ndi_consumer(const boost::property_tree::wptree& ptree)
@@ -326,7 +337,8 @@ namespace caspar {
 			auto groups = narrow(ptree.get(L"groups", L""));
 			bool is_alpha = ptree.get(L"alpha", true);
 			bool is_blocking = ptree.get(L"blocking", false);
-			return make_safe<ndi_consumer_proxy>(ndi_name, groups, is_alpha, is_blocking);
+			float scale = ptree.get(L"scale", 1.0f);
+			return make_safe<ndi_consumer_proxy>(ndi_name, groups, is_alpha, is_blocking, scale);
 		}
 
 	}
