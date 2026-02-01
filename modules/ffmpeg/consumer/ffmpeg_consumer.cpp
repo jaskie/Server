@@ -469,6 +469,7 @@ namespace caspar {
 				video_codec_ctx_->time_base = time_base;
 				video_codec_ctx_->framerate = frame_rate;
 				video_codec_ctx_->flags = 0;
+				video_codec_ctx_->thread_count = std::min(tbb::tbb_thread::hardware_concurrency(), 8u); // limits memory usage in 32-bit process
 
 				if (channel_format_desc_.format == core::video_format::ntsc && height == 486)
 					video_codec_ctx_->height = 480;
@@ -513,7 +514,6 @@ namespace caspar {
 					if (strcmp(video_codec_ctx_->codec->name, "libx264") == 0)
 					{
 						LOG_ON_ERROR2(av_dict_set(&options_, "preset", "veryfast", AV_DICT_DONT_OVERWRITE), print());
-						LOG_ON_ERROR2(av_dict_set_int(&options_, "threads", std::min(tbb::tbb_thread::hardware_concurrency(), 8u), AV_DICT_DONT_OVERWRITE), print()); // limits memory usage in 32-bit process
 					}
 				}
 				else if (video_codec_ctx_->codec_id == AV_CODEC_ID_QTRLE)
@@ -545,7 +545,7 @@ namespace caspar {
 					}
 				}
 
-				if (output_params_.video_bitrate_ != 0)
+				if (output_params_.video_bitrate_)
 					video_codec_ctx_->bit_rate = output_params_.video_bitrate_ * 1000;
 
 				if (format->flags & AVFMT_GLOBALHEADER)
