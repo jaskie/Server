@@ -102,9 +102,6 @@
     <ClInclude Include="mixer\audio\audio_mixer.h">
       <Filter>source\mixer\audio</Filter>
     </ClInclude>
-    <ClInclude Include="producer\separated\separated_producer.h">
-      <Filter>source\producer\separated</Filter>
-    </ClInclude>
     <ClInclude Include="mixer\read_frame.h">
       <Filter>source\mixer</Filter>
     </ClInclude>
@@ -215,9 +212,6 @@
     </ClCompile>
     <ClCompile Include="mixer\audio\audio_mixer.cpp">
       <Filter>source\mixer\audio</Filter>
-    </ClCompile>
-    <ClCompile Include="producer\separated\separated_producer.cpp">
-      <Filter>source\producer\separated</Filter>
     </ClCompile>
     <ClCompile Include="mixer\read_frame.cpp">
       <Filter>source\mixer</Filter>
