@@ -483,6 +483,7 @@ namespace caspar {
 				video_codec_ctx_->time_base = time_base;
 				video_codec_ctx_->framerate = frame_rate;
 				video_codec_ctx_->flags = 0;
+				video_codec_ctx_->thread_count = 4;
 
 				if (channel_format_desc_.format == core::video_format::ntsc && height == 486)
 					video_codec_ctx_->height = 480;
