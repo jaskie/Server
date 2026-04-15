@@ -130,27 +130,43 @@ namespace caspar {
 			}
 		}
 
-		void initialize_audio_channel_layout(const caspar::core::channel_layout &caspar_layout, AVChannelLayout &channel_layout)
+		static int initialize_audio_channel_layout(AVChannelLayout &channel_layout, const caspar::core::channel_layout& caspar_layout)
 		{
 			const std::wstring &channel_layout_name = caspar_layout.name;
 			if (channel_layout_name == L"MONO")
-				av_channel_layout_from_string(&channel_layout, "mono");
-			else if (channel_layout_name == L"STEREO")
-				av_channel_layout_from_string(&channel_layout, "stereo");
-			else if (channel_layout_name == L"DUAL-STEREO")
-				av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_2_2);
-			else if (channel_layout_name == L"DTS")
-				av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_5POINT1);
-			else if (channel_layout_name == L"DOLBYE")
-				av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_5POINT1 | AV_CH_LAYOUT_STEREO_DOWNMIX);
-			else if (channel_layout_name == L"DOLBYDIGITAL")
-				av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_5POINT1);
-			else if (channel_layout_name == L"SMPTE")
-				av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_5POINT1);
-			else 
-				av_channel_layout_custom_init(&channel_layout, caspar_layout.num_channels);
+				return av_channel_layout_from_string(&channel_layout, "mono");
+			if (channel_layout_name == L"STEREO")
+				return av_channel_layout_from_string(&channel_layout, "stereo");
+			if (channel_layout_name == L"DUAL-STEREO")
+				return av_channel_layout_from_string(&channel_layout, "quad");
+			if (channel_layout_name == L"DTS")
+				return av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_5POINT1);
+			if (channel_layout_name == L"DOLBYE")
+				return av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_5POINT1 | AV_CH_LAYOUT_STEREO_DOWNMIX);
+			if (channel_layout_name == L"DOLBYDIGITAL")
+				return av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_5POINT1);
+			if (channel_layout_name == L"SMPTE")
+				return av_channel_layout_from_mask(&channel_layout, AV_CH_LAYOUT_5POINT1);
+			av_channel_layout_default(&channel_layout, caspar_layout.num_channels);
+			return 0;
 			// TODO: set order of channels for dolby/dts/smpte
 		}
+
+		static int initialize_audio_channel_layout(AVChannelLayout& channel_layout, const int channel_count)
+		{
+			switch (channel_count)
+			{
+			case 1:
+				return av_channel_layout_from_string(&channel_layout, "mono");
+			case 2:
+				return av_channel_layout_from_string(&channel_layout, "stereo");
+			case 4:
+				return av_channel_layout_from_string(&channel_layout, "quad");
+			}
+			av_channel_layout_default(&channel_layout, channel_count);
+			return 0;
+		}
+
 
 		static const std::string			MXF = ".MXF";
 
@@ -611,12 +627,11 @@ namespace caspar {
 					if (output_params_.channel_layout_name_ != "")
 						THROW_ON_ERROR2(av_channel_layout_from_string(&audio_codec_ctx_->ch_layout, output_params_.channel_layout_name_.c_str()), print());
 					else if (output_params_.channel_map_.size() == 0)
-						initialize_audio_channel_layout(audio_channel_layout_, audio_codec_ctx_->ch_layout);
+						THROW_ON_ERROR2(initialize_audio_channel_layout(audio_codec_ctx_->ch_layout, audio_channel_layout_), print());
 					else 
-						av_channel_layout_default(&audio_codec_ctx_->ch_layout, output_params_.channel_map_.size());
+						THROW_ON_ERROR2(initialize_audio_channel_layout(audio_codec_ctx_->ch_layout, output_params_.channel_map_.size()), print());
 				}
 				audio_is_planar_ = av_sample_fmt_is_planar(audio_codec_ctx_->sample_fmt) != 0;
-
 
 				THROW_ON_ERROR2(avcodec_open2(audio_codec_ctx_.get(), encoder, &options_), print());
 
@@ -762,18 +777,40 @@ namespace caspar {
 
 			void create_swr()
 			{
-				AVChannelLayout in_channel_layout;
-				initialize_audio_channel_layout(audio_channel_layout_, in_channel_layout);
-				SwrContext* swr = NULL;
-				int ret = swr_alloc_set_opts2(&swr,
+				AVChannelLayout in_channel_layout = {};
+
+				THROW_ON_ERROR2(initialize_audio_channel_layout(in_channel_layout, audio_channel_layout_.num_channels), print());
+
+				SwrContext* swr = nullptr;
+				THROW_ON_ERROR2(swr_alloc_set_opts2(&swr,
 					&audio_codec_ctx_->ch_layout, audio_codec_ctx_->sample_fmt, audio_codec_ctx_->sample_rate,
 					&in_channel_layout, AV_SAMPLE_FMT_S32, channel_format_desc_.audio_sample_rate,
-					0, nullptr);
+					0, nullptr), print());
+
 				av_channel_layout_uninit(&in_channel_layout);
-				FF_RET(ret, "swr_alloc_set_opts2");
-				swr_ = SwrContextPtr(swr, [](SwrContext * ctx) { swr_free(&ctx); });
-				if (output_params_.channel_map_.size() > 0 && output_params_.channel_map_.size() <= MAX_CHANNELS)
-					THROW_ON_ERROR2(swr_set_channel_mapping(swr_.get(), output_params_.channel_map_.data()), print());
+
+				swr_ = SwrContextPtr(swr, [](SwrContext* ctx) { swr_free(&ctx); });
+
+				// calculate channel mapping matrix
+				int in_channels = audio_channel_layout_.num_channels;
+				int out_channels = output_params_.channel_map_.size();
+				if (out_channels > 0 && out_channels <= MAX_CHANNELS)
+				{
+					std::vector<double> matrix(out_channels * in_channels, 0.0);
+					// Populate the matrix based on the map
+					for (int out_ch = 0; out_ch < out_channels; ++out_ch) {
+						int in_ch = output_params_.channel_map_[out_ch];
+
+						if (in_ch >= 0 && in_ch < in_channels) {
+							// Set 100% volume (1.0) at the intersection of [Row: out_ch][Col: in_ch]
+							matrix[out_ch * in_channels + in_ch] = 1.0;
+						}
+						else if (in_ch != -1) {
+							BOOST_THROW_EXCEPTION(caspar_exception() << msg_info("Provided input channel index is out of bounds."));
+						}
+					}
+					THROW_ON_ERROR2(swr_set_matrix(swr, matrix.data(), in_channels), print());
+				}
 				THROW_ON_ERROR2(swr_init(swr_.get()), print());
 			}
 
