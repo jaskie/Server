@@ -230,12 +230,15 @@ namespace caspar {
 
 			void send_audio(const safe_ptr<core::read_frame>& frame)
 			{
+				std::ptrdiff_t samples_count = frame->audio_data().size() / frame->num_channels();
+				if (samples_count == 0)
+					return;
 				audio_send_timer_.restart();
-				auto audio_frame = create_audio_frame(channel_layout_, frame->multichannel_view().num_samples(), format_desc_.audio_sample_rate);
+				auto audio_frame = create_audio_frame(channel_layout_, samples_count, format_desc_.audio_sample_rate);
 				const uint8_t* in[] = { reinterpret_cast<const uint8_t*>(frame->audio_data().begin()) };
 				int converted_sample_count = swr_convert(swr_.get(),
 					reinterpret_cast<uint8_t**>(&audio_frame->p_data), audio_frame->no_samples,
-					in, frame->multichannel_view().num_samples());
+					in, samples_count);
 				if (converted_sample_count != audio_frame->no_samples)
 					CASPAR_LOG(warning) << print() << L" Not all samples were converted (" << converted_sample_count << L" of " << audio_frame->no_samples << L").";
 				ndi_lib_->NDIlib_util_send_send_audio_interleaved_32f(ndi_send_, audio_frame.get());

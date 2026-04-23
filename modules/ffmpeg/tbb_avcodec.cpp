@@ -99,8 +99,8 @@ void thread_init(AVCodecContext* s, bool execute2enable)
 
 int tbb_avcodec_open(AVCodecContext* avctx, const AVCodec* codec, AVDictionary** options)
 {
-	if(((codec->capabilities & AV_CODEC_CAP_SLICE_THREADS) && (avctx->thread_type & FF_THREAD_SLICE)
-	  ||  (codec->capabilities & AV_CODEC_CAP_FRAME_THREADS)) && (avctx->thread_type & FF_THREAD_FRAME)) 
+	if ((codec->id != AV_CODEC_ID_DVVIDEO) && // DV VIDEO causes crash
+	   (((codec->capabilities & AV_CODEC_CAP_SLICE_THREADS) && (avctx->thread_type & FF_THREAD_SLICE)) || ((codec->capabilities & AV_CODEC_CAP_FRAME_THREADS) && (avctx->thread_type & FF_THREAD_FRAME))))
 	{
 		thread_init(avctx, codec->id != AV_CODEC_ID_PRORES && codec->id != AV_CODEC_ID_DNXHD); // do not enable execute2 for ProRes and DNxHD codec as they cause crash
 	}	
